@@ -1,0 +1,9 @@
+[package]
+name = "krab"
+description = "A text editor"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+crossterm = "0.27.0"
+anyhow = "1"
