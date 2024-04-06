@@ -63,17 +63,17 @@ impl Renderer {
     fn default() -> Result<Self> {
         let mut stdout = std::io::stdout();
 
-        // terminal::enable_raw_mode()?;
-        // stdout.execute(terminal::EnterAlternateScreen)?;
-        // stdout.execute(terminal::Clear(terminal::ClearType::All))?;
+        terminal::enable_raw_mode()?;
+        stdout.execute(terminal::EnterAlternateScreen)?;
+        stdout.execute(terminal::Clear(terminal::ClearType::All))?;
 
-        // let default_panic = std::panic::take_hook();
-        // std::panic::set_hook(Box::new(move |info| {
-        //     _ = std::io::stdout().execute(terminal::LeaveAlternateScreen);
-        //     _ = terminal::disable_raw_mode();
-        //     println!();
-        //     default_panic(info);
-        // }));
+        let default_panic = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |info| {
+            _ = std::io::stdout().execute(terminal::LeaveAlternateScreen);
+            _ = terminal::disable_raw_mode();
+            println!();
+            default_panic(info);
+        }));
 
         let (width, height) = terminal::size()?;
         let width: usize = width.into();
@@ -86,10 +86,11 @@ impl Renderer {
     }
 
     fn draw(&mut self, state: &Editor) -> Result<()> {
-        // self.draw_buffer(state)?;
+        self.draw_buffer(state)?;
         self.draw_statusline();
-        self.draw_cursor(state)?;
         self.paint()?;
+        self.draw_cursor(state)?;
+        self.stdout.flush()?;
         Ok(())
     }
 
@@ -99,18 +100,13 @@ impl Renderer {
             self.stdout.queue(style::Print(char))?;
         }
 
-        self.stdout.flush()?;
-        // self.prev_buffer = std::mem::replace(&mut self.curr_buffer, RenderBuffer::with_size(self.width, self.height));
-
+        self.prev_buffer = std::mem::replace(&mut self.curr_buffer, RenderBuffer::with_size(self.width, self.height));
         Ok(())
     }
 
     fn draw_buffer(&mut self, state: &Editor) -> Result<()> {
-        self.stdout.queue(cursor::MoveTo(0, 0))?;
-
-        // TODO: clear the lines only when we need to scroll
-        for y in 0..state.buffer_view.height {
-            for x in 0..state.buffer_view.width {
+        for x in 0..state.buffer_view.width {
+            for y in 0..state.buffer_view.height {
                 self.stdout.queue(cursor::MoveTo(x as u16, y as u16))?;
                 self.stdout.queue(style::Print(" "))?;
             }
@@ -172,7 +168,7 @@ impl Drop for Renderer {
     }
 }
 
-struct ScrollableArea {
+struct ScrollView {
     width: usize,
     height: usize,
     cursor_x: usize,
@@ -181,7 +177,7 @@ struct ScrollableArea {
     buffer_start_x: usize,
 }
 
-impl ScrollableArea {
+impl ScrollView {
     fn with_size(width: usize, height: usize) -> Self {
         Self {
             width,
@@ -241,7 +237,7 @@ impl ScrollableArea {
 
 struct Editor {
     mode: Mode,
-    buffer_view: ScrollableArea,
+    buffer_view: ScrollView,
     buffer: Buffer,
 }
 
@@ -258,7 +254,7 @@ impl Editor {
         Ok(Self {
             buffer,
             mode: Mode::Normal,
-            buffer_view: ScrollableArea::with_size(width, height),
+            buffer_view: ScrollView::with_size(width, height),
         })
     }
 
@@ -273,7 +269,7 @@ impl Editor {
 
     fn edit_buffer(&mut self, c: char) {
         let (cursor_x, cursor_y) = self.buffer_view.cursor_position_relative_to_buffer();
-        self.buffer.lines[cursor_y].insert(self.buffer_view.cursor_x, c);
+        self.buffer.lines[cursor_y].insert(cursor_x, c);
         self.buffer_view.cursor_right();
     }
 
@@ -321,6 +317,7 @@ struct Patch {
     y: usize,
 }
 
+#[derive(Debug)]
 struct RenderBuffer {
     cells: Vec<Cell>,
     width: usize,
@@ -340,7 +337,7 @@ impl RenderBuffer {
             .zip(other.cells.iter())
             .enumerate()
             .filter(|(_, (a, b))| *a != *b)
-            .map(|(i, (_, cell))| Patch {
+            .map(|(i, (cell, _))| Patch {
                 cell: cell.clone(),
                 x: i % self.width,
                 y: i / self.width,
@@ -348,15 +345,11 @@ impl RenderBuffer {
             .collect()
     }
 
-    fn clear(&mut self) {
-        self.cells.fill(Cell::empty());
-    }
-
-    fn resize(&mut self, width: usize, height: usize) {
-        self.width = width;
-        self.height = height;
-        self.cells.resize(width * height, Cell::empty());
-    }
+    // fn resize(&mut self, width: usize, height: usize) {
+    //     self.width = width;
+    //     self.height = height;
+    //     self.cells.resize(width * height, Cell::empty());
+    // }
 
     fn put_char(&mut self, char: char, x: usize, y: usize, fg: Option<Color>, bg: Option<Color>) {
         let index = self.width * y + x;
@@ -388,15 +381,14 @@ fn main() -> Result<()> {
         renderer.height.saturating_sub(1),
     )?;
 
-    let mut quit = false;
-
-    while !quit {
+    loop {
         renderer.draw(&editor)?;
+
         match read()? {
             Event::Key(event) => {
                 if let Some(action) = handle_key_event(&editor.mode, &event) {
                     match action {
-                        Action::Quit                    => { quit = true; },
+                        Action::Quit                    => break,
                         Action::MoveUp                  => { editor.buffer_view.cursor_up(); },
                         Action::MoveDown                => { editor.buffer_view.cursor_down(&editor.buffer); },
                         Action::MoveLeft                => { editor.buffer_view.cursor_left(); },
@@ -408,7 +400,6 @@ fn main() -> Result<()> {
                     }
                 }
             }
-            // Event::Resize(height, width) => { state.resize(height, width) },
             Event::Resize(_, _) => todo!(),
             Event::Mouse(_)     => todo!(),
             Event::Paste(_)     => todo!(),
@@ -416,16 +407,6 @@ fn main() -> Result<()> {
             Event::FocusLost    => todo!(),
         }
     }
-
-    // renderer.draw(&editor)?;
-
-    // for (i, cell) in renderer.front_buffer.cells.iter().enumerate() {
-    //     if cell.char == ' ' { continue; }
-    //     let y = i / renderer.front_buffer.width;
-    //     let x = i % renderer.front_buffer.width;
-    //     println!("({x}, {y}) {:?}", cell);
-    // }
-
 
     Ok(())
 }
