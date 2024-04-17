@@ -7,3 +7,11 @@ edition = "2021"
 [dependencies]
 crossterm = "0.27.0"
 anyhow = "1"
+
+log = "0.4"
+fern = "0.6"
+
+jumprope = "1"
+
+unicode-segmentation = "1"
+unicode-display-width = "0.3"
