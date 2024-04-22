@@ -23,7 +23,6 @@ enum Action {
     EnterInsertModeAtCursor,
     EnterInsertModeAfterCursor,
     AppendCharacter(char),
-    NewLine,
     InsertLineBelow,
     InsertLineAbove,
     DeleteSymbolToTheLeft,
@@ -39,11 +38,11 @@ fn handle_key_event(mode: &Mode, event: &KeyEvent) -> Option<Action> {
 
 fn handle_normal_mode_key_event(event: &KeyEvent) -> Option<Action> {
     match event.code {
-        KeyCode::Char('h') => Some(Action::MoveLeft),
-        KeyCode::Char('j') => Some(Action::MoveDown),
-        KeyCode::Char('k') => Some(Action::MoveUp),
-        KeyCode::Char('l') => Some(Action::MoveRight),
-        KeyCode::Char('i') => Some(Action::EnterInsertModeAtCursor),
+        KeyCode::Char('h') | KeyCode::Left => Some(Action::MoveLeft),
+        KeyCode::Char('j') | KeyCode::Down=> Some(Action::MoveDown),
+        KeyCode::Char('k') | KeyCode::Up => Some(Action::MoveUp),
+        KeyCode::Char('l') | KeyCode::Right => Some(Action::MoveRight),
+        KeyCode::Char('i')=> Some(Action::EnterInsertModeAtCursor),
         KeyCode::Char('a') => Some(Action::EnterInsertModeAfterCursor),
         KeyCode::Char('o') => Some(Action::InsertLineBelow),
         KeyCode::Char('O') => Some(Action::InsertLineAbove),
@@ -56,8 +55,12 @@ fn handle_insert_mode_key_event(event: &KeyEvent) -> Option<Action> {
     match event.code {
         KeyCode::Esc => Some(Action::EnterNormalMode),
         KeyCode::Char(c) => Some(Action::AppendCharacter(c)),
-        KeyCode::Enter => Some(Action::NewLine),
+        KeyCode::Enter => Some(Action::AppendCharacter('\n')),
         KeyCode::Backspace => Some(Action::DeleteSymbolToTheLeft),
+        KeyCode::Left => Some(Action::MoveLeft),
+        KeyCode::Down=> Some(Action::MoveDown),
+        KeyCode::Up => Some(Action::MoveUp),
+        KeyCode::Right => Some(Action::MoveRight),
         _ => None,
     }
 }
@@ -124,14 +127,6 @@ impl Renderer {
     }
 
     fn paint(&mut self) -> Result<()> {
-        // log::debug!("Buffer:");
-        // for (i, cell) in self.curr_buffer.cells.iter().enumerate() {
-        //     if cell.symbol != " " {
-        //         let x = i % self.width;
-        //         let y = i / self.width;
-        //         log::debug!("{x}, {y}: {}", cell.symbol);
-        //     }
-        // }
         let patches = self.curr_buffer.diff(&self.prev_buffer);
         for Patch { cell: Cell { symbol, width, fg, bg, }, x, y, } in patches {
             self.stdout.queue(cursor::MoveTo(x as u16, y as u16))?;
@@ -247,10 +242,12 @@ impl TextBuffer {
 
     fn byte_offset_at_cursor(&self, cursor_x: usize, cursor_y: usize) -> usize {
         let mut offset = self.rope.byte_of_line(cursor_y);
-        for (i, g) in self.rope.line(cursor_y).graphemes().enumerate() {
-            if i == cursor_x {
+        let mut col = 0;
+        for g in self.rope.line(cursor_y).graphemes() {
+            if col == cursor_x {
                 break;
             }
+            col += unicode_display_width::width(&g) as usize;
             offset += g.len();
         }
         offset
@@ -258,11 +255,28 @@ impl TextBuffer {
 
     fn insert_char_at(&mut self, char: char, cursor_x: usize, cursor_y: usize) {
         let offset = self.byte_offset_at_cursor(cursor_x, cursor_y);
-        let mut buf = [0, 4];
+        let mut buf = [0; 4];
         let text = char.encode_utf8(&mut buf);
+        let text_width = unicode_display_width::width(text) as usize;
 
-        self.cols[cursor_y] += unicode_display_width::width(&text) as usize;
         self.rope.insert(offset, text);
+
+        if char == '\n' {
+            let mut old_line_count = 0;
+            let mut new_line_count = 0;
+            for g in self.rope.line(cursor_y).graphemes() {
+                old_line_count += unicode_display_width::width(&g) as usize;
+            }
+            for g in self.rope.line(cursor_y + 1).graphemes() {
+                new_line_count += unicode_display_width::width(&g) as usize;
+            }
+            self.cols[cursor_y] = old_line_count;
+            self.cols.insert(cursor_y + 1, new_line_count);
+            self.rows += 1;
+        } else {
+            self.cols[cursor_y] += text_width;
+        }
+        debug!("{}", self.rope);
     }
 }
 
@@ -315,9 +329,13 @@ impl ScrollView {
         self.scroll_x..self.scroll_x + self.width
     }
 
-    fn move_document_cursor_to(&mut self, x: Option<usize>, y: Option<usize>, buffer: &TextBuffer) {
+    fn move_document_cursor_to(&mut self, x: Option<usize>, y: Option<usize>, buffer: &TextBuffer, mode: &Mode) {
         let y = buffer.rows.saturating_sub(1).min(y.unwrap_or(self.document_cursor_y));
-        let x = buffer.cols[y].min(x.unwrap_or(self.sticky_cursor_x));
+        let max_x = match mode {
+            Mode::Insert => buffer.cols[y],
+            Mode::Normal => buffer.cols[y].saturating_sub(1),
+        };
+        let x = max_x.min(x.unwrap_or(self.sticky_cursor_x));
 
 
         let horizontal_direction = match self.document_cursor_x.cmp(&x) {
@@ -354,37 +372,41 @@ impl ScrollView {
         }
     }
 
-    fn cursor_up(&mut self, buffer: &TextBuffer) {
+    fn cursor_up(&mut self, buffer: &TextBuffer, mode: &Mode) {
         self.move_document_cursor_to(
             None,
             Some(self.document_cursor_y.saturating_sub(1)),
             buffer,
+            mode
         );
     }
 
-    fn cursor_down(&mut self, buffer: &TextBuffer) {
+    fn cursor_down(&mut self, buffer: &TextBuffer, mode: &Mode) {
         self.move_document_cursor_to(
             None,
             Some(self.document_cursor_y + 1),
             buffer,
+            mode
         );
     }
 
-    fn cursor_left(&mut self, rope: &TextBuffer) {
+    fn cursor_left(&mut self, buffer: &TextBuffer, mode: &Mode) {
         self.move_document_cursor_to(
             Some(self.document_cursor_x.saturating_sub(1)),
             None,
-            rope,
+            buffer,
+            mode
         );
 
         self.sticky_cursor_x = self.document_cursor_x;
     }
 
-    fn cursor_right(&mut self, rope: &TextBuffer) {
+    fn cursor_right(&mut self, buffer: &TextBuffer, mode: &Mode) {
         self.move_document_cursor_to(
             Some(self.document_cursor_x + 1),
             None,
-            rope,
+            buffer,
+            mode
         );
 
         self.sticky_cursor_x = self.document_cursor_x;
@@ -445,57 +467,39 @@ impl Editor {
     }
 
     fn enter_normal_mode(&mut self) {
-        // if let Mode::Insert = self.mode {
-        //     self.buffer_view.cursor_left();
-        // }
         self.mode = Mode::Normal;
+        self.buffer_view.cursor_left(&self.text_buffer, &self.mode);
     }
 
     fn enter_insert_mode_relative_to_cursor(&mut self, x: usize) {
-        for _ in 0..x {
-            self.buffer_view.cursor_right(&self.text_buffer);
-        }
         self.mode = Mode::Insert;
+        for _ in 0..x {
+            self.buffer_view.cursor_right(&self.text_buffer, &self.mode);
+        }
     }
 
     fn append_character(&mut self, c: char) {
         self.text_buffer.insert_char_at(c, self.buffer_view.document_cursor_x, self.buffer_view.document_cursor_y);
-        self.buffer_view.cursor_right(&self.text_buffer);
+
+        if c == '\n' {
+            self.buffer_view.move_document_cursor_to(Some(0), Some(self.buffer_view.document_cursor_y + 1), &self.text_buffer, &self.mode);
+        } else {
+            self.buffer_view.cursor_right(&self.text_buffer, &self.mode);
+        }
     }
 
-    // fn delete_symbol_to_the_left(&mut self) {
-    //     let (cursor_x, cursor_y) = self.buffer_view.cursor_position_relative_to_buffer();
-    //     if cursor_x > 0 {
-    //         let offset = byte_offset_at_cursor(&self.rope, cursor_x - 1, cursor_y);
+    fn insert_line_below(&mut self) {
+        self.mode = Mode::Insert;
+        self.buffer_view.move_document_cursor_to(Some(std::usize::MAX), None, &self.text_buffer, &self.mode);
+        self.append_character('\n');
+    }
 
-
-    //         self.buffer_view.cursor_left();
-    //     }
-    // }
-
-    // fn insert_line_break(&mut self) {
-    //     let (cursor_x, cursor_y) = self.buffer_view.cursor_position_relative_to_buffer();
-    //     let right = self.rope.lines[cursor_y].split_off(cursor_x);
-    //     self.insert_line_relative_to_cursor(1, right);
-    // }
-
-    // fn insert_line_below(&mut self) {
-    //     self.insert_line_relative_to_cursor(1, "".to_string());
-    // }
-
-    // fn insert_line_above(&mut self) {
-    //     self.insert_line_relative_to_cursor(0, "".to_string());
-    // }
-
-    // fn insert_line_relative_to_cursor(&mut self, y: usize, contents: String) {
-    //     let (_, cursor_y) = self.buffer_view.cursor_position_relative_to_buffer();
-    //     self.rope.lines.insert(cursor_y + y, contents);
-    //     for _ in 0..y {
-    //         self.buffer_view.cursor_down(&self.rope);
-    //     }
-    //     self.buffer_view.cursor_x = 0;
-    //     self.mode = Mode::Insert;
-    // }
+    fn insert_line_above(&mut self) {
+        self.mode = Mode::Insert;
+        self.buffer_view.move_document_cursor_to(None, None, &self.text_buffer, &self.mode);
+        self.append_character('\n');
+        self.buffer_view.cursor_up(&self.text_buffer, &self.mode);
+    }
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -613,16 +617,16 @@ fn main() -> Result<()> {
                         match action {
                             Action::Quit => break,
                             Action::MoveUp => {
-                                editor.buffer_view.cursor_up(&editor.text_buffer);
+                                editor.buffer_view.cursor_up(&editor.text_buffer, &editor.mode);
                             }
                             Action::MoveDown => {
-                                editor.buffer_view.cursor_down(&editor.text_buffer);
+                                editor.buffer_view.cursor_down(&editor.text_buffer, &editor.mode);
                             }
                             Action::MoveLeft => {
-                                editor.buffer_view.cursor_left(&editor.text_buffer);
+                                editor.buffer_view.cursor_left(&editor.text_buffer, &editor.mode);
                             }
                             Action::MoveRight => {
-                                editor.buffer_view.cursor_right(&editor.text_buffer);
+                                editor.buffer_view.cursor_right(&editor.text_buffer, &editor.mode);
                             }
                             Action::EnterInsertModeAtCursor => {
                                 editor.enter_insert_mode_relative_to_cursor(0);
@@ -633,14 +637,11 @@ fn main() -> Result<()> {
                             Action::EnterNormalMode => {
                                 editor.enter_normal_mode();
                             }
-                            Action::NewLine => {
-                                // editor.insert_line_break();
-                            }
                             Action::InsertLineBelow => {
-                                // editor.insert_line_below();
+                                editor.insert_line_below();
                             }
                             Action::InsertLineAbove => {
-                                // editor.insert_line_above();
+                                editor.insert_line_above();
                             }
                             Action::AppendCharacter(c) => {
                                 editor.append_character(c);
