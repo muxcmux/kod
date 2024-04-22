@@ -2,10 +2,9 @@ use anyhow::Result;
 use crossterm::{
     cursor,
     event::{read, Event, KeyCode, KeyEvent, KeyEventKind},
-    style::{self, Color, Stylize},
+    style::{Color, Print},
     terminal, ExecutableCommand, QueueableCommand,
 };
-use log::debug;
 use std::{cmp::Ordering, env, io::Write};
 use crop::Rope;
 
@@ -91,8 +90,8 @@ fn leave_screen() -> Result<()> {
 
 struct Renderer {
     stdout: std::io::Stdout,
-    curr_buffer: RenderBuffer,
-    prev_buffer: RenderBuffer,
+    buffers: [RenderBuffer; 2],
+    current: usize,
     width: usize,
     height: usize,
 }
@@ -105,16 +104,22 @@ impl Renderer {
         let width: usize = width.into();
         let height: usize = height.into();
 
-        let curr_buffer = RenderBuffer::with_size(width, height);
-        let prev_buffer = RenderBuffer::with_size(width, height);
+        let buffers = [
+            RenderBuffer::with_size(width, height),
+            RenderBuffer::with_size(width, height)
+        ];
 
         Ok(Self {
             stdout,
-            curr_buffer,
-            prev_buffer,
+            buffers,
+            current: 0,
             width,
             height,
         })
+    }
+
+    fn current_buffer_mut(&mut self) -> &mut RenderBuffer {
+        &mut self.buffers[self.current]
     }
 
     fn draw(&mut self, state: &Editor) -> Result<()> {
@@ -127,20 +132,16 @@ impl Renderer {
     }
 
     fn paint(&mut self) -> Result<()> {
-        let patches = self.curr_buffer.diff(&self.prev_buffer);
-        for Patch { cell: Cell { symbol, width, fg, bg, }, x, y, } in patches {
+        let prev_buffer = &self.buffers[1 - self.current];
+        let curr_buffer = &self.buffers[self.current];
+
+        for Patch { cell: Cell { symbol, fg, bg, }, x, y, } in prev_buffer.diff(curr_buffer) {
             self.stdout.queue(cursor::MoveTo(x as u16, y as u16))?;
-            self.stdout.queue(style::PrintStyledContent(
-                symbol
-                    .with(fg.unwrap_or(Color::Reset))
-                    .on(bg.unwrap_or(Color::Reset)),
-            ))?;
+            self.stdout.queue(Print(&symbol))?;
         }
 
-        self.prev_buffer = std::mem::replace(
-            &mut self.curr_buffer,
-            RenderBuffer::with_size(self.width, self.height),
-        );
+        self.buffers[1 - self.current].reset();
+        self.current = 1 - self.current;
 
         Ok(())
     }
@@ -166,7 +167,7 @@ impl Renderer {
                         let width = unicode_display_width::width(&g);
                         let x = col.saturating_sub(state.buffer_view.scroll_x);
                         let y = row.saturating_sub(state.buffer_view.scroll_y);
-                        self.curr_buffer.put_symbol(g.to_string(), width as u8, x, y, None, None);
+                        self.current_buffer_mut().put_symbol(g.to_string(), width as u8, x, y, None, None);
                         skip_next_n_cols = width - 1;
                     }
                 }
@@ -276,7 +277,6 @@ impl TextBuffer {
         } else {
             self.cols[cursor_y] += text_width;
         }
-        debug!("{}", self.rope);
     }
 }
 
@@ -505,7 +505,6 @@ impl Editor {
 #[derive(PartialEq, Debug, Clone)]
 struct Cell {
     symbol: String,
-    width: u8,
     fg: Option<Color>,
     bg: Option<Color>,
 }
@@ -514,16 +513,24 @@ impl Cell {
     fn empty() -> Self {
         Self {
             symbol: " ".to_string(),
-            width: 1,
             fg: None,
             bg: None,
         }
     }
+
+    fn set_symbol(&mut self, symbol: &str) {
+        self.symbol.clear();
+        self.symbol.push_str(symbol);
+    }
+
+    fn reset(&mut self) {
+        self.set_symbol(" ");
+    }
 }
 
 #[derive(Debug)]
-struct Patch {
-    cell: Cell,
+struct Patch<'a> {
+    cell: &'a Cell,
     x: usize,
     y: usize,
 }
@@ -545,7 +552,13 @@ impl RenderBuffer {
         }
     }
 
-    fn diff(&self, other: &Self) -> Vec<Patch> {
+    fn reset(&mut self) {
+        for cell in &mut self.cells {
+            cell.reset();
+        }
+    }
+
+    fn diff<'a>(&'a self, other: &'a Self) -> Vec<Patch> {
         assert!(self.width == other.width && self.height == other.height);
 
         self.cells
@@ -553,8 +566,8 @@ impl RenderBuffer {
             .zip(other.cells.iter())
             .enumerate()
             .filter(|(_, (a, b))| *a != *b)
-            .map(|(i, (cell, _))| Patch {
-                cell: cell.clone(),
+            .map(|(i, (_, cell))| Patch {
+                cell,
                 x: i % self.width,
                 y: i / self.width,
             })
@@ -567,11 +580,11 @@ impl RenderBuffer {
     //     self.cells.resize(width * height, Cell::empty());
     // }
 
-    fn put_symbol(&mut self, symbol: String, width: u8, x: usize, y: usize, fg: Option<Color>, bg: Option<Color>) {
+    fn put_symbol(&mut self, symbol: String, _width: u8, x: usize, y: usize, fg: Option<Color>, bg: Option<Color>) {
         let index = self.width * y + x;
 
         if let Some(cell) = self.cells.get_mut(index) {
-            *cell = Cell { symbol, width, fg, bg };
+            *cell = Cell { symbol, fg, bg };
         }
     }
 
