@@ -224,6 +224,12 @@ impl Renderer {
 
 struct TextBuffer {
     rope: Rope,
+    cursor_x: usize,
+    cursor_y: usize,
+    sticky_cursor_x: usize,
+    last_vertical_move_dir: Option<MovementDirection>,
+    last_horizontal_move_dir: Option<MovementDirection>,
+    // cache - do we *really* need this?
     rows: usize,
     cols: Vec<usize>,
 }
@@ -238,7 +244,7 @@ impl TextBuffer {
             rows = i + 1;
         }
 
-        Self { rope, rows, cols }
+        Self { rope, rows, cols, cursor_x: 0, cursor_y: 0, sticky_cursor_x: 0, last_vertical_move_dir: None, last_horizontal_move_dir: None }
     }
 
     fn byte_offset_at_cursor(&self, cursor_x: usize, cursor_y: usize) -> usize {
@@ -254,8 +260,8 @@ impl TextBuffer {
         offset
     }
 
-    fn insert_char_at(&mut self, char: char, cursor_x: usize, cursor_y: usize) {
-        let offset = self.byte_offset_at_cursor(cursor_x, cursor_y);
+    fn insert_char_at_cursor(&mut self, char: char, mode: &Mode) {
+        let offset = self.byte_offset_at_cursor(self.cursor_x, self.cursor_y);
         let mut buf = [0; 4];
         let text = char.encode_utf8(&mut buf);
         let text_width = unicode_display_width::width(text) as usize;
@@ -265,29 +271,90 @@ impl TextBuffer {
         if char == '\n' {
             let mut old_line_count = 0;
             let mut new_line_count = 0;
-            for g in self.rope.line(cursor_y).graphemes() {
+            for g in self.rope.line(self.cursor_y).graphemes() {
                 old_line_count += unicode_display_width::width(&g) as usize;
             }
-            for g in self.rope.line(cursor_y + 1).graphemes() {
+            for g in self.rope.line(self.cursor_y + 1).graphemes() {
                 new_line_count += unicode_display_width::width(&g) as usize;
             }
-            self.cols[cursor_y] = old_line_count;
-            self.cols.insert(cursor_y + 1, new_line_count);
+            self.cols[self.cursor_y] = old_line_count;
+            self.cols.insert(self.cursor_y + 1, new_line_count);
             self.rows += 1;
+
+            self.move_cursor_to(Some(0), Some(self.cursor_y + 1), mode);
         } else {
-            self.cols[cursor_y] += text_width;
+            self.cols[self.cursor_y] += text_width;
+
+            self.cursor_right(mode);
         }
     }
+
+    fn move_cursor_to(&mut self, x: Option<usize>, y: Option<usize>, mode: &Mode) {
+        // ensure x and y are within bounds
+        let y = self.rows.saturating_sub(1).min(y.unwrap_or(self.cursor_y));
+        let max_x = match mode {
+            Mode::Insert => self.cols[y],
+            Mode::Normal => self.cols[y].saturating_sub(1),
+        };
+        let x = max_x.min(x.unwrap_or(self.sticky_cursor_x));
+
+        self.last_horizontal_move_dir = match self.cursor_x.cmp(&x) {
+            Ordering::Greater => Some(MovementDirection::Backward),
+            Ordering::Less => Some(MovementDirection::Forward),
+            Ordering::Equal => None,
+        };
+
+        self.last_vertical_move_dir = match self.cursor_y.cmp(&y) {
+            Ordering::Greater => Some(MovementDirection::Backward),
+            Ordering::Less => Some(MovementDirection::Forward),
+            Ordering::Equal => None,
+        };
+
+        self.cursor_x = x;
+        self.cursor_y = y;
+    }
+
+    fn cursor_up(&mut self, mode: &Mode) {
+        self.move_cursor_to(
+            None,
+            Some(self.cursor_y.saturating_sub(1)),
+            mode
+        );
+    }
+
+    fn cursor_down(&mut self, mode: &Mode) {
+        self.move_cursor_to(
+            None,
+            Some(self.cursor_y + 1),
+            mode
+        );
+    }
+
+    fn cursor_left(&mut self, mode: &Mode) {
+        self.move_cursor_to(
+            Some(self.cursor_x.saturating_sub(1)),
+            None,
+            mode
+        );
+
+        self.sticky_cursor_x = self.cursor_x;
+    }
+
+    fn cursor_right(&mut self, mode: &Mode) {
+        self.move_cursor_to(
+            Some(self.cursor_x + 1),
+            None,
+            mode
+        );
+
+        self.sticky_cursor_x = self.cursor_x;
+    }
+
 }
 
-enum CursorHorizontalMovementDirection {
-    Left,
-    Right,
-}
-
-enum CursorVerticalMovementDirection {
-    Up,
-    Down,
+enum MovementDirection {
+    Forward,
+    Backward,
 }
 
 struct ScrollView {
@@ -299,9 +366,6 @@ struct ScrollView {
     offset_y: usize,
     scroll_x: usize,
     scroll_y: usize,
-    sticky_cursor_x: usize,
-    document_cursor_x: usize,
-    document_cursor_y: usize,
 }
 
 impl ScrollView {
@@ -315,9 +379,6 @@ impl ScrollView {
             offset_y: 2,
             scroll_y: 0,
             scroll_x: 0,
-            sticky_cursor_x: 0,
-            document_cursor_x: 0,
-            document_cursor_y: 0,
         }
     }
 
@@ -329,117 +390,49 @@ impl ScrollView {
         self.scroll_x..self.scroll_x + self.width
     }
 
-    fn move_document_cursor_to(&mut self, x: Option<usize>, y: Option<usize>, buffer: &TextBuffer, mode: &Mode) {
-        let y = buffer.rows.saturating_sub(1).min(y.unwrap_or(self.document_cursor_y));
-        let max_x = match mode {
-            Mode::Insert => buffer.cols[y],
-            Mode::Normal => buffer.cols[y].saturating_sub(1),
-        };
-        let x = max_x.min(x.unwrap_or(self.sticky_cursor_x));
-
-
-        let horizontal_direction = match self.document_cursor_x.cmp(&x) {
-            Ordering::Greater => Some(CursorHorizontalMovementDirection::Left),
-            Ordering::Less => Some(CursorHorizontalMovementDirection::Right),
-            Ordering::Equal => None,
-        };
-
-        let vertical_direction = match self.document_cursor_y.cmp(&y) {
-            Ordering::Greater => Some(CursorVerticalMovementDirection::Up),
-            Ordering::Less => Some(CursorVerticalMovementDirection::Down),
-            Ordering::Equal => None,
-        };
-
-        self.document_cursor_x = x;
-        self.document_cursor_y = y;
-
-        self.scroll_into_view(buffer, horizontal_direction, vertical_direction);
-    }
-
-    fn scroll_into_view(&mut self, buffer: &TextBuffer, horizontal_direction: Option<CursorHorizontalMovementDirection>, vertical_direction: Option<CursorVerticalMovementDirection>) {
-        if let Some(dir) = vertical_direction {
+    fn scroll_cursor_into_view(&mut self, buffer: &TextBuffer) {
+        if let Some(ref dir) = buffer.last_vertical_move_dir {
             match dir {
-                CursorVerticalMovementDirection::Up => self.scroll_up(buffer),
-                CursorVerticalMovementDirection::Down => self.scroll_down(buffer),
+                MovementDirection::Backward => self.scroll_up(buffer),
+                MovementDirection::Forward => self.scroll_down(buffer),
             }
         }
 
-        if let Some(dir) = horizontal_direction {
+        if let Some(ref dir) = buffer.last_horizontal_move_dir {
             match dir {
-                CursorHorizontalMovementDirection::Left => self.scroll_left(),
-                CursorHorizontalMovementDirection::Right => self.scroll_right(buffer),
+                MovementDirection::Backward => self.scroll_left(buffer),
+                MovementDirection::Forward => self.scroll_right(buffer),
             }
         }
     }
 
-    fn cursor_up(&mut self, buffer: &TextBuffer, mode: &Mode) {
-        self.move_document_cursor_to(
-            None,
-            Some(self.document_cursor_y.saturating_sub(1)),
-            buffer,
-            mode
-        );
-    }
+    fn scroll_up(&mut self, buffer: &TextBuffer) {
+        self.scroll_y = buffer.cursor_y.saturating_sub(self.offset_y).min(self.scroll_y);
 
-    fn cursor_down(&mut self, buffer: &TextBuffer, mode: &Mode) {
-        self.move_document_cursor_to(
-            None,
-            Some(self.document_cursor_y + 1),
-            buffer,
-            mode
-        );
-    }
-
-    fn cursor_left(&mut self, buffer: &TextBuffer, mode: &Mode) {
-        self.move_document_cursor_to(
-            Some(self.document_cursor_x.saturating_sub(1)),
-            None,
-            buffer,
-            mode
-        );
-
-        self.sticky_cursor_x = self.document_cursor_x;
-    }
-
-    fn cursor_right(&mut self, buffer: &TextBuffer, mode: &Mode) {
-        self.move_document_cursor_to(
-            Some(self.document_cursor_x + 1),
-            None,
-            buffer,
-            mode
-        );
-
-        self.sticky_cursor_x = self.document_cursor_x;
-    }
-
-    fn scroll_up(&mut self, _buffer: &TextBuffer) {
-        let scroll_y = self.document_cursor_y.saturating_sub(self.offset_y).min(self.scroll_y);
-        self.scroll_y = scroll_y;
-
-        self.cursor_y = self.document_cursor_y.saturating_sub(self.scroll_y);
+        self.cursor_y = buffer.cursor_y.saturating_sub(self.scroll_y);
     }
 
     fn scroll_down(&mut self, buffer: &TextBuffer) {
         let max_scroll_y = buffer.rows.saturating_sub(self.height);
-        let scroll_y = self.document_cursor_y.saturating_sub(self.height.saturating_sub(self.offset_y + 1)).min(max_scroll_y);
+        let scroll_y = buffer.cursor_y.saturating_sub(self.height.saturating_sub(self.offset_y + 1)).min(max_scroll_y);
         self.scroll_y = self.scroll_y.max(scroll_y);
 
-        self.cursor_y = self.document_cursor_y.saturating_sub(self.scroll_y);
+        self.cursor_y = buffer.cursor_y.saturating_sub(self.scroll_y);
     }
 
-    fn scroll_left(&mut self) {
-        let scroll_x = self.document_cursor_x.saturating_sub(self.offset_x).min(self.scroll_x);
+    fn scroll_left(&mut self, buffer: &TextBuffer) {
+        let scroll_x = buffer.cursor_x.saturating_sub(self.offset_x).min(self.scroll_x);
         self.scroll_x = scroll_x;
 
-        self.cursor_x = self.document_cursor_x.saturating_sub(self.scroll_x);
+        self.cursor_x = buffer.cursor_x.saturating_sub(self.scroll_x);
     }
 
     fn scroll_right(&mut self, buffer: &TextBuffer) {
         let max_scroll_x = buffer.cols.iter().max().unwrap_or(&0).saturating_sub(self.width);
-        let scroll_x = self.document_cursor_x.saturating_sub(self.width.saturating_sub(self.offset_x + 1)).min(max_scroll_x);
+        let scroll_x = buffer.cursor_x.saturating_sub(self.width.saturating_sub(self.offset_x + 1)).min(max_scroll_x);
         self.scroll_x = self.scroll_x.max(scroll_x);
 
-        self.cursor_x = self.document_cursor_x.saturating_sub(self.scroll_x);
+        self.cursor_x = buffer.cursor_x.saturating_sub(self.scroll_x);
     }
 }
 
@@ -468,37 +461,56 @@ impl Editor {
 
     fn enter_normal_mode(&mut self) {
         self.mode = Mode::Normal;
-        self.buffer_view.cursor_left(&self.text_buffer, &self.mode);
+        self.text_buffer.cursor_left(&self.mode);
+        self.buffer_view.scroll_cursor_into_view(&self.text_buffer);
     }
 
     fn enter_insert_mode_relative_to_cursor(&mut self, x: usize) {
         self.mode = Mode::Insert;
         for _ in 0..x {
-            self.buffer_view.cursor_right(&self.text_buffer, &self.mode);
+            self.text_buffer.cursor_right(&self.mode);
+            self.buffer_view.scroll_cursor_into_view(&self.text_buffer);
         }
     }
 
     fn append_character(&mut self, c: char) {
-        self.text_buffer.insert_char_at(c, self.buffer_view.document_cursor_x, self.buffer_view.document_cursor_y);
+        self.text_buffer.insert_char_at_cursor(c, &self.mode);
+        self.buffer_view.scroll_cursor_into_view(&self.text_buffer);
+    }
 
-        if c == '\n' {
-            self.buffer_view.move_document_cursor_to(Some(0), Some(self.buffer_view.document_cursor_y + 1), &self.text_buffer, &self.mode);
-        } else {
-            self.buffer_view.cursor_right(&self.text_buffer, &self.mode);
-        }
+    fn cursor_up(&mut self) {
+        self.text_buffer.cursor_up(&self.mode);
+        self.buffer_view.scroll_cursor_into_view(&self.text_buffer);
+    }
+
+    fn cursor_down(&mut self) {
+        self.text_buffer.cursor_down(&self.mode);
+        self.buffer_view.scroll_cursor_into_view(&self.text_buffer);
+    }
+
+    fn cursor_left(&mut self) {
+        self.text_buffer.cursor_left(&self.mode);
+        self.buffer_view.scroll_cursor_into_view(&self.text_buffer);
+    }
+
+    fn cursor_right(&mut self) {
+        self.text_buffer.cursor_right(&self.mode);
+        self.buffer_view.scroll_cursor_into_view(&self.text_buffer);
     }
 
     fn insert_line_below(&mut self) {
         self.mode = Mode::Insert;
-        self.buffer_view.move_document_cursor_to(Some(std::usize::MAX), None, &self.text_buffer, &self.mode);
-        self.append_character('\n');
+        self.text_buffer.move_cursor_to(Some(std::usize::MAX), None, &self.mode);
+        self.text_buffer.insert_char_at_cursor('\n', &self.mode);
+        self.buffer_view.scroll_cursor_into_view(&self.text_buffer);
     }
 
     fn insert_line_above(&mut self) {
         self.mode = Mode::Insert;
-        self.buffer_view.move_document_cursor_to(None, None, &self.text_buffer, &self.mode);
-        self.append_character('\n');
-        self.buffer_view.cursor_up(&self.text_buffer, &self.mode);
+        self.text_buffer.cursor_up(&self.mode);
+        self.text_buffer.move_cursor_to(Some(std::usize::MAX), None, &self.mode);
+        self.text_buffer.insert_char_at_cursor('\n', &self.mode);
+        self.buffer_view.scroll_cursor_into_view(&self.text_buffer);
     }
 }
 
@@ -630,16 +642,16 @@ fn main() -> Result<()> {
                         match action {
                             Action::Quit => break,
                             Action::MoveUp => {
-                                editor.buffer_view.cursor_up(&editor.text_buffer, &editor.mode);
+                                editor.cursor_up();
                             }
                             Action::MoveDown => {
-                                editor.buffer_view.cursor_down(&editor.text_buffer, &editor.mode);
+                                editor.cursor_down();
                             }
                             Action::MoveLeft => {
-                                editor.buffer_view.cursor_left(&editor.text_buffer, &editor.mode);
+                                editor.cursor_left();
                             }
                             Action::MoveRight => {
-                                editor.buffer_view.cursor_right(&editor.text_buffer, &editor.mode);
+                                editor.cursor_right();
                             }
                             Action::EnterInsertModeAtCursor => {
                                 editor.enter_insert_mode_relative_to_cursor(0);
