@@ -1,6 +1,6 @@
 [package]
-name = "krab"
-description = "A text editor"
+name = "kod"
+description = "A code editor"
 version = "0.1.0"
 edition = "2021"
 

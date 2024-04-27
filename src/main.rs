@@ -1,12 +1,38 @@
 use anyhow::Result;
+use crop::Rope;
 use crossterm::{
     cursor,
     event::{read, Event, KeyCode, KeyEvent, KeyEventKind},
-    style::{Color, Print},
+    style::{Color, Print, SetBackgroundColor, SetForegroundColor},
     terminal, ExecutableCommand, QueueableCommand,
 };
+use log::debug;
+use unicode_segmentation::UnicodeSegmentation;
 use std::{cmp::Ordering, env, io::Write};
-use crop::Rope;
+
+struct Perf<'a> {
+    now: std::time::Instant,
+    msg: &'a str
+}
+
+impl<'a> Perf<'a> {
+    fn new(msg: &'a str) -> Self {
+        Self {
+            msg,
+            now: std::time::Instant::now(),
+        }
+    }
+
+    fn end(self) {
+        debug!("[{}ms] {}", self.now.elapsed().as_millis(), self.msg);
+    }
+}
+
+macro_rules! perf {
+    ($s:expr) => {
+        Perf::new($s)
+    }
+}
 
 enum Mode {
     Normal,
@@ -18,9 +44,12 @@ enum Action {
     MoveDown,
     MoveLeft,
     MoveRight,
+    GoToFirstLine,
+    GoToLastLine,
     EnterNormalMode,
     EnterInsertModeAtCursor,
     EnterInsertModeAfterCursor,
+    EnterInsertModeAtEol,
     AppendCharacter(char),
     InsertLineBelow,
     InsertLineAbove,
@@ -43,8 +72,11 @@ fn handle_normal_mode_key_event(event: &KeyEvent) -> Option<Action> {
         KeyCode::Char('l') | KeyCode::Right => Some(Action::MoveRight),
         KeyCode::Char('i')=> Some(Action::EnterInsertModeAtCursor),
         KeyCode::Char('a') => Some(Action::EnterInsertModeAfterCursor),
+        KeyCode::Char('A') => Some(Action::EnterInsertModeAtEol),
         KeyCode::Char('o') => Some(Action::InsertLineBelow),
         KeyCode::Char('O') => Some(Action::InsertLineAbove),
+        KeyCode::Char('g') => Some(Action::GoToFirstLine),
+        KeyCode::Char('G') => Some(Action::GoToLastLine),
         KeyCode::Char('q') => Some(Action::Quit),
         _ => None,
     }
@@ -101,6 +133,7 @@ impl Renderer {
         let stdout = std::io::stdout();
 
         let (width, height) = terminal::size()?;
+        debug!("Terminal size: {}x{}", width, height);
         let width: usize = width.into();
         let height: usize = height.into();
 
@@ -124,7 +157,7 @@ impl Renderer {
 
     fn draw(&mut self, state: &Editor) -> Result<()> {
         self.draw_buffer(state);
-        // self.draw_statusline(state);
+        self.draw_statusline(state);
         self.paint()?;
         self.draw_cursor(state)?;
         self.stdout.flush()?;
@@ -135,10 +168,26 @@ impl Renderer {
         let prev_buffer = &self.buffers[1 - self.current];
         let curr_buffer = &self.buffers[self.current];
 
-        for Patch { cell: Cell { symbol, fg, bg, }, x, y, } in prev_buffer.diff(curr_buffer) {
+        let mut fg = Color::Reset;
+        let mut bg = Color::Reset;
+
+        for Patch { cell, x, y, } in prev_buffer.diff(curr_buffer) {
             self.stdout.queue(cursor::MoveTo(x as u16, y as u16))?;
-            self.stdout.queue(Print(&symbol))?;
+
+            if cell.fg != fg {
+                self.stdout.queue(SetForegroundColor(cell.fg))?;
+                fg = cell.fg;
+            }
+            if cell.bg != bg {
+                self.stdout.queue(SetBackgroundColor(cell.bg))?;
+                bg = cell.bg;
+            }
+
+            self.stdout.queue(Print(&cell.symbol))?;
         }
+
+        self.stdout.queue(SetForegroundColor(Color::Reset))?;
+        self.stdout.queue(SetBackgroundColor(Color::Reset))?;
 
         self.buffers[1 - self.current].reset();
         self.current = 1 - self.current;
@@ -148,14 +197,15 @@ impl Renderer {
 
     fn draw_buffer(&mut self, state: &Editor) {
         for row in state.buffer_view.row_range() {
-            if row >= state.text_buffer.rope.lines().len() {
+            if row >= state.text_buffer.lines_len() {
                 break;
             }
-            let line = state.text_buffer.rope.line(row);
+            let line = state.text_buffer.data.line(row);
             let mut graphemes = line.graphemes();
             let mut skip_next_n_cols = 0;
             // advance the iterator
             for _ in 0..state.buffer_view.scroll_x { graphemes.next(); }
+
             for col in state.buffer_view.col_range() {
                 if skip_next_n_cols > 0 {
                     skip_next_n_cols -= 1;
@@ -167,7 +217,7 @@ impl Renderer {
                         let width = unicode_display_width::width(&g);
                         let x = col.saturating_sub(state.buffer_view.scroll_x);
                         let y = row.saturating_sub(state.buffer_view.scroll_y);
-                        self.current_buffer_mut().put_symbol(g.to_string(), width as u8, x, y, None, None);
+                        self.current_buffer_mut().put_symbol(g.to_string(), width as u8, x, y, Color::Reset, Color::Reset);
                         skip_next_n_cols = width - 1;
                     }
                 }
@@ -175,38 +225,40 @@ impl Renderer {
         }
     }
 
-    // fn draw_statusline(&mut self, state: &Editor) {
-    //     let label = match state.mode {
-    //         Mode::Normal => " NOR ",
-    //         Mode::Insert => " INS ",
-    //     };
+    fn draw_statusline(&mut self, state: &Editor) {
+        let label = match state.mode {
+            Mode::Normal => " NOR ",
+            Mode::Insert => " INS ",
+        };
 
-    //     let (cursor_x, cursor_y) = state.buffer_view.cursor_position_relative_to_buffer();
-    //     let position = format!(" {}:{} ", cursor_y + 1, cursor_x + 1);
 
-    //     if label.len() + position.len() < self.width {
-    //         let chars: Vec<char> = label.chars().collect();
-    //         self.curr_buffer.put_chars(
-    //             &chars,
-    //             0,
-    //             self.height - 1,
-    //             Some(Color::Black),
-    //             Some(Color::White),
-    //         );
-    //         for x in label.len()..self.width - position.len() {
-    //             self.curr_buffer
-    //                 .put_symbol(' ', x, self.height - 1, None, None);
-    //         }
-    //         let position_chars: Vec<char> = position.chars().collect();
-    //         self.curr_buffer.put_chars(
-    //             &position_chars,
-    //             self.width - position.len(),
-    //             self.height - 1,
-    //             Some(Color::Black),
-    //             Some(Color::White),
-    //         );
-    //     }
-    // }
+        let h = self.height - 1;
+        let line = " ".repeat(self.width);
+        self.current_buffer_mut().put_string(
+            line,
+            0,
+            h,
+            Color::Black,
+            Color::White,
+        );
+        self.current_buffer_mut().put_string(
+            label.to_string(),
+            0,
+            h,
+            Color::Black,
+            Color::White,
+        );
+
+        let position = format!(" {}:{} ", state.text_buffer.cursor_y + 1, state.text_buffer.cursor_x + 1);
+        let w = self.width - position.graphemes(true).map(|g| unicode_display_width::width(g) as usize).sum::<usize>();
+        self.current_buffer_mut().put_string(
+            position,
+            w,
+            h,
+            Color::Black,
+            Color::White,
+        );
+    }
 
     fn draw_cursor(&mut self, state: &Editor) -> Result<()> {
         let x = state.buffer_view.cursor_x as u16;
@@ -223,34 +275,23 @@ impl Renderer {
 }
 
 struct TextBuffer {
-    rope: Rope,
+    data: Rope,
     cursor_x: usize,
     cursor_y: usize,
     sticky_cursor_x: usize,
     last_vertical_move_dir: Option<MovementDirection>,
     last_horizontal_move_dir: Option<MovementDirection>,
-    // cache - do we *really* need this?
-    rows: usize,
-    cols: Vec<usize>,
 }
 
 impl TextBuffer {
-    fn new(rope: Rope) -> Self {
-        let mut cols = Vec::with_capacity(rope.lines().len());
-        let mut rows = 0;
-
-        for (i, line) in rope.lines().enumerate() {
-            cols.push(line.graphemes().map(|g| unicode_display_width::width(&g) as usize).sum());
-            rows = i + 1;
-        }
-
-        Self { rope, rows, cols, cursor_x: 0, cursor_y: 0, sticky_cursor_x: 0, last_vertical_move_dir: None, last_horizontal_move_dir: None }
+    fn new(data: Rope) -> Self {
+        Self { data, cursor_x: 0, cursor_y: 0, sticky_cursor_x: 0, last_vertical_move_dir: None, last_horizontal_move_dir: None }
     }
 
     fn byte_offset_at_cursor(&self, cursor_x: usize, cursor_y: usize) -> usize {
-        let mut offset = self.rope.byte_of_line(cursor_y);
+        let mut offset = self.data.byte_of_line(cursor_y);
         let mut col = 0;
-        for g in self.rope.line(cursor_y).graphemes() {
+        for g in self.data.line(cursor_y).graphemes() {
             if col == cursor_x {
                 break;
             }
@@ -264,37 +305,68 @@ impl TextBuffer {
         let offset = self.byte_offset_at_cursor(self.cursor_x, self.cursor_y);
         let mut buf = [0; 4];
         let text = char.encode_utf8(&mut buf);
-        let text_width = unicode_display_width::width(text) as usize;
 
-        self.rope.insert(offset, text);
+        let width = unicode_display_width::width(text) as usize;
+
+        self.data.insert(offset, text);
 
         if char == '\n' {
-            let mut old_line_count = 0;
-            let mut new_line_count = 0;
-            for g in self.rope.line(self.cursor_y).graphemes() {
-                old_line_count += unicode_display_width::width(&g) as usize;
-            }
-            for g in self.rope.line(self.cursor_y + 1).graphemes() {
-                new_line_count += unicode_display_width::width(&g) as usize;
-            }
-            self.cols[self.cursor_y] = old_line_count;
-            self.cols.insert(self.cursor_y + 1, new_line_count);
-            self.rows += 1;
-
             self.move_cursor_to(Some(0), Some(self.cursor_y + 1), mode);
         } else {
-            self.cols[self.cursor_y] += text_width;
-
-            self.cursor_right(mode);
+            self.move_cursor_to(Some(self.cursor_x + width), None, mode);
         }
+    }
+
+    fn delete_to_the_left(&mut self) {
+        if self.cursor_x > 0 {
+            let mut offset = self.data.byte_of_line(self.cursor_y);
+            let mut from = offset;
+            let mut to = 0;
+            let mut col = 0;
+
+            for g in self.data.line(self.cursor_y).graphemes() {
+                col += unicode_display_width::width(&g) as usize;
+                offset += g.len();
+                to = offset;
+
+                if col == self.cursor_x.saturating_sub(1) {
+                    from = offset;
+                } else if col == self.cursor_x {
+                    break;
+                }
+            }
+
+            self.data.delete(from..to);
+            self.cursor_left(&Mode::Insert);
+        } else if self.cursor_y > 0 {
+            let byte_length_of_newline_char = 1;
+            let to = self.data.byte_of_line(self.cursor_y);
+            let from = to.saturating_sub(byte_length_of_newline_char);
+            // need to move cursor before deleting
+            self.move_cursor_to(Some(self.line_len(self.cursor_y - 1)), Some(self.cursor_y - 1), &Mode::Insert);
+            self.data.delete(from..to);
+        }
+    }
+
+    fn lines_len(&self) -> usize {
+        self.data.lines().len()
+    }
+
+    // TODO: performance bottleneck
+    fn line_len(&self, line: usize) -> usize {
+        self.data.line(line).graphemes().map(|g| unicode_display_width::width(&g) as usize).sum()
+    }
+
+    fn current_line_len(&self) -> usize {
+        self.line_len(self.cursor_y)
     }
 
     fn move_cursor_to(&mut self, x: Option<usize>, y: Option<usize>, mode: &Mode) {
         // ensure x and y are within bounds
-        let y = self.rows.saturating_sub(1).min(y.unwrap_or(self.cursor_y));
+        let y = self.lines_len().saturating_sub(1).min(y.unwrap_or(self.cursor_y));
         let max_x = match mode {
-            Mode::Insert => self.cols[y],
-            Mode::Normal => self.cols[y].saturating_sub(1),
+            Mode::Insert => self.line_len(y),
+            Mode::Normal => self.line_len(y).saturating_sub(1),
         };
         let x = max_x.min(x.unwrap_or(self.sticky_cursor_x));
 
@@ -315,42 +387,39 @@ impl TextBuffer {
     }
 
     fn cursor_up(&mut self, mode: &Mode) {
-        self.move_cursor_to(
-            None,
-            Some(self.cursor_y.saturating_sub(1)),
-            mode
-        );
+        self.move_cursor_to(None, Some(self.cursor_y.saturating_sub(1)), mode);
     }
 
     fn cursor_down(&mut self, mode: &Mode) {
-        self.move_cursor_to(
-            None,
-            Some(self.cursor_y + 1),
-            mode
-        );
+        self.move_cursor_to(None, Some(self.cursor_y + 1), mode);
     }
 
     fn cursor_left(&mut self, mode: &Mode) {
-        self.move_cursor_to(
-            Some(self.cursor_x.saturating_sub(1)),
-            None,
-            mode
-        );
+        let width = match self.data.line(self.cursor_y).graphemes().nth(self.cursor_x.saturating_sub(2)) {
+            Some(g) => unicode_display_width::width(&g) as usize,
+            None => 0
+        };
+
+        self.move_cursor_to(Some(self.cursor_x.saturating_sub(width)), None, mode);
 
         self.sticky_cursor_x = self.cursor_x;
     }
 
     fn cursor_right(&mut self, mode: &Mode) {
-        self.move_cursor_to(
-            Some(self.cursor_x + 1),
-            None,
-            mode
-        );
+        let width = match self.data.line(self.cursor_y).graphemes().nth(self.cursor_x) {
+            Some(g) => unicode_display_width::width(&g) as usize,
+            None => 0
+        };
+
+        self.move_cursor_to(Some(self.cursor_x + width), None, mode);
 
         self.sticky_cursor_x = self.cursor_x;
     }
-
 }
+
+// fn nth_grapheme_boundary_on_line(cursor_x: usize, line: RopeSlice) -> usize {
+//     line.graphemes
+// }
 
 enum MovementDirection {
     Forward,
@@ -413,7 +482,7 @@ impl ScrollView {
     }
 
     fn scroll_down(&mut self, buffer: &TextBuffer) {
-        let max_scroll_y = buffer.rows.saturating_sub(self.height);
+        let max_scroll_y = buffer.lines_len().saturating_sub(self.height);
         let scroll_y = buffer.cursor_y.saturating_sub(self.height.saturating_sub(self.offset_y + 1)).min(max_scroll_y);
         self.scroll_y = self.scroll_y.max(scroll_y);
 
@@ -428,7 +497,7 @@ impl ScrollView {
     }
 
     fn scroll_right(&mut self, buffer: &TextBuffer) {
-        let max_scroll_x = buffer.cols.iter().max().unwrap_or(&0).saturating_sub(self.width);
+        let max_scroll_x = buffer.line_len(buffer.cursor_y).saturating_sub(self.width);
         let scroll_x = buffer.cursor_x.saturating_sub(self.width.saturating_sub(self.offset_x + 1)).min(max_scroll_x);
         self.scroll_x = self.scroll_x.max(scroll_x);
 
@@ -446,16 +515,25 @@ impl Editor {
     fn with_size(width: usize, height: usize) -> Result<Self> {
         let mut args: Vec<String> = env::args().collect();
 
-        let mut text_buffer = TextBuffer::new(Rope::from("\n"));
-        if args.len() > 1 {
+        let data = if args.len() > 1 {
+            let p = perf!("Reading file and building rope");
+
             let contents = std::fs::read_to_string(args.pop().unwrap())?;
-            text_buffer = TextBuffer::new(Rope::from(contents));
-        }
+            let data = Rope::from(contents);
+
+            p.end();
+
+            data
+        } else {
+            Rope::from("\n")
+        };
+
+        let text_buffer = TextBuffer::new(data);
 
         Ok(Self {
             text_buffer,
             mode: Mode::Normal,
-            buffer_view: ScrollView::with_size(width, height),
+            buffer_view: ScrollView::with_size(width.saturating_sub(1), height),
         })
     }
 
@@ -471,6 +549,12 @@ impl Editor {
             self.text_buffer.cursor_right(&self.mode);
             self.buffer_view.scroll_cursor_into_view(&self.text_buffer);
         }
+    }
+
+    fn enter_insert_mode_at_eol(&mut self) {
+        self.mode = Mode::Insert;
+        self.text_buffer.move_cursor_to(Some(self.text_buffer.current_line_len()), None, &self.mode);
+        self.buffer_view.scroll_cursor_into_view(&self.text_buffer);
     }
 
     fn append_character(&mut self, c: char) {
@@ -498,6 +582,16 @@ impl Editor {
         self.buffer_view.scroll_cursor_into_view(&self.text_buffer);
     }
 
+    fn go_to_first_line(&mut self) {
+        self.text_buffer.move_cursor_to(None, Some(0), &self.mode);
+        self.buffer_view.scroll_cursor_into_view(&self.text_buffer);
+    }
+
+    fn go_to_last_line(&mut self) {
+        self.text_buffer.move_cursor_to(None, Some(self.text_buffer.lines_len() - 1), &self.mode);
+        self.buffer_view.scroll_cursor_into_view(&self.text_buffer);
+    }
+
     fn insert_line_below(&mut self) {
         self.mode = Mode::Insert;
         self.text_buffer.move_cursor_to(Some(std::usize::MAX), None, &self.mode);
@@ -507,9 +601,13 @@ impl Editor {
 
     fn insert_line_above(&mut self) {
         self.mode = Mode::Insert;
-        self.text_buffer.cursor_up(&self.mode);
-        self.text_buffer.move_cursor_to(Some(std::usize::MAX), None, &self.mode);
+        self.text_buffer.move_cursor_to(Some(std::usize::MAX), Some(self.text_buffer.cursor_y.saturating_sub(1)), &self.mode);
         self.text_buffer.insert_char_at_cursor('\n', &self.mode);
+        self.buffer_view.scroll_cursor_into_view(&self.text_buffer);
+    }
+
+    fn delete_symbol_to_the_left(&mut self) {
+        self.text_buffer.delete_to_the_left();
         self.buffer_view.scroll_cursor_into_view(&self.text_buffer);
     }
 }
@@ -517,22 +615,33 @@ impl Editor {
 #[derive(PartialEq, Debug, Clone)]
 struct Cell {
     symbol: String,
-    fg: Option<Color>,
-    bg: Option<Color>,
+    fg: Color,
+    bg: Color,
 }
 
 impl Cell {
     fn empty() -> Self {
         Self {
             symbol: " ".to_string(),
-            fg: None,
-            bg: None,
+            fg: Color::Reset,
+            bg: Color::Reset,
         }
     }
 
-    fn set_symbol(&mut self, symbol: &str) {
+    fn set_symbol(&mut self, symbol: &str) -> &mut Self {
         self.symbol.clear();
         self.symbol.push_str(symbol);
+        self
+    }
+
+    fn set_fg(&mut self, fg: Color) -> &mut Self {
+        self.fg = fg;
+        self
+    }
+
+    fn set_bg(&mut self, bg: Color) -> &mut Self {
+        self.bg = bg;
+        self
     }
 
     fn reset(&mut self) {
@@ -592,26 +701,30 @@ impl RenderBuffer {
     //     self.cells.resize(width * height, Cell::empty());
     // }
 
-    fn put_symbol(&mut self, symbol: String, _width: u8, x: usize, y: usize, fg: Option<Color>, bg: Option<Color>) {
+    fn put_symbol(&mut self, symbol: String, _width: u8, x: usize, y: usize, fg: Color, bg: Color) {
         let index = self.width * y + x;
 
         if let Some(cell) = self.cells.get_mut(index) {
-            *cell = Cell { symbol, fg, bg };
+            cell.set_symbol(&symbol)
+                .set_fg(fg)
+                .set_bg(bg);
         }
     }
 
-    // fn put_chars(&mut self, chars: &[char], x: usize, y: usize, fg: Option<Color>, bg: Option<Color>) {
-    //     let start = self.width * y + x;
+    fn put_string(&mut self, string: String, x: usize, y: usize, fg: Color, bg: Color) {
+        let start = self.width * y + x;
 
-    //     for (offset, &char) in chars.iter().enumerate() {
-    //         if start + offset > self.cells.len() {
-    //             break;
-    //         }
-    //         if let Some(cell) = self.cells.get_mut(start + offset) {
-    //             *cell = Cell { symbol: char, fg, bg };
-    //         }
-    //     }
-    // }
+        for (offset, g) in string.graphemes(true).enumerate() {
+            if start + offset > self.cells.len() {
+                break;
+            }
+            if let Some(cell) = self.cells.get_mut(start + offset) {
+                cell.set_symbol(g)
+                    .set_fg(fg)
+                    .set_bg(bg);
+            }
+        }
+    }
 }
 
 fn setup_logging() -> Result<()> {
@@ -653,11 +766,20 @@ fn main() -> Result<()> {
                             Action::MoveRight => {
                                 editor.cursor_right();
                             }
+                            Action::GoToFirstLine => {
+                                editor.go_to_first_line();
+                            }
+                            Action::GoToLastLine => {
+                                editor.go_to_last_line();
+                            }
                             Action::EnterInsertModeAtCursor => {
                                 editor.enter_insert_mode_relative_to_cursor(0);
                             }
                             Action::EnterInsertModeAfterCursor => {
                                 editor.enter_insert_mode_relative_to_cursor(1);
+                            }
+                            Action::EnterInsertModeAtEol => {
+                                editor.enter_insert_mode_at_eol();
                             }
                             Action::EnterNormalMode => {
                                 editor.enter_normal_mode();
@@ -672,7 +794,7 @@ fn main() -> Result<()> {
                                 editor.append_character(c);
                             }
                             Action::DeleteSymbolToTheLeft => {
-                                // editor.delete_symbol_to_the_left();
+                                editor.delete_symbol_to_the_left();
                             }
                         }
                     }
