@@ -8,7 +8,7 @@ use crossterm::{
 };
 use log::debug;
 use unicode_segmentation::UnicodeSegmentation;
-use std::{cmp::Ordering, env, io::Write, path::PathBuf};
+use std::{cmp::Ordering, env, fs, io::Write, path::PathBuf};
 
 struct Perf<'a> {
     now: std::time::Instant,
@@ -54,6 +54,7 @@ enum Action {
     InsertLineBelow,
     InsertLineAbove,
     DeleteSymbolToTheLeft,
+    Write,
     Quit,
 }
 
@@ -78,6 +79,7 @@ fn handle_normal_mode_key_event(event: &KeyEvent) -> Option<Action> {
         KeyCode::Char('g') => Some(Action::GoToFirstLine),
         KeyCode::Char('G') => Some(Action::GoToLastLine),
         KeyCode::Char('q') => Some(Action::Quit),
+        KeyCode::Char('s') => Some(Action::Write),
         _ => None,
     }
 }
@@ -573,6 +575,15 @@ impl Editor {
         })
     }
 
+    fn save(&mut self) {
+        if let Some(path) = &self.text_buffer.path {
+            let p = perf!("Writing file");
+            fs::write(path, self.text_buffer.data.to_string()).expect("couldn't write to file");
+            p.end();
+        }
+        self.text_buffer.modified = false;
+    }
+
     fn enter_normal_mode(&mut self) {
         self.mode = Mode::Normal;
         self.text_buffer.cursor_left(&self.mode);
@@ -798,6 +809,9 @@ fn main() -> Result<()> {
                     if let Some(action) = handle_key_event(&editor.mode, &event) {
                         match action {
                             Action::Quit => break,
+                            Action::Write => {
+                                editor.save();
+                            }
                             Action::MoveUp => {
                                 editor.cursor_up();
                             }
