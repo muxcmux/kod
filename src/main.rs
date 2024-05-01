@@ -8,7 +8,7 @@ use crossterm::{
 };
 use log::debug;
 use unicode_segmentation::UnicodeSegmentation;
-use std::{cmp::Ordering, env, io::Write};
+use std::{cmp::Ordering, env, io::Write, path::PathBuf};
 
 struct Perf<'a> {
     now: std::time::Instant,
@@ -235,20 +235,31 @@ impl Renderer {
     }
 
     fn draw_statusline(&mut self, state: &Editor) {
-        let label = match state.mode {
-            Mode::Normal => " NOR ",
-            Mode::Insert => " INS ",
-        };
-
-
         let h = self.height - 1;
         let line = " ".repeat(self.width);
-        self.current_buffer_mut().put_string(line, 0, h, Color::Black, Color::White);
-        self.current_buffer_mut().put_string(label.to_string(), 0, h, Color::Black, Color::White);
+        self.current_buffer_mut().put_string(line, 0, h, Color::White, Color::Black);
 
-        let position = format!(" {}:{} ", state.text_buffer.cursor_y + 1, state.text_buffer.grapheme_idx_at_cursor() + 1);
-        let w = self.width - position.graphemes(true).map(|g| unicode_display_width::width(g) as usize).sum::<usize>();
-        self.current_buffer_mut().put_string(position, w, h, Color::Black, Color::White);
+        let (label, label_fg, label_bg) = match state.mode {
+            Mode::Normal => (" NOR ", Color::Black, Color::Blue),
+            Mode::Insert => (" INS ", Color::Black, Color::Green),
+        };
+
+        self.current_buffer_mut().put_string(label.to_string(), 0, h, label_fg, label_bg);
+
+        let filename = match &state.text_buffer.path {
+            Some(p) => p.to_str().expect("shit path name given"),
+            None => "[scratch]",
+        };
+        self.current_buffer_mut().put_string(filename.to_string(), label.chars().count() + 1, h, Color::White, Color::Black);
+
+        if state.text_buffer.modified {
+            let x = filename.chars().count() + label.chars().count() + 2;
+            self.current_buffer_mut().put_string("[*]".to_string(), x, h, Color::White, Color::Black);
+        }
+
+        let cursor_position = format!(" {}:{} ", state.text_buffer.cursor_y + 1, state.text_buffer.grapheme_idx_at_cursor() + 1);
+        let w = self.width - cursor_position.chars().count();
+        self.current_buffer_mut().put_string(cursor_position, w, h, Color::White, Color::Black);
     }
 
     fn draw_cursor(&mut self, state: &Editor) -> Result<()> {
@@ -270,13 +281,24 @@ struct TextBuffer {
     cursor_x: usize,
     cursor_y: usize,
     sticky_cursor_x: usize,
+    path: Option<PathBuf>,
+    modified: bool,
     last_vertical_move_dir: Option<VerticalMove>,
     last_horizontal_move_dir: Option<HorizontalMove>,
 }
 
 impl TextBuffer {
-    fn new(data: Rope) -> Self {
-        Self { data, cursor_x: 0, cursor_y: 0, sticky_cursor_x: 0, last_vertical_move_dir: None, last_horizontal_move_dir: None }
+    fn new(data: Rope, path: Option<PathBuf>) -> Self {
+        Self {
+            data,
+            path,
+            cursor_x: 0,
+            cursor_y: 0,
+            sticky_cursor_x: 0,
+            last_vertical_move_dir: None,
+            last_horizontal_move_dir: None,
+            modified: false,
+        }
     }
 
     fn byte_offset_at_cursor(&self, cursor_x: usize, cursor_y: usize) -> usize {
@@ -293,6 +315,7 @@ impl TextBuffer {
     }
 
     fn insert_char_at_cursor(&mut self, char: char, mode: &Mode) {
+        self.modified = true;
         let offset = self.byte_offset_at_cursor(self.cursor_x, self.cursor_y);
         let mut buf = [0; 4];
         let text = char.encode_utf8(&mut buf);
@@ -324,6 +347,7 @@ impl TextBuffer {
     fn delete_to_the_left(&mut self, mode: &Mode) {
         assert!(matches!(mode, Mode::Insert));
 
+        self.modified = true;
         if self.cursor_x > 0 {
             let mut start = self.data.byte_of_line(self.cursor_y);
             let mut end = start;
@@ -524,10 +548,13 @@ impl Editor {
     fn with_size(width: usize, height: usize) -> Result<Self> {
         let mut args: Vec<String> = env::args().collect();
 
+        let mut path = None;
         let data = if args.len() > 1 {
             let p = perf!("Reading file and building rope");
 
-            let contents = std::fs::read_to_string(args.pop().unwrap())?;
+            let pa = PathBuf::from(args.pop().unwrap());
+            let contents = std::fs::read_to_string(&pa)?;
+            path = Some(pa);
             let data = Rope::from(contents);
 
             p.end();
@@ -537,7 +564,7 @@ impl Editor {
             Rope::from("\n")
         };
 
-        let text_buffer = TextBuffer::new(data);
+        let text_buffer = TextBuffer::new(data, path);
 
         Ok(Self {
             text_buffer,
