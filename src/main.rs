@@ -246,7 +246,7 @@ impl Renderer {
         self.current_buffer_mut().put_string(line, 0, h, Color::Black, Color::White);
         self.current_buffer_mut().put_string(label.to_string(), 0, h, Color::Black, Color::White);
 
-        let position = format!(" {}:{} ", state.text_buffer.cursor_y + 1, state.text_buffer.cursor_x + 1);
+        let position = format!(" {}:{} ", state.text_buffer.cursor_y + 1, state.text_buffer.grapheme_idx_at_cursor() + 1);
         let w = self.width - position.graphemes(true).map(|g| unicode_display_width::width(g) as usize).sum::<usize>();
         self.current_buffer_mut().put_string(position, w, h, Color::Black, Color::White);
     }
@@ -297,44 +297,52 @@ impl TextBuffer {
         let mut buf = [0; 4];
         let text = char.encode_utf8(&mut buf);
 
-        let width = unicode_display_width::width(text) as usize;
-
         self.data.insert(offset, text);
 
         if char == '\n' {
             self.move_cursor_to(Some(0), Some(self.cursor_y + 1), mode);
         } else {
-            self.move_cursor_to(Some(self.cursor_x + width), None, mode);
+            self.move_cursor_to(Some(self.cursor_x + 1), None, mode);
         }
     }
 
-    fn delete_to_the_left(&mut self) {
+    fn grapheme_idx_at_cursor(&self) -> usize {
+        let mut idx = 0;
+        let mut col = 0;
+
+        let mut iter = self.data.line(self.cursor_y).graphemes().enumerate().peekable();
+        while let Some((i, g)) = iter.next() {
+            idx = i;
+            if col >= self.cursor_x { break }
+            if iter.peek().is_none() { idx += 1 }
+            col += unicode_display_width::width(&g) as usize;
+        }
+
+        idx
+    }
+
+    fn delete_to_the_left(&mut self, mode: &Mode) {
+        assert!(matches!(mode, Mode::Insert));
+
         if self.cursor_x > 0 {
-            let mut offset = self.data.byte_of_line(self.cursor_y);
-            let mut from = offset;
-            let mut to = 0;
-            let mut col = 0;
-
-            for g in self.data.line(self.cursor_y).graphemes() {
-                col += unicode_display_width::width(&g) as usize;
-                offset += g.len();
-                to = offset;
-
-                if col == self.cursor_x.saturating_sub(1) {
-                    from = offset;
-                } else if col == self.cursor_x {
-                    break;
+            let mut start = self.data.byte_of_line(self.cursor_y);
+            let mut end = start;
+            let idx = self.grapheme_idx_at_cursor() - 1;
+            for (i, g) in self.data.line(self.cursor_y).graphemes().enumerate() {
+                if i < idx { start += g.len() }
+                if i == idx {
+                    end = start + g.len();
+                    break
                 }
             }
-
-            self.data.delete(from..to);
+            self.data.delete(start..end);
             self.cursor_left(&Mode::Insert);
         } else if self.cursor_y > 0 {
             let byte_length_of_newline_char = 1;
             let to = self.data.byte_of_line(self.cursor_y);
             let from = to.saturating_sub(byte_length_of_newline_char);
             // need to move cursor before deleting
-            self.move_cursor_to(Some(self.line_len(self.cursor_y - 1)), Some(self.cursor_y - 1), &Mode::Insert);
+            self.move_cursor_to(Some(self.line_len(self.cursor_y - 1)), Some(self.cursor_y - 1), mode);
             self.data.delete(from..to);
         }
     }
@@ -343,7 +351,6 @@ impl TextBuffer {
         self.data.lines().len()
     }
 
-    // TODO: performance bottleneck
     fn line_len(&self, line: usize) -> usize {
         self.data.line(line).graphemes().map(|g| unicode_display_width::width(&g) as usize).sum()
     }
@@ -609,7 +616,7 @@ impl Editor {
     }
 
     fn delete_symbol_to_the_left(&mut self) {
-        self.text_buffer.delete_to_the_left();
+        self.text_buffer.delete_to_the_left(&self.mode);
         self.buffer_view.ensure_cursor_is_in_view(&self.text_buffer);
     }
 }
