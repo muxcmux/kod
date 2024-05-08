@@ -15,3 +15,6 @@ crop = { version = "0.4", features = ["graphemes", "simd"] }
 
 unicode-segmentation = "1"
 unicode-display-width = "0.3"
+
+[profile.release]
+lto = true
