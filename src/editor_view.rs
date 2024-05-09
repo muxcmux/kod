@@ -2,8 +2,23 @@ use crossterm::{cursor::SetCursorStyle, event::{KeyCode, KeyEvent}, style::Color
 
 use crate::{compositor::{Component, Context, EventResult}, document::{Document, HorizontalMove, VerticalMove}, editor::Mode, ui::{Buffer, Position, Rect}};
 
+const GUTTER_LINE_NUM_PAD_LEFT: u16 = 2;
+const GUTTER_LINE_NUM_PAD_RIGHT: u16 = 1;
+const MIN_GUTTER_WIDTH: u16 = 6;
+
+fn gutter_and_document_areas(size: Rect, ctx: &Context) -> (Rect, Rect) {
+    let gutter_width = ctx.editor.document.lines_len().checked_ilog10().unwrap_or(1) as u16 + GUTTER_LINE_NUM_PAD_LEFT + GUTTER_LINE_NUM_PAD_RIGHT;
+    let gutter_width = gutter_width.max(MIN_GUTTER_WIDTH);
+    let gutter_area = size.clip_bottom(1).clip_right(size.width.saturating_sub(gutter_width));
+    // clip right to allow for double width graphemes
+    let area = size.clip_left(gutter_area.width).clip_right(1);
+
+    (gutter_area, area)
+}
+
 pub struct EditorView {
     area: Rect,
+    gutter_area: Rect,
     cursor_position: Position,
     offset_x: usize,
     offset_y: usize,
@@ -12,10 +27,13 @@ pub struct EditorView {
 }
 
 impl EditorView {
-    pub fn new(area: Rect) -> Self {
+    pub fn new(size: Rect, ctx: &Context) -> Self {
+        let (gutter_area, area) = gutter_and_document_areas(size, ctx);
+
         Self {
             area,
-            cursor_position: Position::at_origin(),
+            gutter_area,
+            cursor_position: area.position,
             offset_x: 10,
             offset_y: 2,
             scroll_y: 0,
@@ -47,8 +65,8 @@ impl EditorView {
         }
 
         // adjust cursor
-        self.cursor_position.y = document.cursor_y.saturating_sub(self.scroll_y) as u16;
-        self.cursor_position.x = document.cursor_x.saturating_sub(self.scroll_x) as u16;
+        self.cursor_position.y = self.area.top() + document.cursor_y.saturating_sub(self.scroll_y) as u16;
+        self.cursor_position.x = self.area.left() + document.cursor_x.saturating_sub(self.scroll_x) as u16;
     }
 
     fn scroll_up(&mut self, document: &Document) {
@@ -62,8 +80,7 @@ impl EditorView {
     }
 
     fn scroll_left(&mut self, document: &Document) {
-        let scroll_x = document.cursor_x.saturating_sub(self.offset_x).min(self.scroll_x);
-        self.scroll_x = scroll_x;
+        self.scroll_x = document.cursor_x.saturating_sub(self.offset_x).min(self.scroll_x);
     }
 
     fn scroll_right(&mut self, document: &Document) {
@@ -103,9 +120,45 @@ impl EditorView {
                         let width = unicode_display_width::width(&g) as usize;
                         let x = col.saturating_sub(self.scroll_x);
                         let y = row.saturating_sub(self.scroll_y);
-                        buffer.put_symbol(g.to_string(), x as u16, y as u16, Color::Reset, Color::Reset);
+                        buffer.put_symbol(g.to_string(), x as u16 + self.area.left(), y as u16 + self.area.top(), Color::Reset, Color::Reset);
                         skip_next_n_cols = width - 1;
                     }
+                }
+            }
+        }
+    }
+
+    fn render_gutter(&self, buffer: &mut Buffer, ctx: &Context) {
+        let max = ctx.editor.document.lines_len();
+
+        for y in self.gutter_area.v_range() {
+            let line_no = y as usize + self.scroll_y + 1;
+            if line_no > max { break }
+
+            match ctx.editor.mode {
+                Mode::Insert => {
+                    let label = format!("{: >1$}", line_no, self.gutter_area.width.saturating_sub(GUTTER_LINE_NUM_PAD_RIGHT) as usize);
+                    let fg = if line_no == ctx.editor.document.cursor_y + 1 {
+                        Color::White
+                    } else {
+                        Color::DarkGrey
+                    };
+                    buffer.put_string(label, 0, y, fg, Color::Reset);
+                }
+                Mode::Normal => {
+                    let rel_line_no = self.cursor_position.y as isize - y as isize;
+                    let (fg, label) = if rel_line_no == 0 {
+                        (
+                            Color::White,
+                            format!("  {}", ctx.editor.document.cursor_y + 1)
+                        )
+                    } else {
+                        (
+                            Color::DarkGrey,
+                            format!("{: >1$}", rel_line_no.abs(), self.gutter_area.width.saturating_sub(GUTTER_LINE_NUM_PAD_RIGHT) as usize)
+                        )
+                    };
+                    buffer.put_string(label, 0, y, fg, Color::Reset);
                 }
             }
         }
@@ -121,8 +174,8 @@ impl EditorView {
         ctx.editor.mode = Mode::Insert;
         for _ in 0..x {
             ctx.editor.document.cursor_right(&ctx.editor.mode);
-            self.ensure_cursor_is_in_view(&ctx.editor.document);
         }
+        self.ensure_cursor_is_in_view(&ctx.editor.document);
     }
 
     fn enter_insert_mode_at_eol(&mut self, ctx: &mut Context) {
@@ -282,7 +335,7 @@ impl EditorView {
                 EventResult::Consumed(None)
             },
             KeyCode::Right => {
-                self.cursor_down(ctx);
+                self.cursor_right(ctx);
                 EventResult::Consumed(None)
             },
             _ => EventResult::Ignored(None)
@@ -291,12 +344,16 @@ impl EditorView {
 }
 
 impl Component for EditorView {
-    fn render(&mut self, _area: Rect, buffer: &mut Buffer, ctx: &mut Context) {
+    fn render(&mut self, area: Rect, buffer: &mut Buffer, ctx: &mut Context) {
+        self.resize(area.clip_bottom(1), ctx);
         self.render_document(buffer, ctx);
+        self.render_gutter(buffer, ctx);
     }
 
     fn resize(&mut self, new_size: Rect, ctx: &mut Context) {
-        self.area = new_size.clip_bottom(1);
+        let (gutter_area, area) = gutter_and_document_areas(new_size, ctx);
+        self.area = area;
+        self.gutter_area = gutter_area;
     }
 
     fn handle_key_event(&mut self, event: &KeyEvent, ctx: &mut Context) -> EventResult {
@@ -316,42 +373,5 @@ impl Component for EditorView {
                 }
             )
         )
-    }
-}
-
-pub struct StatusLine;
-
-impl Component for StatusLine {
-    fn resize(&mut self, _new_size: Rect, _ctx: &mut Context) {
-        // no-op
-    }
-
-    fn render(&mut self, area: Rect, buffer: &mut Buffer, ctx: &mut Context) {
-        let h = area.height.saturating_sub(1);
-
-        let line = " ".repeat(area.width as usize);
-        buffer.put_string(line, 0, h, Color::White, Color::Black);
-
-        let (label, label_fg, label_bg) = match ctx.editor.mode {
-            Mode::Normal => (" NOR ", Color::Black, Color::Blue),
-            Mode::Insert => (" INS ", Color::Black, Color::Green),
-        };
-
-        buffer.put_string(label.to_string(), 0, h, label_fg, label_bg);
-
-        let filename = match &ctx.editor.document.path {
-            Some(p) => p.to_str().expect("shit path name given"),
-            None => "[scratch]",
-        };
-        buffer.put_string(filename.to_string(), label.chars().count() as u16 + 1, h, Color::White, Color::Black);
-
-        if ctx.editor.document.modified {
-            let x = filename.chars().count() + label.chars().count() + 2;
-            buffer.put_string("[*]".to_string(), x as u16, h, Color::White, Color::Black);
-        }
-
-        let cursor_position = format!(" {}:{} ", ctx.editor.document.cursor_y + 1, ctx.editor.document.grapheme_idx_at_cursor() + 1);
-        let w = area.width.saturating_sub(cursor_position.chars().count() as u16);
-        buffer.put_string(cursor_position, w, h, Color::White, Color::Black);
     }
 }

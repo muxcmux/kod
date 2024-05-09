@@ -1,6 +1,6 @@
 use anyhow::Result;
 use crossterm::{cursor::SetCursorStyle, event::{read, Event, KeyEvent, KeyEventKind}};
-use crate::{compositor::{Compositor, Context}, editor::Editor, terminal::{self, Terminal}, ui::Rect, editor_view::{EditorView, StatusLine}};
+use crate::{compositor::{Compositor, Context}, editor::Editor, editor_view::EditorView, status_line::StatusLine, terminal::{self, Terminal}, ui::Rect};
 
 pub struct Application {
     editor: Editor,
@@ -13,12 +13,14 @@ impl Application {
         let size = crossterm::terminal::size().expect("Can't get terminal size");
         let size = Rect::from(size);
 
-        let editor = Editor::new()?;
+        let mut editor = Editor::new()?;
         let terminal = Terminal::new(size);
         let mut compositor = Compositor::new(size);
 
-        compositor.push(Box::new(EditorView::new(size.clip_bottom(1))));
-        compositor.push(Box::new(StatusLine {}));
+        let ctx = Context { editor: &mut editor };
+
+        compositor.push(Box::new(EditorView::new(size.clip_bottom(1), &ctx)));
+        compositor.push(Box::new(StatusLine::new(size.clip_top(size.height.saturating_sub(1)))));
 
         Ok(Self { editor, compositor, terminal })
     }

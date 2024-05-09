@@ -1,3 +1,5 @@
+use std::ops::Range;
+
 use crossterm::style::Color;
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -26,7 +28,7 @@ impl Rect {
     }
 
     pub fn clip_bottom(self, height: u16) -> Self {
-        Rect {
+        Self {
             height: self.height.saturating_sub(height),
             ..self
         }
@@ -34,7 +36,7 @@ impl Rect {
 
     pub fn clip_top(self, height: u16) -> Self {
         let height = height.min(self.height);
-        Rect {
+        Self {
             position: Position {
                 x: self.position.x,
                 y: self.position.y.saturating_add(height)
@@ -42,6 +44,49 @@ impl Rect {
             height: self.height.saturating_sub(height),
             ..self
         }
+    }
+
+    pub fn clip_left(self, width: u16) -> Self {
+        let width = width.min(self.width);
+        Self {
+            position: Position {
+                x: self.position.x.saturating_add(width),
+                ..self.position
+            },
+            width: self.width.saturating_sub(width),
+            ..self
+        }
+    }
+
+    pub fn clip_right(self, width: u16) -> Self {
+        Self {
+            width: self.width.saturating_sub(width),
+            ..self
+        }
+    }
+
+    pub fn left(&self) -> u16 {
+        self.position.x
+    }
+
+    pub fn top(&self) -> u16 {
+        self.position.y
+    }
+
+    pub fn right(&self) -> u16 {
+        self.position.x + self.width
+    }
+
+    pub fn bottom(&self) -> u16 {
+        self.position.y + self.height
+    }
+
+    pub fn v_range(&self) -> Range<u16> {
+        self.top()..self.bottom() + 1
+    }
+
+    pub fn h_range(&self) -> Range<u16> {
+        self.left()..self.right()
     }
 }
 
