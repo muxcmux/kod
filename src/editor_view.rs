@@ -1,10 +1,22 @@
 use crossterm::{cursor::SetCursorStyle, event::{KeyCode, KeyEvent}, style::Color};
 
-use crate::{compositor::{Component, Context, EventResult}, document::{Document, HorizontalMove, VerticalMove}, editor::Mode, ui::{Buffer, Position, Rect}};
+use crate::{compositor::{Component, Context, EventResult}, document::Document, editor::Mode, ui::{Buffer, Position, Rect}};
 
 const GUTTER_LINE_NUM_PAD_LEFT: u16 = 2;
 const GUTTER_LINE_NUM_PAD_RIGHT: u16 = 1;
 const MIN_GUTTER_WIDTH: u16 = 6;
+
+fn adjust_scroll(dimension: usize, doc_cursor: usize, offset: usize, scroll: usize) -> Option<usize> {
+    if doc_cursor > dimension.saturating_sub(offset + 1) + scroll {
+        return Some(doc_cursor.saturating_sub(dimension.saturating_sub(offset + 1)));
+    }
+
+    if doc_cursor < scroll + offset {
+        return Some(doc_cursor.saturating_sub(offset));
+    }
+
+    None
+}
 
 fn gutter_and_document_areas(size: Rect, ctx: &Context) -> (Rect, Rect) {
     let gutter_width = ctx.editor.document.lines_len().checked_ilog10().unwrap_or(1) as u16 + GUTTER_LINE_NUM_PAD_LEFT + GUTTER_LINE_NUM_PAD_RIGHT;
@@ -34,8 +46,8 @@ impl EditorView {
             area,
             gutter_area,
             cursor_position: area.position,
-            offset_x: 10,
-            offset_y: 2,
+            offset_x: 6,
+            offset_y: 4,
             scroll_y: 0,
             scroll_x: 0,
         }
@@ -50,43 +62,17 @@ impl EditorView {
     }
 
     fn ensure_cursor_is_in_view(&mut self, document: &Document) {
-        if let Some(ref dir) = document.last_vertical_move_dir {
-            match dir {
-                VerticalMove::Up => self.scroll_up(document),
-                VerticalMove::Down => self.scroll_down(document),
-            }
+        if let Some(s) = adjust_scroll(self.area.height as usize, document.cursor_y, self.offset_y, self.scroll_y) {
+            self.scroll_y = s;
         }
 
-        if let Some(ref dir) = document.last_horizontal_move_dir {
-            match dir {
-                HorizontalMove::Left => self.scroll_left(document),
-                HorizontalMove::Right => self.scroll_right(document),
-            }
+        if let Some(s) = adjust_scroll(self.area.width as usize, document.cursor_x, self.offset_x, self.scroll_x) {
+            self.scroll_x = s;
         }
 
         // adjust cursor
         self.cursor_position.y = self.area.top() + document.cursor_y.saturating_sub(self.scroll_y) as u16;
         self.cursor_position.x = self.area.left() + document.cursor_x.saturating_sub(self.scroll_x) as u16;
-    }
-
-    fn scroll_up(&mut self, document: &Document) {
-        self.scroll_y = document.cursor_y.saturating_sub(self.offset_y).min(self.scroll_y);
-    }
-
-    fn scroll_down(&mut self, document: &Document) {
-        let max_scroll_y = document.lines_len().saturating_sub(self.area.height as usize);
-        let scroll_y = document.cursor_y.saturating_sub((self.area.height as usize).saturating_sub(self.offset_y + 1)).min(max_scroll_y);
-        self.scroll_y = self.scroll_y.max(scroll_y);
-    }
-
-    fn scroll_left(&mut self, document: &Document) {
-        self.scroll_x = document.cursor_x.saturating_sub(self.offset_x).min(self.scroll_x);
-    }
-
-    fn scroll_right(&mut self, document: &Document) {
-        let max_scroll_x = document.line_len(document.cursor_y).saturating_sub(self.area.width as usize);
-        let scroll_x = document.cursor_x.saturating_sub((self.area.width as usize).saturating_sub(self.offset_x + 1)).min(max_scroll_x);
-        self.scroll_x = self.scroll_x.max(scroll_x);
     }
 
     fn render_document(&self, buffer: &mut Buffer, ctx: &mut Context) {

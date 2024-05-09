@@ -4,8 +4,28 @@ use crop::Rope;
 
 use crate::editor::Mode;
 
-pub enum HorizontalMove { Right, Left }
-pub enum VerticalMove { Down, Up }
+enum HorizontalMove { Right, Left }
+enum VerticalMove { Down, Up }
+struct CursorMove {
+    horizontal: Option<HorizontalMove>,
+    vertical: Option<VerticalMove>,
+}
+
+fn move_direction(from: (usize, usize), to: (&usize, &usize)) -> CursorMove {
+    CursorMove {
+        horizontal: match from.0.cmp(to.0) {
+            Ordering::Greater => Some(HorizontalMove::Left),
+            Ordering::Less => Some(HorizontalMove::Right),
+            Ordering::Equal => None,
+        },
+        vertical: match from.1.cmp(to.1) {
+            Ordering::Greater => Some(VerticalMove::Up),
+            Ordering::Less => Some(VerticalMove::Down),
+            Ordering::Equal => None,
+        }
+    }
+}
+
 
 pub struct Document {
     pub data: Rope,
@@ -13,8 +33,6 @@ pub struct Document {
     pub cursor_y: usize,
     pub path: Option<PathBuf>,
     pub modified: bool,
-    pub last_vertical_move_dir: Option<VerticalMove>,
-    pub last_horizontal_move_dir: Option<HorizontalMove>,
     sticky_cursor_x: usize,
 }
 
@@ -26,8 +44,6 @@ impl Document {
             cursor_x: 0,
             cursor_y: 0,
             sticky_cursor_x: 0,
-            last_vertical_move_dir: None,
-            last_horizontal_move_dir: None,
             modified: false,
         }
     }
@@ -123,28 +139,18 @@ impl Document {
         };
         let x = max_x.min(x.unwrap_or(self.sticky_cursor_x));
 
-        self.last_horizontal_move_dir = match self.cursor_x.cmp(&x) {
-            Ordering::Greater => Some(HorizontalMove::Left),
-            Ordering::Less => Some(HorizontalMove::Right),
-            Ordering::Equal => None,
-        };
-
-        self.last_vertical_move_dir = match self.cursor_y.cmp(&y) {
-            Ordering::Greater => Some(VerticalMove::Up),
-            Ordering::Less => Some(VerticalMove::Down),
-            Ordering::Equal => None,
-        };
+        let cursor_move = move_direction((self.cursor_x, self.cursor_y), (&x, &y));
 
         self.cursor_x = x;
         self.cursor_y = y;
 
-        self.ensure_cursor_is_on_grapheme_boundary(mode);
+        self.ensure_cursor_is_on_grapheme_boundary(mode, cursor_move);
     }
 
-    fn ensure_cursor_is_on_grapheme_boundary(&mut self, mode: &Mode) {
+    fn ensure_cursor_is_on_grapheme_boundary(&mut self, mode: &Mode, cursor_move: CursorMove) {
         let mut acc = 0;
-        let go_to_prev = self.last_vertical_move_dir.is_some() || matches!(self.last_horizontal_move_dir, Some(HorizontalMove::Left));
-        let go_to_next = matches!(self.last_horizontal_move_dir, Some(HorizontalMove::Right));
+        let go_to_prev = cursor_move.vertical.is_some() || matches!(cursor_move.horizontal, Some(HorizontalMove::Left));
+        let go_to_next = matches!(cursor_move.horizontal, Some(HorizontalMove::Right));
 
         let mut graphemes = self.data.line(self.cursor_y).graphemes().peekable();
 
