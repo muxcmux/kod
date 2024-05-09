@@ -55,7 +55,7 @@ impl Application {
             Event::Resize(width, height) => {
                 let mut ctx = Context { editor: &mut self.editor };
                 let size = Rect::from((width, height));
-                self.terminal.resize(size);
+                self.terminal.resize(size).expect("Couldn't resize the terminal");
                 self.compositor.resize(size, &mut ctx);
                 true
             },

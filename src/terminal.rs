@@ -1,8 +1,8 @@
-use std::io::Write;
+use std::io::{stdout, Write};
 
 use crate::ui::{Buffer, Patch, Position, Rect};
 use anyhow::Result;
-use crossterm::{cursor::{self, SetCursorStyle}, style::{Color, Print, SetBackgroundColor, SetForegroundColor}, terminal, ExecutableCommand, QueueableCommand};
+use crossterm::{cursor::{self, SetCursorStyle}, style::{Color, Print, SetBackgroundColor, SetForegroundColor}, terminal::{self, Clear, ClearType}, ExecutableCommand, QueueableCommand};
 
 pub fn enter_terminal_screen() -> Result<()> {
     let mut stdout = std::io::stdout();
@@ -22,7 +22,7 @@ pub fn enter_terminal_screen() -> Result<()> {
 
 pub fn leave_terminal_screen() -> Result<()> {
     terminal::disable_raw_mode()?;
-    std::io::stdout().execute(terminal::LeaveAlternateScreen)?;
+    stdout().execute(terminal::LeaveAlternateScreen)?;
 
     Ok(())
 }
@@ -51,26 +51,29 @@ impl Terminal {
         &mut self.buffers[self.current]
     }
 
-    pub fn resize(&mut self, size: Rect) {
+    pub fn resize(&mut self, size: Rect) -> Result<()> {
         self.buffers[self.current].resize(size);
         self.buffers[1 - self.current].resize(size);
         self.size = size;
         self.clear()
     }
 
-    pub fn clear(&mut self) {
+    pub fn clear(&mut self) -> Result<()> {
+        stdout().execute(Clear(ClearType::All))?;
         self.buffers[1 - self.current].reset();
+
+        Ok(())
     }
 
     pub fn flush(&self) -> Result<()> {
-        let mut stdout = std::io::stdout();
-        stdout.flush()?;
+        stdout().flush()?;
 
         Ok(())
     }
 
     pub fn draw(&mut self) -> Result<()> {
-        let mut stdout = std::io::stdout();
+        let mut stdout = stdout();
+
         let prev_buffer = &self.buffers[1 - self.current];
         let curr_buffer = &self.buffers[self.current];
 
@@ -102,7 +105,7 @@ impl Terminal {
     }
 
     pub fn set_cursor(&self, position: Position, style: SetCursorStyle) -> Result<()> {
-        let mut stdout = std::io::stdout();
+        let mut stdout = stdout();
         stdout.queue(cursor::MoveTo(position.x, position.y))?;
         stdout.queue(style)?;
         Ok(())

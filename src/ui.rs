@@ -129,7 +129,9 @@ impl Cell {
     }
 
     fn reset(&mut self) {
-        self.set_symbol(" ");
+        self.set_symbol(" ")
+            .set_bg(Color::Reset)
+            .set_fg(Color::Reset);
     }
 }
 
@@ -157,8 +159,7 @@ impl Buffer {
     }
 
     pub fn resize(&mut self, size: Rect) {
-        let length = size.area();
-        self.cells.resize(length, Cell::empty());
+        self.cells.resize(size.area(), Cell::empty());
         self.size = size;
     }
 

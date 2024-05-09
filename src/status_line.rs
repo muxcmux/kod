@@ -1,5 +1,4 @@
 use crossterm::style::Color;
-
 use crate::{compositor::{Component, Context}, editor::Mode, ui::{Buffer, Rect}};
 
 pub struct StatusLine {

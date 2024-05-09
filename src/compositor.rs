@@ -1,3 +1,5 @@
+use std::any::Any;
+
 use crossterm::{cursor::SetCursorStyle, event::KeyEvent};
 
 use crate::{editor::Editor, ui::{Buffer, Position, Rect}};
@@ -13,7 +15,7 @@ pub enum EventResult {
     Consumed(Option<Callback>),
 }
 
-pub trait Component {
+pub trait Component: Any {
     fn handle_key_event(&mut self, _event: &KeyEvent, _ctx: &mut Context) -> EventResult {
         EventResult::Ignored(None)
     }
@@ -24,6 +26,10 @@ pub trait Component {
 
     fn cursor(&self, _area: Rect, _ctx: &Context) -> (Option<Position>, Option<SetCursorStyle>) {
         (None, None)
+    }
+
+    fn type_name(&self) -> &'static str {
+        std::any::type_name::<Self>()
     }
 }
 
