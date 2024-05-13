@@ -1,11 +1,12 @@
 use std::collections::HashMap;
 
 use crossterm::event::KeyCode;
-use crate::{commands::*, editor::Mode};
+use crate::{actions::*, editor::Mode};
 
-type Command = fn(&mut Context);
+type Func = fn(&mut Context);
 type Keymap = HashMap<KeyCode, Action>;
 
+#[derive(Debug)]
 pub struct Keymaps {
     map: HashMap<Mode, Keymap>,
     pending: Vec<KeyCode>,
@@ -34,11 +35,11 @@ impl Keymaps {
         // get the action for the root key in the keymap
         let root = self.pending.first().unwrap_or(&key);
 
-        // if the action is a command, or the key isn't mapped,
-        // short circuit and return a result with the command or not found
+        // if the action is a function, or the key isn't mapped,
+        // short circuit and return a result with the function or not found
         let action = match keymap.get(root) {
             None => { return KeymapResult::NotFound },
-            Some(Action::Command(command)) => { return KeymapResult::Found(*command) }
+            Some(Action::Func(f)) => { return KeymapResult::Found(*f) }
             Some(keymap) => keymap,
         };
 
@@ -48,19 +49,19 @@ impl Keymaps {
         // and search for an action in this action's keymap
         match action.find_by_path(&self.pending[1..]) {
             None => KeymapResult::Cancelled(self.pending.drain(..).collect()),
-            Some(Action::Keymap(_)) => KeymapResult::Pending,
-            Some(Action::Command(command)) => {
+            Some(Action::Map(_)) => KeymapResult::Pending,
+            Some(Action::Func(f)) => {
                 self.pending.clear();
-                KeymapResult::Found(*command)
+                KeymapResult::Found(*f)
             }
         }
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Action {
-    Command(Command),
-    Keymap(Keymap)
+    Func(Func),
+    Map(Keymap)
 }
 
 impl Action {
@@ -69,8 +70,8 @@ impl Action {
 
         for key in path {
             current = match current {
-                Action::Keymap(map) => map.get(key),
-                Action::Command(_) => None,
+                Action::Map(map) => map.get(key),
+                Action::Func(_) => None,
             }?
         }
 
@@ -79,7 +80,7 @@ impl Action {
 }
 
 pub enum KeymapResult {
-    Found(Command),
+    Found(Func),
     Pending,
     Cancelled(Vec<KeyCode>),
     NotFound,
@@ -87,48 +88,50 @@ pub enum KeymapResult {
 
 fn g_keymap() -> Keymap {
     let mut map = Keymap::new();
-    map.insert(KeyCode::Char('g'), Action::Command(goto_first_line));
+    map.insert(KeyCode::Char('g'), Action::Func(goto_first_line));
 
     map
 }
 
 fn normal_mode_keymap() -> Keymap {
-    let mut map = Keymap::new();
-    map.insert(KeyCode::Char('h'), Action::Command(cursor_left));
-    map.insert(KeyCode::Left, Action::Command(cursor_left));
-    map.insert(KeyCode::Char('j'), Action::Command(cursor_down));
-    map.insert(KeyCode::Down, Action::Command(cursor_down));
-    map.insert(KeyCode::Char('k'), Action::Command(cursor_up));
-    map.insert(KeyCode::Up, Action::Command(cursor_up));
-    map.insert(KeyCode::Char('l'), Action::Command(cursor_right));
-    map.insert(KeyCode::Right, Action::Command(cursor_right));
+    use KeyCode::*;
+    use Action::*;
 
-    map.insert(KeyCode::Char('i'), Action::Command(enter_insert_mode_at_cursor));
-    map.insert(KeyCode::Char('a'), Action::Command(enter_insert_mode_after_cursor));
-    map.insert(KeyCode::Char('A'), Action::Command(enter_insert_mode_at_eol));
-    map.insert(KeyCode::Char('o'), Action::Command(insert_line_below));
-    map.insert(KeyCode::Char('O'), Action::Command(insert_line_above));
+    Keymap::from([
+        (Char('h'), Func(cursor_left)),
+        (Left,      Func(cursor_left)),
+        (Char('j'), Func(cursor_down)),
+        (Down,      Func(cursor_down)),
+        (Char('k'), Func(cursor_up)),
+        (Up,        Func(cursor_up)),
+        (Char('l'), Func(cursor_right)),
+        (Right,     Func(cursor_right)),
 
-    map.insert(KeyCode::Char('G'), Action::Command(goto_last_line));
-    map.insert(KeyCode::Char('g'), Action::Keymap(g_keymap()));
+        (Char('i'), Func(enter_insert_mode_at_cursor)),
+        (Char('a'), Func(enter_insert_mode_after_cursor)),
+        (Char('A'), Func(enter_insert_mode_at_eol)),
+        (Char('o'), Func(insert_line_below)),
+        (Char('O'), Func(insert_line_above)),
 
-    map.insert(KeyCode::Char('q'), Action::Command(quit));
-    map.insert(KeyCode::Char('s'), Action::Command(save));
-
-    map
+        (Char('G'), Func(goto_last_line)),
+        (Char('g'), Map(g_keymap()))
+    ])
 }
 
 fn insert_mode_keymap() -> Keymap {
-    let mut map = Keymap::new();
-    map.insert(KeyCode::Esc, Action::Command(enter_normal_mode));
+    use KeyCode::*;
+    use Action::*;
 
-    map.insert(KeyCode::Left, Action::Command(cursor_left));
-    map.insert(KeyCode::Down, Action::Command(cursor_down));
-    map.insert(KeyCode::Up, Action::Command(cursor_up));
-    map.insert(KeyCode::Right, Action::Command(cursor_right));
+    Keymap::from([
+        (Esc,   Func(enter_normal_mode)),
 
-    map.insert(KeyCode::Char('j'), Action::Keymap(Keymap::from([(KeyCode::Char('k'), Action::Command(enter_normal_mode))])));
+        (Left,  Func(cursor_left)),
+        (Down,  Func(cursor_down)),
+        (Up,    Func(cursor_up)),
+        (Right, Func(cursor_right)),
 
-    map.insert(KeyCode::Backspace, Action::Command(delete_symbol_to_the_left));
-    map
+        (Char('j'), Map(Keymap::from([(Char('k'), Func(enter_normal_mode))]))),
+
+        (Backspace, Func(delete_symbol_to_the_left))
+    ])
 }

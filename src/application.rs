@@ -1,6 +1,6 @@
 use anyhow::Result;
 use crossterm::{cursor::SetCursorStyle, event::{read, Event, KeyEvent, KeyEventKind}};
-use crate::{compositor::{Compositor, Context}, editor::Editor, editor_view::EditorView, status_line::StatusLine, terminal::{self, Terminal}, ui::Rect};
+use crate::{command_line::CommandLine, compositor::{Compositor, Context}, editor::Editor, editor_view::EditorView, status_line::StatusLine, terminal::{self, Terminal}, ui::Rect};
 
 pub struct Application {
     editor: Editor,
@@ -19,8 +19,9 @@ impl Application {
 
         let ctx = Context { editor: &mut editor };
 
-        compositor.push(Box::new(EditorView::new(size.clip_bottom(1), &ctx)));
-        compositor.push(Box::new(StatusLine::new(size.clip_top(size.height.saturating_sub(1)))));
+        compositor.push(Box::new(EditorView::new(size.clip_bottom(2), &ctx)));
+        compositor.push(Box::new(StatusLine::new(size.clip_top(size.height.saturating_sub(2)))));
+        compositor.push(Box::new(CommandLine::new(size.clip_top(size.height.saturating_sub(1)))));
 
         Ok(Self { editor, compositor, terminal })
     }

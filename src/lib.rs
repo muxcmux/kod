@@ -1,10 +1,12 @@
 pub mod application;
+mod actions;
+mod command_line;
+mod commands;
 mod compositor;
 mod document;
 mod editor;
-mod ui;
-mod terminal;
 mod editor_view;
-mod status_line;
-mod commands;
 mod keymap;
+mod status_line;
+mod terminal;
+mod ui;

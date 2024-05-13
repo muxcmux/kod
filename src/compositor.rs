@@ -1,4 +1,4 @@
-use std::any::Any;
+use std::{any::Any, fmt::Debug};
 
 use crossterm::{cursor::SetCursorStyle, event::KeyEvent};
 
@@ -15,7 +15,7 @@ pub enum EventResult {
     Consumed(Option<Callback>),
 }
 
-pub trait Component: Any {
+pub trait Component: Any + Debug {
     fn handle_key_event(&mut self, _event: KeyEvent, _ctx: &mut Context) -> EventResult {
         EventResult::Ignored(None)
     }

@@ -1,6 +1,6 @@
 use crossterm::{cursor::SetCursorStyle, event::{KeyCode, KeyEvent}, style::Color};
 
-use crate::{commands, compositor::{Component, Context, EventResult}, document::Document, editor::Mode, keymap::{KeymapResult, Keymaps}, ui::{Buffer, Position, Rect}};
+use crate::{actions, compositor::{Component, Context, EventResult}, document::Document, editor::Mode, keymap::{KeymapResult, Keymaps}, ui::{Buffer, Position, Rect}};
 
 const GUTTER_LINE_NUM_PAD_LEFT: u16 = 2;
 const GUTTER_LINE_NUM_PAD_RIGHT: u16 = 1;
@@ -21,13 +21,14 @@ fn adjust_scroll(dimension: usize, doc_cursor: usize, offset: usize, scroll: usi
 fn gutter_and_document_areas(size: Rect, ctx: &Context) -> (Rect, Rect) {
     let gutter_width = ctx.editor.document.lines_len().checked_ilog10().unwrap_or(1) as u16 + GUTTER_LINE_NUM_PAD_LEFT + GUTTER_LINE_NUM_PAD_RIGHT;
     let gutter_width = gutter_width.max(MIN_GUTTER_WIDTH);
-    let gutter_area = size.clip_bottom(1).clip_right(size.width.saturating_sub(gutter_width));
+    let gutter_area = size.clip_bottom(2).clip_right(size.width.saturating_sub(gutter_width));
     // clip right to allow for double width graphemes
     let area = size.clip_left(gutter_area.width).clip_right(1);
 
     (gutter_area, area)
 }
 
+#[derive(Debug)]
 pub struct EditorView {
     area: Rect,
     gutter_area: Rect,
@@ -152,29 +153,29 @@ impl EditorView {
         }
     }
 
-    fn handle_keymap_event(&mut self, event: KeyEvent, ctx: &mut commands::Context) -> Option<KeymapResult> {
+    fn handle_keymap_event(&mut self, event: KeyEvent, ctx: &mut actions::Context) -> Option<KeymapResult> {
         let result = self.keymaps.get(&ctx.editor.mode, event.code);
 
-        if let KeymapResult::Found(command) = result {
-            command(ctx);
+        if let KeymapResult::Found(f) = result {
+            f(ctx);
             return None;
         }
 
         Some(result)
     }
 
-    fn handle_normal_mode_key_event(&mut self, event: KeyEvent, ctx: &mut commands::Context) -> EventResult {
+    fn handle_normal_mode_key_event(&mut self, event: KeyEvent, ctx: &mut actions::Context) -> EventResult {
         match self.handle_keymap_event(event, ctx) {
             Some(KeymapResult::NotFound) => EventResult::Ignored(None),
             _ => EventResult::Consumed(None)
         }
     }
 
-    fn handle_insert_mode_key_event(&mut self, event: KeyEvent, ctx: &mut commands::Context) -> EventResult {
+    fn handle_insert_mode_key_event(&mut self, event: KeyEvent, ctx: &mut actions::Context) -> EventResult {
         match self.handle_keymap_event(event, ctx) {
             Some(KeymapResult::NotFound) => {
                 if let KeyCode::Char(c) = event.code {
-                    commands::append_character(c, ctx);
+                    actions::append_character(c, ctx);
                     EventResult::Consumed(None)
                 } else {
                     EventResult::Ignored(None)
@@ -185,12 +186,12 @@ impl EditorView {
                 for key_code in pending {
                     match key_code {
                         KeyCode::Char(c) => {
-                            commands::append_character(c, ctx);
+                            actions::append_character(c, ctx);
                             result = EventResult::Consumed(None);
                         }
                         _ => {
-                            if let KeymapResult::Found(command) = self.keymaps.get(&Mode::Insert, key_code) {
-                                command(ctx);
+                            if let KeymapResult::Found(f) = self.keymaps.get(&Mode::Insert, key_code) {
+                                f(ctx);
                                 result = EventResult::Consumed(None)
                             }
                         }
@@ -206,7 +207,7 @@ impl EditorView {
 
 impl Component for EditorView {
     fn render(&mut self, area: Rect, buffer: &mut Buffer, ctx: &mut Context) {
-        self.resize(area.clip_bottom(1), ctx);
+        self.resize(area.clip_bottom(2), ctx);
         self.ensure_cursor_is_in_view(&ctx.editor.document);
         self.render_document(buffer, ctx);
         self.render_gutter(buffer, ctx);
@@ -221,18 +222,18 @@ impl Component for EditorView {
     fn handle_key_event(&mut self, event: KeyEvent, ctx: &mut Context) -> EventResult {
         match ctx.editor.mode {
             Mode::Normal => {
-                let mut command_ctx = crate::commands::Context {
+                let mut action_ctx = actions::Context {
                     editor: ctx.editor,
                     compositor_callbacks: vec![]
                 };
-                self.handle_normal_mode_key_event(event, &mut command_ctx)
+                self.handle_normal_mode_key_event(event, &mut action_ctx)
             }
             Mode::Insert => {
-                let mut command_ctx = crate::commands::Context {
+                let mut action_ctx = actions::Context {
                     editor: ctx.editor,
                     compositor_callbacks: vec![]
                 };
-                self.handle_insert_mode_key_event(event, &mut command_ctx)
+                self.handle_insert_mode_key_event(event, &mut action_ctx)
             }
         }
     }

@@ -1,6 +1,7 @@
 use crossterm::style::Color;
 use crate::{compositor::{Component, Context}, editor::Mode, ui::{Buffer, Rect}};
 
+#[derive(Debug)]
 pub struct StatusLine {
     area: Rect
 }
@@ -13,7 +14,7 @@ impl StatusLine {
 
 impl Component for StatusLine {
     fn resize(&mut self, new_size: Rect, _ctx: &mut Context) {
-        self.area = new_size.clip_top(new_size.height.saturating_sub(1));
+        self.area = new_size.clip_top(new_size.height.saturating_sub(2));
     }
 
     fn render(&mut self, _area: Rect, buffer: &mut Buffer, ctx: &mut Context) {
