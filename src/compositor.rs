@@ -16,7 +16,7 @@ pub enum EventResult {
 }
 
 pub trait Component: Any {
-    fn handle_key_event(&mut self, _event: &KeyEvent, _ctx: &mut Context) -> EventResult {
+    fn handle_key_event(&mut self, _event: KeyEvent, _ctx: &mut Context) -> EventResult {
         EventResult::Ignored(None)
     }
 
@@ -69,7 +69,7 @@ impl Compositor {
         (None, None)
     }
 
-    pub fn handle_key_event(&mut self, event: &KeyEvent, ctx: &mut Context) -> bool {
+    pub fn handle_key_event(&mut self, event: KeyEvent, ctx: &mut Context) -> bool {
         let mut callbacks = vec![];
         let mut consumed = false;
 

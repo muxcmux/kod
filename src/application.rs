@@ -62,8 +62,7 @@ impl Application {
             Event::Key(KeyEvent { kind: KeyEventKind::Release, .. }) => false,
             Event::Key(key_event) => {
                 let mut ctx = Context { editor: &mut self.editor };
-                self.compositor.handle_key_event(&key_event, &mut ctx);
-                true
+                self.compositor.handle_key_event(key_event, &mut ctx)
             },
             Event::FocusGained => false,
             Event::FocusLost => false,

@@ -1,6 +1,6 @@
 use crossterm::{cursor::SetCursorStyle, event::{KeyCode, KeyEvent}, style::Color};
 
-use crate::{compositor::{Component, Context, EventResult}, document::Document, editor::Mode, ui::{Buffer, Position, Rect}};
+use crate::{commands, compositor::{Component, Context, EventResult}, document::Document, editor::Mode, keymap::{KeymapResult, Keymaps}, ui::{Buffer, Position, Rect}};
 
 const GUTTER_LINE_NUM_PAD_LEFT: u16 = 2;
 const GUTTER_LINE_NUM_PAD_RIGHT: u16 = 1;
@@ -32,6 +32,7 @@ pub struct EditorView {
     area: Rect,
     gutter_area: Rect,
     cursor_position: Position,
+    keymaps: Keymaps,
     offset_x: usize,
     offset_y: usize,
     scroll_x: usize,
@@ -46,6 +47,7 @@ impl EditorView {
             area,
             gutter_area,
             cursor_position: area.position,
+            keymaps: Keymaps::default(),
             offset_x: 6,
             offset_y: 4,
             scroll_y: 0,
@@ -150,181 +152,54 @@ impl EditorView {
         }
     }
 
-    fn enter_normal_mode(&mut self, ctx: &mut Context) {
-        ctx.editor.mode = Mode::Normal;
-        ctx.editor.document.cursor_left(&ctx.editor.mode);
-        self.ensure_cursor_is_in_view(&ctx.editor.document);
-    }
+    fn handle_keymap_event(&mut self, event: KeyEvent, ctx: &mut commands::Context) -> Option<KeymapResult> {
+        let result = self.keymaps.get(&ctx.editor.mode, event.code);
 
-    fn enter_insert_mode_relative_to_cursor(&mut self, x: usize, ctx: &mut Context) {
-        ctx.editor.mode = Mode::Insert;
-        for _ in 0..x {
-            ctx.editor.document.cursor_right(&ctx.editor.mode);
+        if let KeymapResult::Found(command) = result {
+            command(ctx);
+            return None;
         }
-        self.ensure_cursor_is_in_view(&ctx.editor.document);
+
+        Some(result)
     }
 
-    fn enter_insert_mode_at_eol(&mut self, ctx: &mut Context) {
-        ctx.editor.mode = Mode::Insert;
-        ctx.editor.document.move_cursor_to(Some(ctx.editor.document.current_line_len()), None, &ctx.editor.mode);
-        self.ensure_cursor_is_in_view(&ctx.editor.document);
-    }
-
-    fn append_character(&mut self, c: char, ctx: &mut Context) {
-        ctx.editor.document.insert_char_at_cursor(c, &ctx.editor.mode);
-        self.ensure_cursor_is_in_view(&ctx.editor.document);
-    }
-
-    fn cursor_up(&mut self, ctx: &mut Context) {
-        ctx.editor.document.cursor_up(&ctx.editor.mode);
-        self.ensure_cursor_is_in_view(&ctx.editor.document);
-    }
-
-    fn cursor_down(&mut self, ctx: &mut Context) {
-        ctx.editor.document.cursor_down(&ctx.editor.mode);
-        self.ensure_cursor_is_in_view(&ctx.editor.document);
-    }
-
-    fn cursor_left(&mut self, ctx: &mut Context) {
-        ctx.editor.document.cursor_left(&ctx.editor.mode);
-        self.ensure_cursor_is_in_view(&ctx.editor.document);
-    }
-
-    fn cursor_right(&mut self, ctx: &mut Context) {
-        ctx.editor.document.cursor_right(&ctx.editor.mode);
-        self.ensure_cursor_is_in_view(&ctx.editor.document);
-    }
-
-    fn go_to_first_line(&mut self, ctx: &mut Context) {
-        ctx.editor.document.move_cursor_to(None, Some(0), &ctx.editor.mode);
-        self.ensure_cursor_is_in_view(&ctx.editor.document);
-    }
-
-    fn go_to_last_line(&mut self, ctx: &mut Context) {
-        ctx.editor.document.move_cursor_to(None, Some(ctx.editor.document.lines_len() - 1), &ctx.editor.mode);
-        self.ensure_cursor_is_in_view(&ctx.editor.document);
-    }
-
-    fn insert_line_below(&mut self, ctx: &mut Context) {
-        ctx.editor.mode = Mode::Insert;
-        ctx.editor.document.move_cursor_to(Some(std::usize::MAX), None, &ctx.editor.mode);
-        ctx.editor.document.insert_char_at_cursor('\n', &ctx.editor.mode);
-        self.ensure_cursor_is_in_view(&ctx.editor.document);
-    }
-
-    fn insert_line_above(&mut self, ctx: &mut Context) {
-        ctx.editor.mode = Mode::Insert;
-        ctx.editor.document.move_cursor_to(Some(std::usize::MAX), Some(ctx.editor.document.cursor_y.saturating_sub(1)), &ctx.editor.mode);
-        ctx.editor.document.insert_char_at_cursor('\n', &ctx.editor.mode);
-        self.ensure_cursor_is_in_view(&ctx.editor.document);
-    }
-
-    fn delete_symbol_to_the_left(&mut self, ctx: &mut Context) {
-        ctx.editor.document.delete_to_the_left(&ctx.editor.mode);
-        self.ensure_cursor_is_in_view(&ctx.editor.document);
-    }
-
-    fn save(&self, ctx: &mut Context) {
-        ctx.editor.save_document();
-    }
-
-    fn quit(&self, ctx: &mut Context) {
-        ctx.editor.quit = true;
-    }
-
-    fn handle_normal_mode_key_event(&mut self, event: &KeyEvent, ctx: &mut Context) -> EventResult {
-        match event.code {
-            KeyCode::Char('h') | KeyCode::Left => {
-                self.cursor_left(ctx);
-                EventResult::Consumed(None)
-            }
-            KeyCode::Char('j') | KeyCode::Down=> {
-                self.cursor_down(ctx);
-                EventResult::Consumed(None)
-            }
-            KeyCode::Char('k') | KeyCode::Up => {
-                self.cursor_up(ctx);
-                EventResult::Consumed(None)
-            }
-            KeyCode::Char('l') | KeyCode::Right => {
-                self.cursor_right(ctx);
-                EventResult::Consumed(None)
-            }
-            KeyCode::Char('i')=> {
-                self.enter_insert_mode_relative_to_cursor(0, ctx);
-                EventResult::Consumed(None)
-            }
-            KeyCode::Char('a') => {
-                self.enter_insert_mode_relative_to_cursor(1, ctx);
-                EventResult::Consumed(None)
-            }
-            KeyCode::Char('A') => {
-                self.enter_insert_mode_at_eol(ctx);
-                EventResult::Consumed(None)
-            }
-            KeyCode::Char('o') => {
-                self.insert_line_below(ctx);
-                EventResult::Consumed(None)
-            }
-            KeyCode::Char('O') => {
-                self.insert_line_above(ctx);
-                EventResult::Consumed(None)
-            }
-            KeyCode::Char('g') => {
-                self.go_to_first_line(ctx);
-                EventResult::Consumed(None)
-            }
-            KeyCode::Char('G') => {
-                self.go_to_last_line(ctx);
-                EventResult::Consumed(None)
-            }
-            KeyCode::Char('q') => {
-                self.quit(ctx);
-                EventResult::Consumed(None)
-            }
-            KeyCode::Char('s') => {
-                self.save(ctx);
-                EventResult::Consumed(None)
-            }
-            _ => EventResult::Ignored(None),
+    fn handle_normal_mode_key_event(&mut self, event: KeyEvent, ctx: &mut commands::Context) -> EventResult {
+        match self.handle_keymap_event(event, ctx) {
+            Some(KeymapResult::NotFound) => EventResult::Ignored(None),
+            _ => EventResult::Consumed(None)
         }
     }
 
-    fn handle_insert_mode_key_event(&mut self, event: &KeyEvent, ctx: &mut Context) -> EventResult {
-        match event.code {
-            KeyCode::Esc => {
-                self.enter_normal_mode(ctx);
-                EventResult::Consumed(None)
-            },
-            KeyCode::Char(c) => {
-                self.append_character(c, ctx);
-                EventResult::Consumed(None)
-            },
-            KeyCode::Enter => {
-                self.append_character('\n', ctx);
-                EventResult::Consumed(None)
-            },
-            KeyCode::Backspace => {
-                self.delete_symbol_to_the_left(ctx);
-                EventResult::Consumed(None)
-            },
-            KeyCode::Left => {
-                self.cursor_left(ctx);
-                EventResult::Consumed(None)
-            },
-            KeyCode::Down=> {
-                self.cursor_down(ctx);
-                EventResult::Consumed(None)
-            },
-            KeyCode::Up => {
-                self.cursor_up(ctx);
-                EventResult::Consumed(None)
-            },
-            KeyCode::Right => {
-                self.cursor_right(ctx);
-                EventResult::Consumed(None)
-            },
-            _ => EventResult::Ignored(None)
+    fn handle_insert_mode_key_event(&mut self, event: KeyEvent, ctx: &mut commands::Context) -> EventResult {
+        match self.handle_keymap_event(event, ctx) {
+            Some(KeymapResult::NotFound) => {
+                if let KeyCode::Char(c) = event.code {
+                    commands::append_character(c, ctx);
+                    EventResult::Consumed(None)
+                } else {
+                    EventResult::Ignored(None)
+                }
+            }
+            Some(KeymapResult::Cancelled(pending)) => {
+                let mut result = EventResult::Ignored(None);
+                for key_code in pending {
+                    match key_code {
+                        KeyCode::Char(c) => {
+                            commands::append_character(c, ctx);
+                            result = EventResult::Consumed(None);
+                        }
+                        _ => {
+                            if let KeymapResult::Found(command) = self.keymaps.get(&Mode::Insert, key_code) {
+                                command(ctx);
+                                result = EventResult::Consumed(None)
+                            }
+                        }
+                    }
+                }
+
+                result
+            }
+            _ => EventResult::Consumed(None)
         }
     }
 }
@@ -332,6 +207,7 @@ impl EditorView {
 impl Component for EditorView {
     fn render(&mut self, area: Rect, buffer: &mut Buffer, ctx: &mut Context) {
         self.resize(area.clip_bottom(1), ctx);
+        self.ensure_cursor_is_in_view(&ctx.editor.document);
         self.render_document(buffer, ctx);
         self.render_gutter(buffer, ctx);
     }
@@ -342,10 +218,22 @@ impl Component for EditorView {
         self.gutter_area = gutter_area;
     }
 
-    fn handle_key_event(&mut self, event: &KeyEvent, ctx: &mut Context) -> EventResult {
+    fn handle_key_event(&mut self, event: KeyEvent, ctx: &mut Context) -> EventResult {
         match ctx.editor.mode {
-            Mode::Normal => self.handle_normal_mode_key_event(event, ctx),
-            Mode::Insert => self.handle_insert_mode_key_event(event, ctx),
+            Mode::Normal => {
+                let mut command_ctx = crate::commands::Context {
+                    editor: ctx.editor,
+                    compositor_callbacks: vec![]
+                };
+                self.handle_normal_mode_key_event(event, &mut command_ctx)
+            }
+            Mode::Insert => {
+                let mut command_ctx = crate::commands::Context {
+                    editor: ctx.editor,
+                    compositor_callbacks: vec![]
+                };
+                self.handle_insert_mode_key_event(event, &mut command_ctx)
+            }
         }
     }
 

@@ -149,8 +149,8 @@ impl Document {
 
     fn ensure_cursor_is_on_grapheme_boundary(&mut self, mode: &Mode, cursor_move: CursorMove) {
         let mut acc = 0;
-        let go_to_prev = cursor_move.vertical.is_some() || matches!(cursor_move.horizontal, Some(HorizontalMove::Left));
-        let go_to_next = matches!(cursor_move.horizontal, Some(HorizontalMove::Right));
+        let goto_prev = cursor_move.vertical.is_some() || matches!(cursor_move.horizontal, Some(HorizontalMove::Left));
+        let goto_next = matches!(cursor_move.horizontal, Some(HorizontalMove::Right));
 
         let mut graphemes = self.data.line(self.cursor_y).graphemes().peekable();
 
@@ -160,9 +160,9 @@ impl Document {
             let next_grapheme_start = acc + width;
 
             if (self.cursor_x < next_grapheme_start) && (self.cursor_x > acc) {
-                if go_to_prev {
+                if goto_prev {
                     self.cursor_x = acc;
-                } else if go_to_next {
+                } else if goto_next {
                     if graphemes.peek().is_none() && !matches!(mode, Mode::Insert) {
                         self.cursor_x = acc;
                     } else {

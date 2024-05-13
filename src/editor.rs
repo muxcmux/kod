@@ -5,6 +5,7 @@ use crop::Rope;
 
 use crate::document::Document;
 
+#[derive(Eq, Hash, PartialEq, Debug)]
 pub enum Mode {
     Normal,
     Insert,
