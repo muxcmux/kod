@@ -1,4 +1,4 @@
-use crate::editor::{Editor, Mode};
+use crate::{document::NEW_LINE, editor::{Editor, Mode}};
 
 pub struct Context<'a> {
     pub editor: &'a mut Editor,
@@ -32,6 +32,10 @@ pub fn enter_insert_mode_at_eol(ctx: &mut Context) {
 
 pub fn append_character(c: char, ctx: &mut Context) {
     ctx.editor.document.insert_char_at_cursor(c, &ctx.editor.mode);
+}
+
+pub fn append_new_line(ctx: &mut Context) {
+    ctx.editor.document.insert_char_at_cursor(NEW_LINE, &ctx.editor.mode);
 }
 
 pub fn cursor_up(ctx: &mut Context) {
@@ -72,4 +76,8 @@ pub fn insert_line_above(ctx: &mut Context) {
 
 pub fn delete_symbol_to_the_left(ctx: &mut Context) {
     ctx.editor.document.delete_to_the_left(&ctx.editor.mode);
+}
+
+pub fn delete_current_line(ctx: &mut Context) {
+    ctx.editor.document.delete_lines(ctx.editor.document.cursor_y, ctx.editor.document.cursor_y, true, &ctx.editor.mode);
 }

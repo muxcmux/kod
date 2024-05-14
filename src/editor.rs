@@ -26,9 +26,7 @@ impl Editor {
             let pa = PathBuf::from(args.pop().unwrap());
             let contents = std::fs::read_to_string(&pa)?;
             path = Some(pa);
-            let data = Rope::from(contents);
-
-            data
+            Rope::from(if contents.is_empty() { "\n" } else { &contents })
         } else {
             Rope::from("\n")
         };

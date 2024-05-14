@@ -90,7 +90,7 @@ impl Component for CommandLine {
                         x: self.area.left() + width as u16 + 1
                     }
                     ),
-                    Some(SetCursorStyle::SteadyBar)
+                    Some(SetCursorStyle::SteadyUnderScore)
             )
         } else {
             (None, None)

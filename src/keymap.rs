@@ -93,6 +93,15 @@ fn g_keymap() -> Keymap {
     map
 }
 
+fn d_keymap() -> Keymap {
+    use KeyCode::*;
+    use Action::*;
+
+    Keymap::from([
+        (Char('d'), Func(delete_current_line))
+    ])
+}
+
 fn normal_mode_keymap() -> Keymap {
     use KeyCode::*;
     use Action::*;
@@ -112,9 +121,13 @@ fn normal_mode_keymap() -> Keymap {
         (Char('A'), Func(enter_insert_mode_at_eol)),
         (Char('o'), Func(insert_line_below)),
         (Char('O'), Func(insert_line_above)),
+        (Char('O'), Func(insert_line_above)),
+
+        (Char('X'), Func(delete_symbol_to_the_left)),
+        (Char('d'), Map(d_keymap())),
 
         (Char('G'), Func(goto_last_line)),
-        (Char('g'), Map(g_keymap()))
+        (Char('g'), Map(g_keymap())),
     ])
 }
 
@@ -132,6 +145,8 @@ fn insert_mode_keymap() -> Keymap {
 
         (Char('j'), Map(Keymap::from([(Char('k'), Func(enter_normal_mode))]))),
 
-        (Backspace, Func(delete_symbol_to_the_left))
+        (Backspace, Func(delete_symbol_to_the_left)),
+
+        (Enter,     Func(append_new_line)),
     ])
 }

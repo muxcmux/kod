@@ -11,6 +11,8 @@ struct CursorMove {
     vertical: Option<VerticalMove>,
 }
 
+pub const NEW_LINE: char = '\n';
+
 fn move_direction(from: (usize, usize), to: (&usize, &usize)) -> CursorMove {
     CursorMove {
         horizontal: match from.0.cmp(to.0) {
@@ -92,9 +94,8 @@ impl Document {
     }
 
     pub fn delete_to_the_left(&mut self, mode: &Mode) {
-        assert!(matches!(mode, Mode::Insert));
-
         self.modified = true;
+
         if self.cursor_x > 0 {
             let mut start = self.data.byte_of_line(self.cursor_y);
             let mut end = start;
@@ -106,15 +107,33 @@ impl Document {
                     break
                 }
             }
-            self.data.delete(start..end);
+
             self.cursor_left(&Mode::Insert);
-        } else if self.cursor_y > 0 {
-            let byte_length_of_newline_char = 1;
+            self.data.delete(start..end);
+        } else if self.cursor_y > 0  {
             let to = self.data.byte_of_line(self.cursor_y);
-            let from = to.saturating_sub(byte_length_of_newline_char);
+            let from = to.saturating_sub(NEW_LINE.len_utf8());
             // need to move cursor before deleting
             self.move_cursor_to(Some(self.line_len(self.cursor_y - 1)), Some(self.cursor_y - 1), mode);
             self.data.delete(from..to);
+        }
+    }
+
+    pub fn delete_lines(&mut self, from: usize, to: usize, delete_nlc: bool, mode: &Mode) {
+        let from_line = from.min(to);
+        let to_line = from.max(to).min(self.lines_len().saturating_sub(1));
+
+        let start = self.data.byte_of_line(from_line);
+        let mut end = start + self.data.line(to_line).byte_len();
+
+        if delete_nlc && self.lines_len() > 1 {
+            end += NEW_LINE.len_utf8();
+        }
+
+        self.data.delete(start..end);
+
+        if self.cursor_y > self.lines_len().saturating_sub(1) {
+            self.cursor_up(mode);
         }
     }
 
