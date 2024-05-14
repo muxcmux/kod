@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use crossterm::{cursor::SetCursorStyle, event::{KeyCode, KeyEvent}, style::Color};
 use unicode_segmentation::UnicodeSegmentation;
-use crate::{commands::COMMANDS, compositor::{Component, Context, EventResult}, editor::Mode, ui::{Buffer, Position, Rect}};
+use crate::{commands::COMMANDS, compositor::{Component, Context, EventResult}, editor::{EditorStatus, Mode, Severity}, ui::{Buffer, Position, Rect}};
 
 const PROMPT: &str = ":";
 
@@ -29,14 +29,15 @@ impl CommandLine {
         self.focused = false;
     }
 
-    fn run(&mut self, ctx: &mut Context) {
+    fn run(&mut self, ctx: &mut Context) -> bool {
         for cmd in COMMANDS {
             if cmd.name == self.text || cmd.aliases.contains(&self.text.as_str()) {
                 (cmd.func)(ctx);
-                break;
+                return true;
             }
         }
-        self.dismiss();
+
+        false
     }
 
     fn update_command(&mut self, key_code: KeyCode, ctx: &mut Context) {
@@ -45,26 +46,45 @@ impl CommandLine {
             // so that we get consistent editing text experience
             KeyCode::Char(c) => self.text.push(c),
             KeyCode::Esc => self.dismiss(),
-            KeyCode::Enter => self.run(ctx),
+            KeyCode::Enter => {
+                if !self.run(ctx) {
+                    ctx.editor.set_error(format!(":{} is not an editor command", self.text));
+                }
+                self.dismiss();
+            }
             _ => {
                 //do nothing
             }
         }
     }
+
+    fn render_editor_status(&self, status: &EditorStatus, buffer: &mut Buffer) {
+        let fg = match status.severity {
+            Severity::Error => Color::Red,
+            _ => Color::Reset
+        };
+
+        buffer.put_string(status.message.to_string(), self.area.left(), self.area.top(), fg, Color::Reset);
+    }
 }
+
 
 impl Component for CommandLine {
     fn resize(&mut self, new_size: Rect, _ctx: &mut Context) {
         self.area = new_size.clip_top(new_size.height.saturating_sub(1));
     }
 
-    fn render(&mut self, _area: Rect, buffer: &mut Buffer, _ctx: &mut Context) {
+    fn render(&mut self, _area: Rect, buffer: &mut Buffer, ctx: &mut Context) {
         if self.focused {
             buffer.put_string(format!("{}", self), self.area.left(), self.area.top(), Color::Reset, Color::Reset);
+        } else if let Some(s) = &ctx.editor.status {
+            self.render_editor_status(s, buffer);
         }
     }
 
     fn handle_key_event(&mut self, event: KeyEvent, ctx: &mut Context) -> EventResult {
+        ctx.editor.status = None;
+
         match ctx.editor.mode {
             Mode::Insert => EventResult::Ignored(None),
             Mode::Normal => {

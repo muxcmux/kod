@@ -220,6 +220,8 @@ impl Component for EditorView {
     }
 
     fn handle_key_event(&mut self, event: KeyEvent, ctx: &mut Context) -> EventResult {
+        ctx.editor.status = None;
+
         match ctx.editor.mode {
             Mode::Normal => {
                 let mut action_ctx = actions::Context {
