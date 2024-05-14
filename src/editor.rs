@@ -20,7 +20,7 @@ pub enum Severity {
 
 pub struct EditorStatus {
     pub severity: Severity,
-    pub message: Cow<'static, str>
+    pub message: Cow<'static, str>,
 }
 
 pub struct Editor {
@@ -30,7 +30,7 @@ pub struct Editor {
     pub status: Option<EditorStatus>,
 }
 
-const SIZE_SUFFIX: [&str; 9] = ["B", "K", "M", "G", "T", "P", "E", "Z", "Y"];
+const SIZE_SUFFIX: [&str; 9] = ["b", "k", "m", "g", "t", "p", "e", "z", "y"];
 const SIZE_UNIT: f64 = 1024.0;
 
 fn format_size_units(bytes: usize) -> String {
@@ -68,21 +68,32 @@ impl Editor {
 
     pub fn save_document(&mut self) {
         if let Some(path) = &self.document.path {
-            fs::write(path, self.document.data.to_string()).expect("couldn't write to file");
-            let size = format_size_units(self.document.data.byte_len());
-            self.set_status(format!("{} written {}", path.to_string_lossy(), size));
-            self.document.modified = false;
+            match fs::write(path, self.document.data.to_string()) {
+                Ok(_) => {
+                    let size = format_size_units(self.document.data.byte_len());
+                    self.set_status(format!("{} written to {}", size, path.to_string_lossy()));
+                    self.document.modified = false;
+                },
+                Err(error) => {
+                    self.set_error(format!("Write failed: {error}"));
+                },
+            }
         } else {
-            self.set_error("Can't write a buffer without a path");
+            self.set_error("Don't know where to save to");
         }
     }
 
     pub fn set_error(&mut self, message: impl Into<Cow<'static, str>>) {
-        self.status = Some(EditorStatus { message: message.into(), severity: Severity::Error });
+        self.status = Some(EditorStatus {
+            message: message.into(),
+            severity: Severity::Error,
+        });
     }
 
     pub fn set_status(&mut self, message: String) {
-        self.status = Some(EditorStatus { message: message.into(), severity: Severity::Info });
+        self.status = Some(EditorStatus {
+            message: message.into(),
+            severity: Severity::Info,
+        });
     }
 }
-
