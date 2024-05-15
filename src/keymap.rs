@@ -122,7 +122,9 @@ fn normal_mode_keymap() -> Keymap {
         (Char('A'), Func(enter_insert_mode_at_eol)),
         (Char('o'), Func(insert_line_below)),
         (Char('O'), Func(insert_line_above)),
-        (Char('O'), Func(insert_line_above)),
+
+        (Char('D'), Func(delete_until_eol)),
+        (Char('C'), Func(change_until_eol)),
 
         (Char('X'), Func(delete_symbol_to_the_left)),
         (Char('d'), Map(d_keymap())),

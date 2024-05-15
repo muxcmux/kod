@@ -91,3 +91,12 @@ pub fn delete_symbol_to_the_left(ctx: &mut Context) {
 pub fn delete_current_line(ctx: &mut Context) {
     ctx.editor.document.delete_lines(ctx.editor.document.cursor_y, ctx.editor.document.cursor_y, &ctx.editor.mode);
 }
+
+pub fn delete_until_eol(ctx: &mut Context) {
+    ctx.editor.document.delete_until_eol(&ctx.editor.mode);
+}
+
+pub fn change_until_eol(ctx: &mut Context) {
+    ctx.editor.mode = Mode::Insert;
+    ctx.editor.document.delete_until_eol(&ctx.editor.mode);
+}

@@ -175,7 +175,17 @@ impl Document {
                 self.move_cursor_to(None, None, mode);
             }
         }
+    }
 
+    pub fn delete_until_eol(&mut self, mode: &Mode) {
+        let start = self.byte_offset_at_cursor(self.cursor_x, self.cursor_y);
+        let end = self.data.byte_of_line(self.cursor_y) + self.current_line().byte_len();
+
+        if end > 0 {
+            self.data.delete(start..end);
+            self.modified = true;
+            self.move_cursor_to(None, None, mode);
+        }
     }
 
     pub fn move_cursor_to(&mut self, x: Option<usize>, y: Option<usize>, mode: &Mode) {
