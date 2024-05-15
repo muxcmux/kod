@@ -80,7 +80,7 @@ impl Editor {
             match fs::write(path, self.document.data.to_string()) {
                 Ok(_) => {
                     let size = format_size_units(self.document.data.byte_len());
-                    self.set_status(format!("{} written to {}", size, path.to_string_lossy()));
+                    self.set_status(format!("{}, {} lines written", size, self.document.lines_len()));
                     self.document.modified = false;
                 },
                 Err(err) => {
@@ -99,7 +99,7 @@ impl Editor {
         });
     }
 
-    pub fn set_status(&mut self, message: String) {
+    pub fn set_status(&mut self, message: impl Into<Cow<'static, str>>) {
         self.status = Some(EditorStatus {
             message: message.into(),
             severity: Severity::Info,

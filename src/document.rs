@@ -1,6 +1,6 @@
 use std::{cmp::Ordering, path::PathBuf};
 
-use crop::Rope;
+use crop::{Rope, RopeSlice};
 use log::debug;
 
 use crate::editor::Mode;
@@ -81,6 +81,22 @@ impl Document {
         }
     }
 
+    pub fn lines_len(&self) -> usize {
+        self.data.lines().len()
+    }
+
+    pub fn line_len(&self, line: usize) -> usize {
+        self.data.line(line).graphemes().map(|g| unicode_display_width::width(&g) as usize).sum()
+    }
+
+    pub fn current_line_len(&self) -> usize {
+        self.line_len(self.cursor_y)
+    }
+
+    pub fn current_line(&self) -> RopeSlice {
+        self.data.line(self.cursor_y)
+    }
+
     pub fn insert_char_at_cursor(&mut self, char: char, mode: &Mode) {
         self.modified = true;
         let offset = self.byte_offset_at_cursor(self.cursor_x, self.cursor_y);
@@ -100,7 +116,7 @@ impl Document {
         let mut idx = 0;
         let mut col = 0;
 
-        let mut iter = self.data.line(self.cursor_y).graphemes().enumerate().peekable();
+        let mut iter = self.current_line().graphemes().enumerate().peekable();
         while let Some((i, g)) = iter.next() {
             idx = i;
             if col >= self.cursor_x { break }
@@ -116,7 +132,7 @@ impl Document {
             let mut start = self.data.byte_of_line(self.cursor_y);
             let mut end = start;
             let idx = self.grapheme_idx_at_cursor() - 1;
-            for (i, g) in self.data.line(self.cursor_y).graphemes().enumerate() {
+            for (i, g) in self.current_line().graphemes().enumerate() {
                 if i < idx { start += g.len() }
                 if i == idx {
                     end = start + g.len();
@@ -162,18 +178,6 @@ impl Document {
 
     }
 
-    pub fn lines_len(&self) -> usize {
-        self.data.lines().len()
-    }
-
-    pub fn line_len(&self, line: usize) -> usize {
-        self.data.line(line).graphemes().map(|g| unicode_display_width::width(&g) as usize).sum()
-    }
-
-    pub fn current_line_len(&self) -> usize {
-        self.line_len(self.cursor_y)
-    }
-
     pub fn move_cursor_to(&mut self, x: Option<usize>, y: Option<usize>, mode: &Mode) {
         // ensure x and y are within bounds
         let y = self.lines_len().saturating_sub(1).min(y.unwrap_or(self.cursor_y));
@@ -192,7 +196,7 @@ impl Document {
         let goto_prev = cursor_move.vertical.is_some() || matches!(cursor_move.horizontal, Some(HorizontalMove::Left));
         let goto_next = matches!(cursor_move.horizontal, Some(HorizontalMove::Right));
 
-        let mut graphemes = self.data.line(self.cursor_y).graphemes().peekable();
+        let mut graphemes = self.current_line().graphemes().peekable();
 
         while let Some(g) = graphemes.next() {
             let width = unicode_display_width::width(&g) as usize;

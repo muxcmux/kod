@@ -117,6 +117,7 @@ fn normal_mode_keymap() -> Keymap {
         (Right,     Func(cursor_right)),
 
         (Char('i'), Func(enter_insert_mode_at_cursor)),
+        (Char('I'), Func(enter_insert_mode_at_first_non_whitespace)),
         (Char('a'), Func(enter_insert_mode_after_cursor)),
         (Char('A'), Func(enter_insert_mode_at_eol)),
         (Char('o'), Func(insert_line_below)),

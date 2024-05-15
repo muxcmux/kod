@@ -21,6 +21,16 @@ pub fn enter_insert_mode_at_cursor(ctx: &mut Context) {
     enter_insert_mode_relative_to_cursor(0, ctx);
 }
 
+pub fn enter_insert_mode_at_first_non_whitespace(ctx: &mut Context) {
+    ctx.editor.mode = Mode::Insert;
+    for (i, c) in ctx.editor.document.current_line().chars().enumerate() {
+        if !c.is_whitespace() {
+            ctx.editor.document.move_cursor_to(Some(i), None, &ctx.editor.mode);
+            break;
+        }
+    }
+}
+
 pub fn enter_insert_mode_after_cursor(ctx: &mut Context) {
     enter_insert_mode_relative_to_cursor(1, ctx);
 }
