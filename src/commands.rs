@@ -21,7 +21,6 @@ pub fn write_quit(ctx: &mut Context) {
 
 pub const COMMANDS: &[Command] = &[
     Command { name: "quit", aliases: &["q"], func: quit },
-    Command { name: "quit", aliases: &["q"], func: quit },
     Command { name: "write", aliases: &["save", "s", "write", "w"], func: save },
     Command { name: "write-quit", aliases: &["wq", "x"], func: write_quit },
 ];

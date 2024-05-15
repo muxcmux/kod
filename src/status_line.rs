@@ -18,7 +18,7 @@ impl Component for StatusLine {
     }
 
     fn render(&mut self, _area: Rect, buffer: &mut Buffer, ctx: &mut Context) {
-        let (x, y) = (self.area.left(), self.area.top());
+        let (mut x, y) = (self.area.left(), self.area.top());
 
         let line = " ".repeat(self.area.width as usize);
         buffer.put_string(line, x, y, Color::White, Color::Black);
@@ -29,16 +29,23 @@ impl Component for StatusLine {
         };
 
         buffer.put_string(label.to_string(), x, y, label_fg, label_bg);
+        x += (label.chars().count() + 1) as u16;
 
         let filename = match &ctx.editor.document.path {
-            Some(p) => p.to_str().expect("shit path name given"),
-            None => "[scratch]",
+            Some(p) => p.to_string_lossy(),
+            None => "[scratch]".into(),
         };
-        buffer.put_string(filename.to_string(), label.chars().count() as u16 + 1, y, Color::White, Color::Black);
+        let filename_len = filename.chars().count();
+        buffer.put_string(filename.into(), x, y, Color::White, Color::Black);
+        x += (filename_len + 1) as u16;
 
         if ctx.editor.document.modified {
-            let x = filename.chars().count() + label.chars().count() + 2;
-            buffer.put_string("[*]".to_string(), x as u16, y, Color::White, Color::Black);
+            buffer.put_string("*".into(), x, y, Color::Yellow, Color::Black);
+            x += 2;
+        }
+
+        if ctx.editor.document.readonly {
+            buffer.put_string("readonly".into(), x, y, Color::DarkGrey, Color::Black);
         }
 
         let cursor_position = format!(" {}:{} ", ctx.editor.document.cursor_y + 1, ctx.editor.document.grapheme_idx_at_cursor() + 1);

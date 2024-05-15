@@ -1,6 +1,7 @@
 use std::{cmp::Ordering, path::PathBuf};
 
 use crop::Rope;
+use log::debug;
 
 use crate::editor::Mode;
 
@@ -35,14 +36,24 @@ pub struct Document {
     pub cursor_y: usize,
     pub path: Option<PathBuf>,
     pub modified: bool,
+    pub readonly: bool,
     sticky_cursor_x: usize,
 }
 
 impl Document {
     pub fn new(data: Rope, path: Option<PathBuf>) -> Self {
+        let readonly = match &path {
+            Some(p) => {
+                std::fs::metadata(p).is_ok_and(|m| {
+                    m.permissions().readonly()
+                })
+            },
+            None => false,
+        };
         Self {
             data,
             path,
+            readonly,
             cursor_x: 0,
             cursor_y: 0,
             sticky_cursor_x: 0,
@@ -61,6 +72,13 @@ impl Document {
             offset += g.len();
         }
         offset
+    }
+
+    fn max_cursor_x(&self, line: usize, mode: &Mode) -> usize {
+        match mode {
+            Mode::Insert => self.line_len(line),
+            Mode::Normal => self.line_len(line).saturating_sub(1),
+        }
     }
 
     pub fn insert_char_at_cursor(&mut self, char: char, mode: &Mode) {
@@ -94,8 +112,6 @@ impl Document {
     }
 
     pub fn delete_to_the_left(&mut self, mode: &Mode) {
-        self.modified = true;
-
         if self.cursor_x > 0 {
             let mut start = self.data.byte_of_line(self.cursor_y);
             let mut end = start;
@@ -110,31 +126,40 @@ impl Document {
 
             self.cursor_left(&Mode::Insert);
             self.data.delete(start..end);
+            self.modified = true;
         } else if self.cursor_y > 0  {
             let to = self.data.byte_of_line(self.cursor_y);
             let from = to.saturating_sub(NEW_LINE.len_utf8());
             // need to move cursor before deleting
             self.move_cursor_to(Some(self.line_len(self.cursor_y - 1)), Some(self.cursor_y - 1), mode);
             self.data.delete(from..to);
+            self.modified = true;
         }
     }
 
-    pub fn delete_lines(&mut self, from: usize, to: usize, delete_nlc: bool, mode: &Mode) {
+    pub fn delete_lines(&mut self, from: usize, to: usize, mode: &Mode) {
         let from_line = from.min(to);
         let to_line = from.max(to).min(self.lines_len().saturating_sub(1));
 
         let start = self.data.byte_of_line(from_line);
         let mut end = start + self.data.line(to_line).byte_len();
 
-        if delete_nlc && self.lines_len() > 1 {
+        if self.lines_len() > 1 {
             end += NEW_LINE.len_utf8();
         }
 
-        self.data.delete(start..end);
-
-        if self.cursor_y > self.lines_len().saturating_sub(1) {
-            self.cursor_up(mode);
+        if end > 0 {
+            self.modified = true;
+            self.data.delete(start..end);
+            // if removing last line, go up
+            if self.cursor_y > self.lines_len().saturating_sub(1) {
+                self.cursor_up(mode);
+            } else {
+                // ensure x is within bounds
+                self.move_cursor_to(None, None, mode);
+            }
         }
+
     }
 
     pub fn lines_len(&self) -> usize {
@@ -152,11 +177,7 @@ impl Document {
     pub fn move_cursor_to(&mut self, x: Option<usize>, y: Option<usize>, mode: &Mode) {
         // ensure x and y are within bounds
         let y = self.lines_len().saturating_sub(1).min(y.unwrap_or(self.cursor_y));
-        let max_x = match mode {
-            Mode::Insert => self.line_len(y),
-            Mode::Normal => self.line_len(y).saturating_sub(1),
-        };
-        let x = max_x.min(x.unwrap_or(self.sticky_cursor_x));
+        let x = self.max_cursor_x(y, mode).min(x.unwrap_or(self.sticky_cursor_x));
 
         let cursor_move = move_direction((self.cursor_x, self.cursor_y), (&x, &y));
 

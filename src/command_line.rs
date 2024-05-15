@@ -46,15 +46,14 @@ impl CommandLine {
             // so that we get consistent editing text experience
             KeyCode::Char(c) => self.text.push(c),
             KeyCode::Esc => self.dismiss(),
+            KeyCode::Backspace => { self.text.pop(); },
             KeyCode::Enter => {
                 if !self.run(ctx) {
                     ctx.editor.set_error(format!(":{} is not an editor command", self.text));
                 }
                 self.dismiss();
             }
-            _ => {
-                //do nothing
-            }
+            _ => {}
         }
     }
 

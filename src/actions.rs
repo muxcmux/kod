@@ -79,5 +79,5 @@ pub fn delete_symbol_to_the_left(ctx: &mut Context) {
 }
 
 pub fn delete_current_line(ctx: &mut Context) {
-    ctx.editor.document.delete_lines(ctx.editor.document.cursor_y, ctx.editor.document.cursor_y, true, &ctx.editor.mode);
+    ctx.editor.document.delete_lines(ctx.editor.document.cursor_y, ctx.editor.document.cursor_y, &ctx.editor.mode);
 }

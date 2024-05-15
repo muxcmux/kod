@@ -1,6 +1,6 @@
-use anyhow::Result;
 use crossterm::{cursor::SetCursorStyle, event::{read, Event, KeyEvent, KeyEventKind}};
 use crate::{command_line::CommandLine, compositor::{Compositor, Context}, editor::Editor, editor_view::EditorView, status_line::StatusLine, terminal::{self, Terminal}, ui::Rect};
+use anyhow::Result;
 
 pub struct Application {
     editor: Editor,
@@ -8,12 +8,12 @@ pub struct Application {
     terminal: Terminal,
 }
 
-impl Application {
-    pub fn new() -> Result<Self> {
+impl Default for Application {
+    fn default() -> Self {
         let size = crossterm::terminal::size().expect("Can't get terminal size");
         let size = Rect::from(size);
 
-        let mut editor = Editor::new()?;
+        let mut editor = Editor::default();
         let terminal = Terminal::new(size);
         let mut compositor = Compositor::new(size);
 
@@ -23,19 +23,19 @@ impl Application {
         compositor.push(Box::new(StatusLine::new(size.clip_top(size.height.saturating_sub(2)))));
         compositor.push(Box::new(CommandLine::new(size.clip_top(size.height.saturating_sub(1)))));
 
-        Ok(Self { editor, compositor, terminal })
+        Self { editor, compositor, terminal }
+    }
+}
+
+impl Application {
+    pub fn run(&mut self) -> Result<()> {
+        terminal::enter_terminal_screen()?;
+        self.event_loop()?;
+        terminal::leave_terminal_screen()
     }
 
-    pub fn run(&mut self) {
-        _ = terminal::enter_terminal_screen();
-
-        self.event_loop();
-
-        _ = terminal::leave_terminal_screen();
-    }
-
-    fn event_loop(&mut self) {
-        self.draw();
+    fn event_loop(&mut self) -> Result<()> {
+        self.draw()?;
 
         loop {
             if self.editor.quit { break }
@@ -43,12 +43,14 @@ impl Application {
             match read() {
                 Ok(event) => {
                     if self.handle_event(event) {
-                        self.draw()
+                        self.draw()?
                     }
                 }
                 Err(_) => { break },
             }
         }
+
+        Ok(())
     }
 
     fn handle_event(&mut self, event: Event) -> bool {
@@ -72,17 +74,17 @@ impl Application {
         }
     }
 
-    fn draw(&mut self) {
+    fn draw(&mut self) -> Result<()> {
         let mut ctx = Context { editor: &mut self.editor };
 
         self.compositor.render(self.terminal.current_buffer_mut(), &mut ctx);
 
-        _ = self.terminal.draw();
+        self.terminal.draw()?;
 
         if let (Some(position), style) = self.compositor.cursor(&mut ctx) {
-            _ = self.terminal.set_cursor(position, style.unwrap_or(SetCursorStyle::SteadyBlock));
+            self.terminal.set_cursor(position, style.unwrap_or(SetCursorStyle::SteadyBlock))?;
         }
 
-        _ = self.terminal.flush();
+        self.terminal.flush()
     }
 }

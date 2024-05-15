@@ -1,6 +1,5 @@
 use std::{borrow::Cow, env, fs, path::PathBuf};
 
-use anyhow::Result;
 use crop::Rope;
 
 use crate::document::Document;
@@ -42,30 +41,40 @@ fn format_size_units(bytes: usize) -> String {
     [value, SIZE_SUFFIX[base.floor() as usize]].join("")
 }
 
-impl Editor {
-    pub fn new() -> Result<Self> {
+impl Default for Editor {
+    fn default() -> Self {
         let mut args: Vec<String> = env::args().collect();
 
         let mut path = None;
-        let data = if args.len() > 1 {
+        let mut status = None;
+        let mut contents = "\n".to_string();
+
+        if args.len() > 1 {
             let pa = PathBuf::from(args.pop().unwrap());
-            let contents = std::fs::read_to_string(&pa)?;
+            if pa.is_file() {
+                match std::fs::read_to_string(&pa) {
+                    Ok(c) => {
+                        if !c.is_empty() { contents = c; }
+                    },
+                    Err(err) => {
+                        status = Some(EditorStatus { severity: Severity::Error, message: format!("{err}").into() })
+                    },
+                }
+            }
             path = Some(pa);
-            Rope::from(if contents.is_empty() { "\n" } else { &contents })
-        } else {
-            Rope::from("\n")
-        };
+        }
 
-        let document = Document::new(data, path);
+        let document = Document::new(Rope::from(contents), path);
 
-        Ok(Self {
+        Self {
             document,
+            status,
             mode: Mode::Normal,
             quit: false,
-            status: None,
-        })
+        }
     }
-
+}
+impl Editor {
     pub fn save_document(&mut self) {
         if let Some(path) = &self.document.path {
             match fs::write(path, self.document.data.to_string()) {
@@ -74,8 +83,8 @@ impl Editor {
                     self.set_status(format!("{} written to {}", size, path.to_string_lossy()));
                     self.document.modified = false;
                 },
-                Err(error) => {
-                    self.set_error(format!("Write failed: {error}"));
+                Err(err) => {
+                    self.set_error(format!("{err}"));
                 },
             }
         } else {

@@ -14,9 +14,9 @@ fn setup_logging() -> Result<()> {
 fn main() -> Result<()> {
     setup_logging()?;
 
-    let mut app = Application::new()?;
+    let mut app = Application::default();
 
-    app.run();
+    app.run()?;
 
     Ok(())
 }
