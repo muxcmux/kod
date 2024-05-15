@@ -1,4 +1,5 @@
 use crossterm::{cursor::SetCursorStyle, event::{KeyCode, KeyEvent}, style::Color};
+use log::debug;
 
 use crate::{actions, compositor::{Component, Context, EventResult}, document::Document, editor::Mode, keymap::{KeymapResult, Keymaps}, ui::{Buffer, Position, Rect}};
 
@@ -154,7 +155,7 @@ impl EditorView {
     }
 
     fn handle_keymap_event(&mut self, event: KeyEvent, ctx: &mut actions::Context) -> Option<KeymapResult> {
-        let result = self.keymaps.get(&ctx.editor.mode, event.code);
+        let result = self.keymaps.get(&ctx.editor.mode, event);
 
         if let KeymapResult::Found(f) = result {
             f(ctx);
@@ -183,14 +184,14 @@ impl EditorView {
             }
             Some(KeymapResult::Cancelled(pending)) => {
                 let mut result = EventResult::Ignored(None);
-                for key_code in pending {
-                    match key_code {
+                for event in pending {
+                    match event.code {
                         KeyCode::Char(c) => {
                             actions::append_character(c, ctx);
                             result = EventResult::Consumed(None);
                         }
                         _ => {
-                            if let KeymapResult::Found(f) = self.keymaps.get(&Mode::Insert, key_code) {
+                            if let KeymapResult::Found(f) = self.keymaps.get(&Mode::Insert, event) {
                                 f(ctx);
                                 result = EventResult::Consumed(None)
                             }
