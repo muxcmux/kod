@@ -29,7 +29,7 @@ pub struct Editor {
     pub status: Option<EditorStatus>,
 }
 
-const SIZE_SUFFIX: [&str; 9] = ["b", "k", "m", "g", "t", "p", "e", "z", "y"];
+const SIZE_SUFFIX: [&str; 9] = ["b", "kb", "mb", "gb", "tb", "there is", "a special place", "in hell", "for you"];
 const SIZE_UNIT: f64 = 1024.0;
 
 fn format_size_units(bytes: usize) -> String {
@@ -80,7 +80,7 @@ impl Editor {
             match fs::write(path, self.document.data.to_string()) {
                 Ok(_) => {
                     let size = format_size_units(self.document.data.byte_len());
-                    self.set_status(format!("{}, {} lines written", size, self.document.lines_len()));
+                    self.set_status(format!("{} lines written ({})", self.document.lines_len(), size));
                     self.document.modified = false;
                 },
                 Err(err) => {

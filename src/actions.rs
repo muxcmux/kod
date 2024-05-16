@@ -5,16 +5,16 @@ pub struct Context<'a> {
     pub compositor_callbacks: Vec<crate::compositor::Callback>,
 }
 
-pub fn enter_normal_mode(ctx: &mut Context) {
-    ctx.editor.mode = Mode::Normal;
-    ctx.editor.document.cursor_left(&ctx.editor.mode);
-}
-
 fn enter_insert_mode_relative_to_cursor(x: usize, ctx: &mut Context) {
     ctx.editor.mode = Mode::Insert;
     for _ in 0..x {
         ctx.editor.document.cursor_right(&ctx.editor.mode);
     }
+}
+
+pub fn enter_normal_mode(ctx: &mut Context) {
+    ctx.editor.mode = Mode::Normal;
+    ctx.editor.document.cursor_left(&ctx.editor.mode);
 }
 
 pub fn enter_insert_mode_at_cursor(ctx: &mut Context) {
@@ -23,12 +23,7 @@ pub fn enter_insert_mode_at_cursor(ctx: &mut Context) {
 
 pub fn enter_insert_mode_at_first_non_whitespace(ctx: &mut Context) {
     ctx.editor.mode = Mode::Insert;
-    for (i, c) in ctx.editor.document.current_line().chars().enumerate() {
-        if !c.is_whitespace() {
-            ctx.editor.document.move_cursor_to(Some(i), None, &ctx.editor.mode);
-            break;
-        }
-    }
+    goto_line_first_non_whitespace(ctx);
 }
 
 pub fn enter_insert_mode_after_cursor(ctx: &mut Context) {
@@ -37,7 +32,7 @@ pub fn enter_insert_mode_after_cursor(ctx: &mut Context) {
 
 pub fn enter_insert_mode_at_eol(ctx: &mut Context) {
     ctx.editor.mode = Mode::Insert;
-    ctx.editor.document.move_cursor_to(Some(ctx.editor.document.current_line_len()), None, &ctx.editor.mode);
+    goto_eol(ctx);
 }
 
 pub fn append_character(c: char, ctx: &mut Context) {
@@ -70,6 +65,19 @@ pub fn goto_first_line(ctx: &mut Context) {
 
 pub fn goto_last_line(ctx: &mut Context) {
     ctx.editor.document.move_cursor_to(None, Some(ctx.editor.document.lines_len() - 1), &ctx.editor.mode);
+}
+
+pub fn goto_line_first_non_whitespace(ctx: &mut Context) {
+    for (i, c) in ctx.editor.document.current_line().chars().enumerate() {
+        if !c.is_whitespace() {
+            ctx.editor.document.move_cursor_to(Some(i), None, &ctx.editor.mode);
+            break;
+        }
+    }
+}
+
+pub fn goto_eol(ctx: &mut Context) {
+    ctx.editor.document.move_cursor_to(Some(ctx.editor.document.current_line_len()), None, &ctx.editor.mode);
 }
 
 pub fn insert_line_below(ctx: &mut Context) {

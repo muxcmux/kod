@@ -1,39 +1,24 @@
-macro_rules! key {
-    ($key:ident) => {
-        crossterm::event::KeyEvent::new(
-            crossterm::event::KeyCode::$key,
-            crossterm::event::KeyModifiers::NONE
-        )
-    };
-    ($ch:tt) => {
-        crossterm::event::KeyEvent::new(
-            crossterm::event::KeyCode::Char($ch),
-            crossterm::event::KeyModifiers::NONE
-        )
-    };
-}
-
 macro_rules! map {
     (@action $func:ident) => {
         $crate::keymap::Action::Func($func)
     };
 
     (@action
-        { $($($key:tt)|+ => $value:tt,)+ }
+        { $($($key:literal)|+ => $value:tt,)+ }
     ) => {
         $crate::keymap::Action::Map(map!({ $($($key)|+ => $value,)+ }))
     };
 
     (
-        { $($($key:tt)|+ => $value:tt,)+ }
+        { $($($key:literal)|+ => $value:tt,)+ }
     ) => {
         {
             let mut map = $crate::keymap::Keymap::new();
             $(
                 $(
-                    let key = key!($key);
+                    let key = $crate::keymap::parse_key_combo($key);
                     let duplicate = map.insert(key, map!(@action $value));
-                    assert!(duplicate.is_none(), "Duplicate key found: {}", stringify!($key));
+                    assert!(duplicate.is_none(), "Duplicate key combo: {}", stringify!($key));
                 )+
             )*
             map
@@ -43,7 +28,8 @@ macro_rules! map {
 
 use std::collections::HashMap;
 
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use once_cell::sync::Lazy;
 use crate::{actions::*, editor::Mode};
 
 type Func = fn(&mut Context);
@@ -129,51 +115,123 @@ pub enum KeymapResult {
     NotFound,
 }
 
+static KEYS: Lazy<HashMap<&str, KeyCode>> = Lazy::new(|| {
+    HashMap::from([
+        ("space", KeyCode::Char(' ')),
+        ("backspace", KeyCode::Backspace),
+        ("enter", KeyCode::Enter),
+        ("left", KeyCode::Left),
+        ("right", KeyCode::Right),
+        ("up", KeyCode::Up),
+        ("down", KeyCode::Down),
+        ("home", KeyCode::Home),
+        ("end", KeyCode::End),
+        ("pageup", KeyCode::PageUp),
+        ("pagedown", KeyCode::PageDown),
+        ("tab", KeyCode::Tab),
+        ("backtab", KeyCode::BackTab),
+        ("delete", KeyCode::Delete),
+        ("insert", KeyCode::Insert),
+        ("null", KeyCode::Null),
+        ("esc", KeyCode::Esc),
+        ("capslock", KeyCode::CapsLock),
+        ("scrolllock", KeyCode::ScrollLock),
+        ("numlock", KeyCode::NumLock),
+        ("printscreen", KeyCode::PrintScreen),
+        ("pause", KeyCode::Pause),
+        ("menu", KeyCode::Menu),
+        ("keypadbegin", KeyCode::KeypadBegin),
+        // ("Media(_)", KeyCode::Media(_)),
+    ])
+});
+
+fn parse_key_combo(combo: &str) -> KeyEvent {
+    let mut tokens: Vec<&str> = combo.split('-').collect();
+    let mut key_code = match tokens.pop().expect("Key combo cannot be empty") {
+        c if c.chars().count() == 1 => KeyCode::Char(c.chars().next().unwrap()),
+        fun if fun.chars().count() > 1 && fun.starts_with('F') => {
+            let number: u8 = fun.chars().skip(1).collect::<String>().parse().expect("Invalid function key combo");
+            assert!(number > 0 && number < 25, "Invalid function key combo: F{number}");
+            KeyCode::F(number)
+        }
+        other if KEYS.get(other).is_some() => *KEYS.get(other).unwrap(),
+        invalid => panic!("Invalid key combo: {invalid}"),
+    };
+
+    let mut modifiers = KeyModifiers::empty();
+
+    for token in tokens {
+        let modifier = match token {
+            "S" => KeyModifiers::SHIFT,
+            "A" => KeyModifiers::ALT,
+            "C" => KeyModifiers::CONTROL,
+            _ => panic!("Invalid key modifier '{}-'", token),
+        };
+
+        assert!(!modifiers.contains(modifier), "Repeated key modifier '{token}-'");
+        modifiers.insert(modifier);
+    }
+
+    if let KeyCode::Char(c) = key_code {
+        if c.is_ascii_lowercase() && modifiers.contains(KeyModifiers::SHIFT) {
+            key_code = KeyCode::Char(c.to_ascii_uppercase());
+            modifiers.remove(KeyModifiers::SHIFT);
+        }
+    }
+
+    KeyEvent::new(key_code, modifiers)
+}
+
 fn normal_mode_keymap() -> Keymap {
     map!({
-        'h' | Left => cursor_left,
-        'j' | Down => cursor_down,
-        'k' | Up => cursor_up,
-        'l' | Right => cursor_right,
+        "h" | "left" => cursor_left,
+        "j" | "down" => cursor_down,
+        "k" | "up" => cursor_up,
+        "l" | "right" => cursor_right,
 
-        'i' => enter_insert_mode_at_cursor,
-        'I' => enter_insert_mode_at_first_non_whitespace,
-        'a' => enter_insert_mode_after_cursor,
-        'A' => enter_insert_mode_at_eol,
-        'o' => insert_line_below,
-        'O' => insert_line_above,
+        "^" | "home" | "C-h" => goto_line_first_non_whitespace,
+        "$" | "end" | "C-l" => goto_eol,
+        "G" => goto_last_line,
 
-        'D' => delete_until_eol,
-        'C' => change_until_eol,
-
-        'X' => delete_symbol_to_the_left,
-        'd' =>  {
-            'd' => delete_current_line,
+        "g" => {
+            "g" => goto_first_line,
         },
 
-        'G' => goto_last_line,
+        "i" => enter_insert_mode_at_cursor,
+        "I" => enter_insert_mode_at_first_non_whitespace,
+        "a" => enter_insert_mode_after_cursor,
+        "A" => enter_insert_mode_at_eol,
+        "o" => insert_line_below,
+        "O" => insert_line_above,
 
-        'g' => {
-            'g' => goto_first_line,
+        "D" => delete_until_eol,
+        "C" => change_until_eol,
+
+        "X" => delete_symbol_to_the_left,
+        "d" =>  {
+            "d" => delete_current_line,
         },
     })
 }
 
 fn insert_mode_keymap() -> Keymap {
     map!({
-        Esc => enter_normal_mode,
+        "esc" => enter_normal_mode,
 
-        Left => cursor_left,
-        Down => cursor_down,
-        Up => cursor_up,
-        Right => cursor_right,
+        "left" => cursor_left,
+        "down" => cursor_down,
+        "up" => cursor_up,
+        "right" => cursor_right,
 
-        'j' => {
-            'k' => enter_normal_mode,
+        "C-h" | "home" => goto_line_first_non_whitespace,
+        "C-l" | "end" => goto_eol,
+
+        "j" => {
+            "k" => enter_normal_mode,
         },
 
-        Backspace => delete_symbol_to_the_left,
+        "backspace" => delete_symbol_to_the_left,
 
-        Enter => append_new_line,
+        "enter" => append_new_line,
     })
 }
