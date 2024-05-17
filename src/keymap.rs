@@ -146,7 +146,7 @@ static KEYS: Lazy<HashMap<&str, KeyCode>> = Lazy::new(|| {
 });
 
 fn parse_key_combo(combo: &str) -> KeyEvent {
-    let mut tokens: Vec<&str> = combo.split('-').collect();
+    let mut tokens: Vec<&str> = combo.split("->").collect();
     let mut key_code = match tokens.pop().expect("Key combo cannot be empty") {
         c if c.chars().count() == 1 => KeyCode::Char(c.chars().next().unwrap()),
         fun if fun.chars().count() > 1 && fun.starts_with('F') => {
@@ -165,10 +165,10 @@ fn parse_key_combo(combo: &str) -> KeyEvent {
             "S" => KeyModifiers::SHIFT,
             "A" => KeyModifiers::ALT,
             "C" => KeyModifiers::CONTROL,
-            _ => panic!("Invalid key modifier '{}-'", token),
+            _ => panic!("Invalid key modifier '{}->'", token),
         };
 
-        assert!(!modifiers.contains(modifier), "Repeated key modifier '{token}-'");
+        assert!(!modifiers.contains(modifier), "Repeated key modifier '{token}->'");
         modifiers.insert(modifier);
     }
 
@@ -189,8 +189,8 @@ fn normal_mode_keymap() -> Keymap {
         "k" | "up" => cursor_up,
         "l" | "right" => cursor_right,
 
-        "^" | "home" | "C-h" => goto_line_first_non_whitespace,
-        "$" | "end" | "C-l" => goto_eol,
+        "^" | "home" | "C->h" => goto_line_first_non_whitespace,
+        "$" | "end" | "C->l" => goto_eol,
         "G" => goto_last_line,
 
         "g" => {
@@ -223,8 +223,8 @@ fn insert_mode_keymap() -> Keymap {
         "up" => cursor_up,
         "right" => cursor_right,
 
-        "C-h" | "home" => goto_line_first_non_whitespace,
-        "C-l" | "end" => goto_eol,
+        "C->h" | "home" => goto_line_first_non_whitespace,
+        "C->l" | "end" => goto_eol,
 
         "j" => {
             "k" => enter_normal_mode,
