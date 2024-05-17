@@ -1,6 +1,7 @@
 use std::{borrow::Cow, env, fs, path::PathBuf};
 
 use crop::Rope;
+use log::debug;
 
 use crate::document::Document;
 
@@ -55,13 +56,13 @@ impl Default for Editor {
                 match std::fs::read_to_string(&pa) {
                     Ok(c) => {
                         if !c.is_empty() { contents = c; }
+                        path = Some(pa);
                     },
                     Err(err) => {
                         status = Some(EditorStatus { severity: Severity::Error, message: format!("{err}").into() })
                     },
                 }
             }
-            path = Some(pa);
         }
 
         let document = Document::new(Rope::from(contents), path);
