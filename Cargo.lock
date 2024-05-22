@@ -87,6 +87,7 @@ dependencies = [
  "log",
  "once_cell",
  "unicode-display-width",
+ "unicode-general-category",
  "unicode-segmentation",
 ]
 
@@ -218,6 +219,12 @@ checksum = "9a43273b656140aa2bb8e65351fe87c255f0eca706b2538a9bd4a590a3490bf3"
 dependencies = [
  "unicode-segmentation",
 ]
+
+[[package]]
+name = "unicode-general-category"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2281c8c1d221438e373249e065ca4989c4c36952c211ff21a0ee91c44a3869e7"
 
 [[package]]
 name = "unicode-segmentation"

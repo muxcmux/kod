@@ -68,16 +68,27 @@ pub fn goto_last_line(ctx: &mut Context) {
 }
 
 pub fn goto_line_first_non_whitespace(ctx: &mut Context) {
-    for (i, c) in ctx.editor.document.current_line().chars().enumerate() {
-        if !c.is_whitespace() {
-            ctx.editor.document.move_cursor_to(Some(i), None, &ctx.editor.mode);
-            break;
-        }
-    }
+    ctx.editor.document.goto_line_first_non_whitespace(ctx.editor.document.cursor_y, &ctx.editor.mode);
 }
 
 pub fn goto_eol(ctx: &mut Context) {
     ctx.editor.document.move_cursor_to(Some(ctx.editor.document.current_line_len()), None, &ctx.editor.mode);
+}
+
+pub fn goto_word_start_forward(ctx: &mut Context) {
+    ctx.editor.document.goto_word_start_forward(&ctx.editor.mode);
+}
+
+pub fn goto_word_end_forward(ctx: &mut Context) {
+    ctx.editor.document.goto_word_end_forward(&ctx.editor.mode);
+}
+
+pub fn goto_word_start_backward(ctx: &mut Context) {
+    ctx.editor.document.goto_word_start_backward(&ctx.editor.mode);
+}
+
+pub fn goto_prev_word_end(ctx: &mut Context) {
+    //ctx.editor.document.goto_prev_word(WordLocation::End, true, &ctx.editor.mode);
 }
 
 pub fn insert_line_below(ctx: &mut Context) {

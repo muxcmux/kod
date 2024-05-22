@@ -117,6 +117,7 @@ pub enum KeymapResult {
 
 static KEYS: Lazy<HashMap<&str, KeyCode>> = Lazy::new(|| {
     HashMap::from([
+        ("minus", KeyCode::Char('-')),
         ("space", KeyCode::Char(' ')),
         ("backspace", KeyCode::Backspace),
         ("enter", KeyCode::Enter),
@@ -146,7 +147,7 @@ static KEYS: Lazy<HashMap<&str, KeyCode>> = Lazy::new(|| {
 });
 
 fn parse_key_combo(combo: &str) -> KeyEvent {
-    let mut tokens: Vec<&str> = combo.split("->").collect();
+    let mut tokens: Vec<&str> = combo.split('-').collect();
     let mut key_code = match tokens.pop().expect("Key combo cannot be empty") {
         c if c.chars().count() == 1 => KeyCode::Char(c.chars().next().unwrap()),
         fun if fun.chars().count() > 1 && fun.starts_with('F') => {
@@ -165,10 +166,10 @@ fn parse_key_combo(combo: &str) -> KeyEvent {
             "S" => KeyModifiers::SHIFT,
             "A" => KeyModifiers::ALT,
             "C" => KeyModifiers::CONTROL,
-            _ => panic!("Invalid key modifier '{}->'", token),
+            _ => panic!("Invalid key modifier '{}-'", token),
         };
 
-        assert!(!modifiers.contains(modifier), "Repeated key modifier '{token}->'");
+        assert!(!modifiers.contains(modifier), "Repeated key modifier '{token}-'");
         modifiers.insert(modifier);
     }
 
@@ -188,13 +189,17 @@ fn normal_mode_keymap() -> Keymap {
         "j" | "down" => cursor_down,
         "k" | "up" => cursor_up,
         "l" | "right" => cursor_right,
+        "w" => goto_word_start_forward,
+        "b" => goto_word_start_backward,
+        "e" => goto_word_end_forward,
 
-        "^" | "home" | "C->h" => goto_line_first_non_whitespace,
-        "$" | "end" | "C->l" => goto_eol,
+        "^" | "home" | "C-h" => goto_line_first_non_whitespace,
+        "$" | "end" | "C-l" => goto_eol,
         "G" => goto_last_line,
 
         "g" => {
             "g" => goto_first_line,
+            "e" => goto_prev_word_end,
         },
 
         "i" => enter_insert_mode_at_cursor,
@@ -223,8 +228,8 @@ fn insert_mode_keymap() -> Keymap {
         "up" => cursor_up,
         "right" => cursor_right,
 
-        "C->h" | "home" => goto_line_first_non_whitespace,
-        "C->l" | "end" => goto_eol,
+        "C-h" | "home" => goto_line_first_non_whitespace,
+        "C-l" | "end" => goto_eol,
 
         "j" => {
             "k" => enter_normal_mode,

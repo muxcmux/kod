@@ -1,8 +1,6 @@
-use std::{cmp::Ordering, path::PathBuf};
+use std::{borrow::Cow, cmp::Ordering, path::PathBuf};
 
 use crop::{Rope, RopeSlice};
-use log::debug;
-
 use crate::editor::Mode;
 
 enum HorizontalMove { Right, Left }
@@ -29,6 +27,18 @@ fn move_direction(from: (usize, usize), to: (&usize, &usize)) -> CursorMove {
     }
 }
 
+#[derive(Clone, Debug)]
+struct Word<'a> {
+    slice: RopeSlice<'a>,
+    start: usize,
+    end: usize,
+}
+
+impl<'a> Word<'a> {
+    fn is_blank(&self) -> bool {
+        self.slice.chars().all(|c| c.is_whitespace())
+    }
+}
 
 pub struct Document {
     pub data: Rope,
@@ -112,26 +122,29 @@ impl Document {
         }
     }
 
-    pub fn grapheme_idx_at_cursor(&self) -> usize {
+    pub fn grapheme_at_cursor(&self) -> (usize, Option<Cow<'_, str>>)  {
         let mut idx = 0;
         let mut col = 0;
+        let mut grapheme = None;
 
         let mut iter = self.current_line().graphemes().enumerate().peekable();
         while let Some((i, g)) = iter.next() {
             idx = i;
+            let width = unicode_display_width::width(&g) as usize;
+            grapheme = Some(g);
             if col >= self.cursor_x { break }
             if iter.peek().is_none() { idx += 1 }
-            col += unicode_display_width::width(&g) as usize;
+            col += width;
         }
 
-        idx
+        (idx, grapheme)
     }
 
     pub fn delete_to_the_left(&mut self, mode: &Mode) {
         if self.cursor_x > 0 {
             let mut start = self.data.byte_of_line(self.cursor_y);
             let mut end = start;
-            let idx = self.grapheme_idx_at_cursor() - 1;
+            let idx = self.grapheme_at_cursor().0 - 1;
             for (i, g) in self.current_line().graphemes().enumerate() {
                 if i < idx { start += g.len() }
                 if i == idx {
@@ -189,6 +202,7 @@ impl Document {
     }
 
     pub fn move_cursor_to(&mut self, x: Option<usize>, y: Option<usize>, mode: &Mode) {
+        let stick = x.is_some();
         // ensure x and y are within bounds
         let y = self.lines_len().saturating_sub(1).min(y.unwrap_or(self.cursor_y));
         let x = self.max_cursor_x(y, mode).min(x.unwrap_or(self.sticky_cursor_x));
@@ -198,7 +212,11 @@ impl Document {
         self.cursor_x = x;
         self.cursor_y = y;
 
-        self.ensure_cursor_is_on_grapheme_boundary(mode, cursor_move);
+        if x > 0 {
+            self.ensure_cursor_is_on_grapheme_boundary(mode, cursor_move);
+        }
+
+        if stick { self.sticky_cursor_x = self.cursor_x }
     }
 
     fn ensure_cursor_is_on_grapheme_boundary(&mut self, mode: &Mode, cursor_move: CursorMove) {
@@ -240,14 +258,168 @@ impl Document {
 
     pub fn cursor_left(&mut self, mode: &Mode) {
         self.move_cursor_to(Some(self.cursor_x.saturating_sub(1)), None, mode);
-
-        self.sticky_cursor_x = self.cursor_x;
     }
 
     pub fn cursor_right(&mut self, mode: &Mode) {
         self.move_cursor_to(Some(self.cursor_x + 1), None, mode);
+    }
 
-        self.sticky_cursor_x = self.cursor_x;
+    pub fn goto_line_first_non_whitespace(&mut self, line: usize, mode: &Mode) {
+        for (i, g) in self.data.line(line).graphemes().enumerate() {
+            if !matches!(GraphemeCategory::from(&g), GraphemeCategory::Whitespace) {
+                self.move_cursor_to(Some(i), Some(line), mode);
+                break;
+            }
+        }
+    }
+
+    fn words_of_line(&self, y: usize, exclude_blank_words: bool) -> Vec<Word> {
+        let line = self.data.line(y);
+        let mut offset = 0;
+        let mut word_start_byte = offset;
+        let mut words = vec![];
+        let mut col = 0;
+        let mut word = Word { start: col, end: col, slice: line.byte_slice(..) };
+        let mut iter = line.graphemes().peekable();
+
+        while let Some(g) = iter.next() {
+            let width = unicode_display_width::width(&g) as usize;
+            let size = g.len();
+            let this_cat = GraphemeCategory::from(&g);
+            match iter.peek() {
+                Some(next) => {
+                    let next_cat = GraphemeCategory::from(next);
+                    if this_cat != next_cat {
+                        // that's the end of the current word
+                        // and the index has to fall on the first
+                        // column of a grapheme
+                        word.end = col;
+                        word.slice = line.byte_slice(word_start_byte..offset + size);
+                        // push it to the list of words
+                        words.push(word.clone());
+                        // start the next word
+                        word.start = col + width;
+                        word_start_byte = offset + size;
+                    }
+                }
+                None => {
+                    // this is the end of the last word
+                    // and the index has to fall on the first
+                    // column of a grapheme
+                    word.end = col;
+                    word.slice = line.byte_slice(word_start_byte..offset + size);
+                    words.push(word);
+                    break;
+                }
+            }
+
+            col += width;
+            offset += size;
+        }
+
+        if exclude_blank_words {
+            words.into_iter().filter(|w| !w.is_blank()).collect()
+        } else {
+            words
+        }
+    }
+
+    pub fn goto_word_end_forward(&mut self, mode: &Mode) {
+        let mut line = self.cursor_y;
+
+        'lines: while line < self.lines_len() {
+            let mut iter = self.words_of_line(line, true).into_iter().peekable();
+            while let Some(word) = iter.next() {
+                if line > self.cursor_y || self.cursor_x < word.end {
+                    self.move_cursor_to(Some(word.end), Some(line), mode);
+                    break 'lines;
+                } else if self.cursor_x == word.end {
+                    if let Some(next) = iter.peek() {
+                        self.move_cursor_to(Some(next.end), Some(line), mode);
+                        break 'lines;
+                    }
+                }
+            }
+
+            line += 1;
+        }
+    }
+
+    pub fn goto_word_start_forward(&mut self, mode: &Mode) {
+        let mut line = self.cursor_y;
+
+        'lines: while line < self.lines_len() {
+            let mut iter = self.words_of_line(line, true).into_iter().peekable();
+            while let Some(word) = iter.next() {
+                if line > self.cursor_y {
+                    self.move_cursor_to(Some(word.start), Some(line), mode);
+                    break 'lines;
+                } else if let Some(next) = iter.peek() {
+                    if self.cursor_x < next.start {
+                        self.move_cursor_to(Some(next.start), None, mode);
+                        break 'lines;
+                    }
+                }
+            }
+
+            line += 1;
+        }
+    }
+
+    pub fn goto_word_start_backward(&mut self, mode: &Mode) {
+        let mut line = self.cursor_y as isize;
+
+        'lines: while line >= 0 {
+            let l = line as usize;
+            let mut iter = self.words_of_line(l, true).into_iter().rev().peekable();
+            while let Some(word) = iter.next() {
+                if l < self.cursor_y || self.cursor_x > word.start {
+                    self.move_cursor_to(Some(word.start), Some(l), mode);
+                    break 'lines;
+                } else if self.cursor_x == word.start {
+                    if let Some(next) = iter.peek() {
+                        self.move_cursor_to(Some(next.start), Some(l), mode);
+                        break 'lines;
+                    }
+                }
+            }
+
+            line -= 1;
+        }
     }
 }
 
+#[derive(PartialEq)]
+enum GraphemeCategory {
+    Whitespace,
+    Word,
+    Punctuation,
+    Other,
+}
+
+impl From<&Cow<'_, str>> for GraphemeCategory {
+    fn from(g: &Cow<'_, str>) -> Self {
+        use unicode_general_category::{get_general_category, GeneralCategory::*};
+        match g.chars().next() {
+            Some(c) => match c {
+                ws if ws.is_whitespace() => Self::Whitespace,
+                a if a.is_alphanumeric() => Self::Word,
+                '-' | '_' => Self::Word,
+                _ => match get_general_category(c) {
+                    OtherPunctuation
+                        | OpenPunctuation
+                        | ClosePunctuation
+                        | InitialPunctuation
+                        | FinalPunctuation
+                        | ConnectorPunctuation
+                        | DashPunctuation
+                        | MathSymbol
+                        | CurrencySymbol
+                        | ModifierSymbol => Self::Punctuation,
+                    _ => Self::Other
+                }
+            },
+            None => Self::Other
+        }
+    }
+}

@@ -1,5 +1,4 @@
 use crossterm::{cursor::SetCursorStyle, event::{KeyCode, KeyEvent}, style::Color};
-use log::debug;
 
 use crate::{actions, compositor::{Component, Context, EventResult}, document::Document, editor::Mode, keymap::{KeymapResult, Keymaps}, ui::{Buffer, Position, Rect}};
 
@@ -22,7 +21,7 @@ fn adjust_scroll(dimension: usize, doc_cursor: usize, offset: usize, scroll: usi
 fn gutter_and_document_areas(size: Rect, ctx: &Context) -> (Rect, Rect) {
     let gutter_width = ctx.editor.document.lines_len().checked_ilog10().unwrap_or(1) as u16 + GUTTER_LINE_NUM_PAD_LEFT + GUTTER_LINE_NUM_PAD_RIGHT;
     let gutter_width = gutter_width.max(MIN_GUTTER_WIDTH);
-    let gutter_area = size.clip_bottom(2).clip_right(size.width.saturating_sub(gutter_width));
+    let gutter_area = size.clip_bottom(1).clip_right(size.width.saturating_sub(gutter_width));
     // clip right to allow for double width graphemes
     let area = size.clip_left(gutter_area.width).clip_right(1);
 

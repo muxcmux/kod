@@ -48,7 +48,7 @@ impl Component for StatusLine {
             buffer.put_string("readonly".into(), x, y, Color::DarkGrey, Color::Black);
         }
 
-        let cursor_position = format!(" {}:{} ", ctx.editor.document.cursor_y + 1, ctx.editor.document.grapheme_idx_at_cursor() + 1);
+        let cursor_position = format!(" {}:{} ", ctx.editor.document.cursor_y + 1, ctx.editor.document.grapheme_at_cursor().0 + 1);
         let w = self.area.width.saturating_sub(cursor_position.chars().count() as u16);
         buffer.put_string(cursor_position, w, y, Color::White, Color::Black);
     }
