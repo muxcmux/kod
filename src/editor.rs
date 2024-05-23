@@ -1,7 +1,6 @@
 use std::{borrow::Cow, env, fs, path::PathBuf};
 
 use crop::Rope;
-use log::debug;
 
 use crate::document::Document;
 

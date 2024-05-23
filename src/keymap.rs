@@ -199,7 +199,7 @@ fn normal_mode_keymap() -> Keymap {
 
         "g" => {
             "g" => goto_first_line,
-            "e" => goto_prev_word_end,
+            "e" => goto_word_end_backward,
         },
 
         "i" => enter_insert_mode_at_cursor,

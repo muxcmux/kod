@@ -87,8 +87,8 @@ pub fn goto_word_start_backward(ctx: &mut Context) {
     ctx.editor.document.goto_word_start_backward(&ctx.editor.mode);
 }
 
-pub fn goto_prev_word_end(ctx: &mut Context) {
-    //ctx.editor.document.goto_prev_word(WordLocation::End, true, &ctx.editor.mode);
+pub fn goto_word_end_backward(ctx: &mut Context) {
+    ctx.editor.document.goto_word_end_backward(&ctx.editor.mode);
 }
 
 pub fn insert_line_below(ctx: &mut Context) {

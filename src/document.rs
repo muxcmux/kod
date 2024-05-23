@@ -369,6 +369,22 @@ impl Document {
             line -= 1;
         }
     }
+
+    pub fn goto_word_end_backward(&mut self, mode: &Mode) {
+        let mut line = self.cursor_y as isize;
+
+        'lines: while line >= 0 {
+            let l = line as usize;
+            for word in self.words_of_line(l, true).iter().rev() {
+                if l < self.cursor_y || self.cursor_x > word.end {
+                    self.move_cursor_to(Some(word.end), Some(l), mode);
+                    break 'lines;
+                }
+            }
+
+            line -= 1;
+        }
+    }
 }
 
 #[derive(PartialEq)]
