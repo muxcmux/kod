@@ -328,16 +328,10 @@ impl Document {
         let mut line = self.cursor_y;
 
         'lines: while line < self.lines_len() {
-            let mut iter = self.words_of_line(line, true).into_iter().peekable();
-            while let Some(word) = iter.next() {
+            for word in self.words_of_line(line, true) {
                 if line > self.cursor_y || self.cursor_x < word.end {
                     self.move_cursor_to(Some(word.end), Some(line), mode);
                     break 'lines;
-                } else if self.cursor_x == word.end {
-                    if let Some(next) = iter.peek() {
-                        self.move_cursor_to(Some(next.end), Some(line), mode);
-                        break 'lines;
-                    }
                 }
             }
 
@@ -349,16 +343,10 @@ impl Document {
         let mut line = self.cursor_y;
 
         'lines: while line < self.lines_len() {
-            let mut iter = self.words_of_line(line, true).into_iter().peekable();
-            while let Some(word) = iter.next() {
-                if line > self.cursor_y {
+            for word in self.words_of_line(line, true) {
+                if line > self.cursor_y || self.cursor_x < word.start {
                     self.move_cursor_to(Some(word.start), Some(line), mode);
                     break 'lines;
-                } else if let Some(next) = iter.peek() {
-                    if self.cursor_x < next.start {
-                        self.move_cursor_to(Some(next.start), None, mode);
-                        break 'lines;
-                    }
                 }
             }
 
@@ -371,16 +359,10 @@ impl Document {
 
         'lines: while line >= 0 {
             let l = line as usize;
-            let mut iter = self.words_of_line(l, true).into_iter().rev().peekable();
-            while let Some(word) = iter.next() {
+            for word in self.words_of_line(l, true).iter().rev() {
                 if l < self.cursor_y || self.cursor_x > word.start {
                     self.move_cursor_to(Some(word.start), Some(l), mode);
                     break 'lines;
-                } else if self.cursor_x == word.start {
-                    if let Some(next) = iter.peek() {
-                        self.move_cursor_to(Some(next.start), Some(l), mode);
-                        break 'lines;
-                    }
                 }
             }
 
