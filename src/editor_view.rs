@@ -1,6 +1,6 @@
 use crossterm::{cursor::SetCursorStyle, event::{KeyCode, KeyEvent}, style::Color};
 
-use crate::{actions, compositor::{Component, Context, EventResult}, document::Document, editor::Mode, keymap::{KeymapResult, Keymaps}, ui::{Buffer, Position, Rect}};
+use crate::{actions, compositor::{Component, Context, EventResult}, document::{Document, GraphemeCategory}, editor::Mode, keymap::{KeymapResult, Keymaps}, ui::{Buffer, Position, Rect}};
 
 const GUTTER_LINE_NUM_PAD_LEFT: u16 = 2;
 const GUTTER_LINE_NUM_PAD_RIGHT: u16 = 1;
@@ -98,6 +98,9 @@ impl EditorView {
                 }
             }
 
+            let y = row.saturating_sub(self.scroll_y) as u16 + self.area.top();
+            let mut trailing_whitespace = vec![];
+
             for col in self.col_range() {
                 if skip_next_n_cols > 0 {
                     skip_next_n_cols -= 1;
@@ -107,12 +110,23 @@ impl EditorView {
                     None => break,
                     Some(g) => {
                         let width = unicode_display_width::width(&g) as usize;
-                        let x = col.saturating_sub(self.scroll_x);
-                        let y = row.saturating_sub(self.scroll_y);
-                        buffer.put_symbol(g.to_string(), x as u16 + self.area.left(), y as u16 + self.area.top(), Color::Reset, Color::Reset);
+                        let x = col.saturating_sub(self.scroll_x) as u16 + self.area.left();
+                        buffer.put_symbol(g.to_string(), x, y, Color::Reset, Color::Reset);
                         skip_next_n_cols = width - 1;
+
+                        if matches!(GraphemeCategory::from(&g), GraphemeCategory::Whitespace) {
+                            trailing_whitespace.push(x);
+                        } else {
+                            trailing_whitespace.drain(..);
+                        }
                     }
                 }
+            }
+
+            // render trailing whitespace
+            for x in trailing_whitespace {
+                //buffer.put_symbol("·".to_string(), x, y, Color::DarkGrey, Color::Reset);
+                buffer.put_symbol("~".to_string(), x, y, Color::DarkGrey, Color::Reset);
             }
         }
     }
@@ -120,7 +134,7 @@ impl EditorView {
     fn render_gutter(&self, buffer: &mut Buffer, ctx: &Context) {
         let max = ctx.editor.document.lines_len();
 
-        for y in self.gutter_area.v_range() {
+        for y in self.gutter_area.top()..=self.gutter_area.bottom() {
             let line_no = y as usize + self.scroll_y + 1;
             if line_no > max { break }
 

@@ -80,14 +80,6 @@ impl Rect {
     pub fn bottom(&self) -> u16 {
         self.position.y + self.height
     }
-
-    pub fn v_range(&self) -> Range<u16> {
-        self.top()..self.bottom() + 1
-    }
-
-    pub fn h_range(&self) -> Range<u16> {
-        self.left()..self.right()
-    }
 }
 
 impl From<(u16, u16)> for Rect {

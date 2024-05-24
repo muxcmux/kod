@@ -388,7 +388,7 @@ impl Document {
 }
 
 #[derive(PartialEq)]
-enum GraphemeCategory {
+pub enum GraphemeCategory {
     Whitespace,
     Word,
     Punctuation,
