@@ -1,8 +1,9 @@
 use std::io::{stdout, Write};
 
-use crate::ui::{Buffer, Patch, Position, Rect};
 use anyhow::Result;
 use crossterm::{cursor::{self, SetCursorStyle}, style::{Color, Print, SetBackgroundColor, SetForegroundColor}, terminal::{self, Clear, ClearType}, ExecutableCommand, QueueableCommand};
+
+use super::{buffer::{Buffer, Patch}, Position, Rect};
 
 pub fn enter_terminal_screen() -> Result<()> {
     let mut stdout = std::io::stdout();
@@ -101,6 +102,18 @@ impl Terminal {
         self.buffers[1 - self.current].reset();
         self.current = 1 - self.current;
 
+        Ok(())
+    }
+
+    pub fn hide_cursor(&self) -> Result<()> {
+        let mut stdout = stdout();
+        stdout.queue(cursor::Hide)?;
+        Ok(())
+    }
+
+    pub fn show_cursor(&self) -> Result<()> {
+        let mut stdout = stdout();
+        stdout.queue(cursor::Show)?;
         Ok(())
     }
 

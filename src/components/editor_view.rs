@@ -1,6 +1,9 @@
+use crate::ui::buffer::Buffer;
+use crate::ui::Position;
+use crate::ui::Rect;
 use crossterm::{cursor::SetCursorStyle, event::{KeyCode, KeyEvent}, style::Color};
 
-use crate::{actions, compositor::{Component, Context, EventResult}, document::{Document, GraphemeCategory}, editor::Mode, keymap::{KeymapResult, Keymaps}, ui::{Buffer, Position, Rect}};
+use crate::{actions::{self, KeyCallback}, compositor::{Component, Context, EventResult}, document::{Document, GraphemeCategory}, editor::Mode, keymap::{KeymapResult, Keymaps}};
 
 const GUTTER_LINE_NUM_PAD_LEFT: u16 = 2;
 const GUTTER_LINE_NUM_PAD_RIGHT: u16 = 1;
@@ -28,7 +31,6 @@ fn gutter_and_document_areas(size: Rect, ctx: &Context) -> (Rect, Rect) {
     (gutter_area, area)
 }
 
-#[derive(Debug)]
 pub struct EditorView {
     area: Rect,
     gutter_area: Rect,
@@ -38,11 +40,15 @@ pub struct EditorView {
     offset_y: usize,
     scroll_x: usize,
     scroll_y: usize,
+    on_next_key: Option<KeyCallback>,
 }
 
 impl EditorView {
     pub fn new(size: Rect, ctx: &Context) -> Self {
         let (gutter_area, area) = gutter_and_document_areas(size, ctx);
+
+        // TODO: dinamically decide on offset based on the area
+        // and don't forget to update it on resize!
 
         Self {
             area,
@@ -53,6 +59,7 @@ impl EditorView {
             offset_y: 4,
             scroll_y: 0,
             scroll_x: 0,
+            on_next_key: None,
         }
     }
 
@@ -111,7 +118,7 @@ impl EditorView {
                     Some(g) => {
                         let width = unicode_display_width::width(&g) as usize;
                         let x = col.saturating_sub(self.scroll_x) as u16 + self.area.left();
-                        buffer.put_symbol(g.to_string(), x, y, Color::Reset, Color::Reset);
+                        buffer.put_symbol(&g, x, y, Color::Reset, Color::Reset);
                         skip_next_n_cols = width - 1;
 
                         if matches!(GraphemeCategory::from(&g), GraphemeCategory::Whitespace) {
@@ -125,8 +132,8 @@ impl EditorView {
 
             // render trailing whitespace
             for x in trailing_whitespace {
-                //buffer.put_symbol("·".to_string(), x, y, Color::DarkGrey, Color::Reset);
-                buffer.put_symbol("~".to_string(), x, y, Color::DarkGrey, Color::Reset);
+                //buffer.put_symbol("·", x, y, Color::DarkGrey, Color::Reset);
+                buffer.put_symbol("~", x, y, Color::DarkGrey, Color::Reset);
             }
         }
     }
@@ -235,23 +242,30 @@ impl Component for EditorView {
 
     fn handle_key_event(&mut self, event: KeyEvent, ctx: &mut Context) -> EventResult {
         ctx.editor.status = None;
+        let mut action_ctx = actions::Context {
+            editor: ctx.editor,
+            compositor_callbacks: vec![],
+            on_next_key_callback: None,
+        };
 
-        match ctx.editor.mode {
-            Mode::Normal => {
-                let mut action_ctx = actions::Context {
-                    editor: ctx.editor,
-                    compositor_callbacks: vec![]
-                };
-                self.handle_normal_mode_key_event(event, &mut action_ctx)
+        let event_result = if let Some(on_next_key) = self.on_next_key.take() {
+            on_next_key(&mut action_ctx, event);
+            EventResult::Consumed(None)
+        } else {
+            match action_ctx.editor.mode {
+                Mode::Normal => {
+                    self.handle_normal_mode_key_event(event, &mut action_ctx)
+                }
+                Mode::Insert => {
+                    self.handle_insert_mode_key_event(event, &mut action_ctx)
+                }
             }
-            Mode::Insert => {
-                let mut action_ctx = actions::Context {
-                    editor: ctx.editor,
-                    compositor_callbacks: vec![]
-                };
-                self.handle_insert_mode_key_event(event, &mut action_ctx)
-            }
-        }
+        };
+
+        self.on_next_key = action_ctx.on_next_key_callback.take();
+
+        // still need to handle compositor_callbacks here
+        event_result
     }
 
     fn cursor(&self, _area: Rect, ctx: &Context) -> (Option<Position>, Option<SetCursorStyle>) {

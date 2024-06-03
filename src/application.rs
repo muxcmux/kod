@@ -1,5 +1,5 @@
 use crossterm::{cursor::SetCursorStyle, event::{read, Event, KeyEvent, KeyEventKind}};
-use crate::{command_line::CommandLine, compositor::{Compositor, Context}, editor::Editor, editor_view::EditorView, status_line::StatusLine, terminal::{self, Terminal}, ui::Rect};
+use crate::{components::{editor_view::EditorView, status_line::StatusLine, command_line::CommandLine}, compositor::{Compositor, Context}, editor::Editor, ui::{terminal::{self, Terminal}, Rect}};
 use anyhow::Result;
 
 pub struct Application {
@@ -81,8 +81,13 @@ impl Application {
 
         self.terminal.draw()?;
 
-        if let (Some(position), style) = self.compositor.cursor(&mut ctx) {
-            self.terminal.set_cursor(position, style.unwrap_or(SetCursorStyle::SteadyBlock))?;
+        if self.compositor.hide_cursor(&mut ctx) {
+            self.terminal.hide_cursor()?;
+        } else {
+            self.terminal.show_cursor()?;
+            if let (Some(position), style) = self.compositor.cursor(&mut ctx) {
+                self.terminal.set_cursor(position, style.unwrap_or(SetCursorStyle::SteadyBlock))?;
+            }
         }
 
         self.terminal.flush()

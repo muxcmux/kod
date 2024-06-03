@@ -1,5 +1,7 @@
+use crate::ui::buffer::Buffer;
+use crate::ui::Rect;
 use crossterm::style::Color;
-use crate::{compositor::{Component, Context}, editor::Mode, ui::{Buffer, Rect}};
+use crate::{compositor::{Component, Context}, editor::Mode};
 
 #[derive(Debug)]
 pub struct StatusLine {
@@ -31,10 +33,7 @@ impl Component for StatusLine {
         buffer.put_string(label.to_string(), x, y, label_fg, label_bg);
         x += (label.chars().count() + 1) as u16;
 
-        let filename = match &ctx.editor.document.path {
-            Some(p) => p.to_string_lossy(),
-            None => "[scratch]".into(),
-        };
+        let filename = ctx.editor.document.filename();
         let filename_len = filename.chars().count();
         buffer.put_string(filename.into(), x, y, Color::White, Color::Black);
         x += (filename_len + 1) as u16;

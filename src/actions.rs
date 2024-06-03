@@ -1,8 +1,19 @@
+use crossterm::event::{KeyCode, KeyEvent};
+
 use crate::{document::NEW_LINE, editor::{Editor, Mode}};
+
+pub type KeyCallback = Box<dyn FnOnce(&mut Context, KeyEvent)>;
 
 pub struct Context<'a> {
     pub editor: &'a mut Editor,
     pub compositor_callbacks: Vec<crate::compositor::Callback>,
+    pub on_next_key_callback: Option<KeyCallback>,
+}
+
+impl<'a> Context<'a> {
+    fn on_next_key(&mut self, fun: impl FnOnce(&mut Context, KeyEvent) + 'static) {
+        self.on_next_key_callback = Some(Box::new(fun));
+    }
 }
 
 fn enter_insert_mode_relative_to_cursor(x: usize, ctx: &mut Context) {
@@ -89,6 +100,38 @@ pub fn goto_word_start_backward(ctx: &mut Context) {
 
 pub fn goto_word_end_backward(ctx: &mut Context) {
     ctx.editor.document.goto_word_end_backward(&ctx.editor.mode);
+}
+
+pub fn goto_character_forward(ctx: &mut Context) {
+    ctx.on_next_key(|ctx, event| {
+        if let KeyCode::Char(c) = event.code {
+            ctx.editor.document.goto_character_forward(c, &ctx.editor.mode, 0);
+        }
+    })
+}
+
+pub fn goto_until_character_forward(ctx: &mut Context) {
+    ctx.on_next_key(|ctx, event| {
+        if let KeyCode::Char(c) = event.code {
+            ctx.editor.document.goto_character_forward(c, &ctx.editor.mode, 1);
+        }
+    })
+}
+
+pub fn goto_character_backward(ctx: &mut Context) {
+    ctx.on_next_key(|ctx, event| {
+        if let KeyCode::Char(c) = event.code {
+            ctx.editor.document.goto_character_backward(c, &ctx.editor.mode, 1);
+        }
+    })
+}
+
+pub fn goto_until_character_backward(ctx: &mut Context) {
+    ctx.on_next_key(|ctx, event| {
+        if let KeyCode::Char(c) = event.code {
+            ctx.editor.document.goto_character_backward(c, &ctx.editor.mode, 0);
+        }
+    })
 }
 
 pub fn insert_line_below(ctx: &mut Context) {

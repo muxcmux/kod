@@ -1,8 +1,11 @@
-use std::{any::Any, fmt::Debug};
+use crate::ui::Position;
+use crate::ui::buffer::Buffer;
+use crate::ui::Rect;
+use std::any::Any;
 
 use crossterm::{cursor::SetCursorStyle, event::KeyEvent};
 
-use crate::{editor::Editor, ui::{Buffer, Position, Rect}};
+use crate::editor::Editor;
 
 pub struct Context<'a> {
     pub editor: &'a mut Editor
@@ -15,7 +18,7 @@ pub enum EventResult {
     Consumed(Option<Callback>),
 }
 
-pub trait Component: Any + Debug {
+pub trait Component: Any {
     fn handle_key_event(&mut self, _event: KeyEvent, _ctx: &mut Context) -> EventResult {
         EventResult::Ignored(None)
     }
@@ -26,6 +29,10 @@ pub trait Component: Any + Debug {
 
     fn cursor(&self, _area: Rect, _ctx: &Context) -> (Option<Position>, Option<SetCursorStyle>) {
         (None, None)
+    }
+
+    fn hide_cursor(&self, _ctx: &Context) -> bool {
+        false
     }
 
     fn type_name(&self) -> &'static str {
@@ -47,6 +54,10 @@ impl Compositor {
         self.layers.push(layer);
     }
 
+    pub fn pop(&mut self) -> Option<Box<dyn Component>>  {
+        self.layers.pop()
+    }
+
     pub fn render(&mut self, buffer: &mut Buffer, ctx: &mut Context) {
         for layer in &mut self.layers {
             layer.render(self.size, buffer, ctx);
@@ -58,6 +69,15 @@ impl Compositor {
         for layer in &mut self.layers {
             layer.resize(size, ctx);
         }
+    }
+
+    pub fn hide_cursor(&self, ctx: &mut Context) -> bool {
+        for layer in self.layers.iter().rev() {
+            if layer.hide_cursor(ctx) {
+                return true;
+            }
+        }
+        false
     }
 
     pub fn cursor(&self, ctx: &mut Context) -> (Option<Position>, Option<SetCursorStyle>) {

@@ -1,8 +1,11 @@
+use crate::ui::Position;
+use crate::ui::buffer::Buffer;
+use crate::ui::Rect;
 use std::fmt::Display;
 
 use crossterm::{cursor::SetCursorStyle, event::{KeyCode, KeyEvent}, style::Color};
 use unicode_segmentation::UnicodeSegmentation;
-use crate::{commands::COMMANDS, compositor::{Component, Context, EventResult}, editor::{EditorStatus, Mode, Severity}, ui::{Buffer, Position, Rect}};
+use crate::{commands::COMMANDS, compositor::{Component, Context, EventResult}, editor::{EditorStatus, Mode, Severity}};
 
 const PROMPT: &str = ":";
 
@@ -29,31 +32,57 @@ impl CommandLine {
         self.focused = false;
     }
 
-    fn run(&mut self, ctx: &mut Context) -> bool {
+    fn run(&mut self, ctx: &mut Context) -> anyhow::Result<EventResult> {
         for cmd in COMMANDS {
             if cmd.name == self.text || cmd.aliases.contains(&self.text.as_str()) {
-                (cmd.func)(ctx);
-                return true;
+                let mut ctx = crate::commands::Context { editor: ctx.editor, compositor_callbacks: vec![]  };
+
+                (cmd.func)(&mut ctx);
+
+                if ctx.compositor_callbacks.is_empty() {
+                    return Ok(EventResult::Consumed(None))
+                }
+
+                return Ok(EventResult::Consumed(Some(Box::new(move |compositor, cx| {
+                    for cb in ctx.compositor_callbacks {
+                        cb(compositor, cx);
+                    }
+                }))));
             }
         }
 
-        false
+        Err(anyhow::anyhow!(":{} is not an editor command", self.text))
     }
 
-    fn update_command(&mut self, key_code: KeyCode, ctx: &mut Context) {
+    fn update_command(&mut self, key_code: KeyCode, ctx: &mut Context) -> EventResult {
         match key_code {
             // Need to somehow merge this with the insert mode keymap
             // so that we get consistent editing text experience
-            KeyCode::Char(c) => self.text.push(c),
-            KeyCode::Esc => self.dismiss(),
-            KeyCode::Backspace => { self.text.pop(); },
-            KeyCode::Enter => {
-                if !self.run(ctx) {
-                    ctx.editor.set_error(format!(":{} is not an editor command", self.text));
-                }
+            // maybe have a TextInput component?
+            KeyCode::Char(c) => {
+                self.text.push(c);
+                EventResult::Consumed(None)
+            },
+            KeyCode::Esc => {
                 self.dismiss();
+                EventResult::Consumed(None)
+            },
+            KeyCode::Backspace => {
+                self.text.pop();
+                EventResult::Consumed(None)
+            },
+            KeyCode::Enter => {
+                let ev = match self.run(ctx) {
+                    Ok(result) => result,
+                    Err(err) => {
+                        ctx.editor.set_error(err.to_string());
+                        EventResult::Consumed(None)
+                    }
+                };
+                self.dismiss();
+                ev
             }
-            _ => {}
+            _ => EventResult::Ignored(None)
         }
     }
 
@@ -88,8 +117,7 @@ impl Component for CommandLine {
             Mode::Insert => EventResult::Ignored(None),
             Mode::Normal => {
                 if self.focused {
-                    self.update_command(event.code, ctx);
-                    return EventResult::Consumed(None);
+                    return self.update_command(event.code, ctx);
                 } else if matches!(event.code, KeyCode::Char(':')) {
                     self.focused = true;
                     return EventResult::Consumed(None);

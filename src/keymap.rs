@@ -192,6 +192,10 @@ fn normal_mode_keymap() -> Keymap {
         "w" => goto_word_start_forward,
         "b" => goto_word_start_backward,
         "e" => goto_word_end_forward,
+        "t" => goto_until_character_forward,
+        "f" => goto_character_forward,
+        "T" => goto_until_character_backward,
+        "F" => goto_character_backward,
 
         "^" | "home" | "C-h" => goto_line_first_non_whitespace,
         "$" | "end" | "C-l" => goto_eol,

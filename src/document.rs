@@ -71,6 +71,16 @@ impl Document {
         }
     }
 
+    pub fn filename(&self) -> Cow<'_, str> {
+        match &self.path {
+            Some(p) => match p.file_name() {
+                Some(f) => f.to_string_lossy(),
+                None => "[scratch]".into()
+            }
+            None => "[scratch]".into(),
+        }
+    }
+
     fn byte_offset_at_cursor(&self, cursor_x: usize, cursor_y: usize) -> usize {
         let mut offset = self.data.byte_of_line(cursor_y);
         let mut col = 0;
@@ -383,6 +393,30 @@ impl Document {
             }
 
             line -= 1;
+        }
+    }
+
+    pub fn goto_character_forward(&mut self, c: char, mode: &Mode, offset: usize) {
+        let mut col = 0;
+        for g in self.data.line(self.cursor_y).graphemes() {
+            if col > self.cursor_x && g.starts_with(c) {
+                self.move_cursor_to(Some(col.saturating_sub(offset)), None, mode);
+                break;
+            }
+            let width = unicode_display_width::width(&g) as usize;
+            col += width;
+        }
+    }
+
+    pub fn goto_character_backward(&mut self, c: char, mode: &Mode, offset: usize) {
+        let mut col = self.line_len(self.cursor_y);
+        for g in self.data.line(self.cursor_y).graphemes().rev() {
+            if col <= self.cursor_x && g.starts_with(c) {
+                self.move_cursor_to(Some(col.saturating_sub(offset)), None, mode);
+                break;
+            }
+            let width = unicode_display_width::width(&g) as usize;
+            col -= width;
         }
     }
 }
