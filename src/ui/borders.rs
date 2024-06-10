@@ -134,8 +134,8 @@ pub enum BorderType {
 }
 
 impl BorderType {
-    pub fn line_symbols(border_type: Self) -> Set {
-        match border_type {
+    pub fn line_symbols(&self) -> Set {
+        match self {
             Self::Plain => NORMAL,
             Self::Rounded => ROUNDED,
             Self::Double => DOUBLE,

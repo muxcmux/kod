@@ -1,3 +1,4 @@
+use crate::editable_text::NEW_LINE;
 use std::{borrow::Cow, env, fs, path::PathBuf};
 
 use crop::Rope;
@@ -47,7 +48,7 @@ impl Default for Editor {
 
         let mut path = None;
         let mut status = None;
-        let mut contents = "\n".to_string();
+        let mut contents = NEW_LINE.to_string();
 
         if args.len() > 1 {
             let pa = PathBuf::from(args.pop().unwrap());
@@ -77,10 +78,10 @@ impl Default for Editor {
 impl Editor {
     pub fn save_document(&mut self) {
         if let Some(path) = &self.document.path {
-            match fs::write(path, self.document.data.to_string()) {
+            match fs::write(path, self.document.text.rope.to_string()) {
                 Ok(_) => {
-                    let size = format_size_units(self.document.data.byte_len());
-                    self.set_status(format!("{} lines written ({})", self.document.lines_len(), size));
+                    let size = format_size_units(self.document.text.rope.byte_len());
+                    self.set_status(format!("{} lines written ({})", self.document.text.lines_len(), size));
                     self.document.modified = false;
                 },
                 Err(err) => {

@@ -23,8 +23,6 @@ pub trait Component: Any {
         EventResult::Ignored(None)
     }
 
-    fn resize(&mut self, new_size: Rect, ctx: &mut Context);
-
     fn render(&mut self, area: Rect, buffer: &mut Buffer, ctx: &mut Context);
 
     fn cursor(&self, _area: Rect, _ctx: &Context) -> (Option<Position>, Option<SetCursorStyle>) {
@@ -64,11 +62,8 @@ impl Compositor {
         }
     }
 
-    pub fn resize(&mut self, size: Rect, ctx: &mut Context) {
+    pub fn resize(&mut self, size: Rect) {
         self.size = size;
-        for layer in &mut self.layers {
-            layer.resize(size, ctx);
-        }
     }
 
     pub fn hide_cursor(&self, ctx: &mut Context) -> bool {

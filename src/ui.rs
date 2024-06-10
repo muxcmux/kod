@@ -1,20 +1,15 @@
 pub(crate) mod buffer;
 pub(crate) mod terminal;
 pub(crate) mod borders;
+pub(crate) mod border_box;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Position {
     pub x: u16,
     pub y: u16
 }
 
-impl Position {
-    pub fn at_origin() -> Self {
-        Position { x: 0, y: 0 }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Rect {
     pub position: Position,
     pub width: u16,
@@ -37,8 +32,8 @@ impl Rect {
         let height = height.min(self.height);
         Self {
             position: Position {
-                x: self.position.x,
-                y: self.position.y.saturating_add(height)
+                x: self.left(),
+                y: self.top().saturating_add(height)
             },
             height: self.height.saturating_sub(height),
             ..self
@@ -49,7 +44,7 @@ impl Rect {
         let width = width.min(self.width);
         Self {
             position: Position {
-                x: self.position.x.saturating_add(width),
+                x: self.left().saturating_add(width),
                 ..self.position
             },
             width: self.width.saturating_sub(width),
@@ -61,6 +56,17 @@ impl Rect {
         Self {
             width: self.width.saturating_sub(width),
             ..self
+        }
+    }
+
+    pub fn centered(self, width: u16, height: u16) -> Self {
+        Self {
+            width: self.width.min(width),
+            height: self.height.min(height),
+            position: Position {
+                x: self.left() + (self.width.saturating_sub(width).max(1) / 2),
+                y: self.top() + (self.height.saturating_sub(height).max(1) / 2),
+            }
         }
     }
 
@@ -82,7 +88,7 @@ impl Rect {
 }
 
 impl From<(u16, u16)> for Rect {
-    fn from(value: (u16, u16)) -> Self {
-        Self { position: Position::at_origin(), width: value.0, height: value.1 }
+    fn from((width, height): (u16, u16)) -> Self {
+        Self { width,  height, ..Default::default() }
     }
 }

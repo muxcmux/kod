@@ -113,10 +113,10 @@ impl Buffer {
         }
     }
 
-    pub fn put_string(&mut self, string: String, x: u16, y: u16, fg: Color, bg: Color) {
+    pub fn put_str(&mut self, str: &str, x: u16, y: u16, fg: Color, bg: Color) {
         let start = self.index(x, y);
 
-        for (offset, g) in string.graphemes(true).enumerate() {
+        for (offset, g) in str.graphemes(true).enumerate() {
             if start + offset > self.cells.len() {
                 break;
             }

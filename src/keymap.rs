@@ -30,9 +30,9 @@ use std::collections::HashMap;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use once_cell::sync::Lazy;
-use crate::{actions::*, editor::Mode};
+use crate::{commands::{ self, actions::* }, editor::Mode};
 
-type Func = fn(&mut Context);
+type Func = fn(&mut commands::Context);
 type Keymap = HashMap<KeyEvent, Action>;
 
 #[derive(Debug)]
@@ -41,15 +41,17 @@ pub struct Keymaps {
     pending: Vec<KeyEvent>,
 }
 
-impl Keymaps {
-    pub fn default() -> Self {
+impl Default for Keymaps {
+    fn default() -> Self {
         let mut map = HashMap::new();
         map.insert(Mode::Normal, normal_mode_keymap());
         map.insert(Mode::Insert, insert_mode_keymap());
 
         Self { map, pending: vec![] }
     }
+}
 
+impl Keymaps {
     pub fn get(&mut self, mode: &Mode, event: KeyEvent) -> KeymapResult {
         // gets the keymap for the mode
         let keymap = self.map.get(mode).unwrap_or_else(|| panic!("No keymap found for editor mode {:?}", mode));
@@ -185,6 +187,7 @@ fn parse_key_combo(combo: &str) -> KeyEvent {
 
 fn normal_mode_keymap() -> Keymap {
     map!({
+        ":" => command_pallette,
         "h" | "left" => cursor_left,
         "j" | "down" => cursor_down,
         "k" | "up" => cursor_up,

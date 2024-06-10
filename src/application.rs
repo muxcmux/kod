@@ -1,5 +1,5 @@
 use crossterm::{cursor::SetCursorStyle, event::{read, Event, KeyEvent, KeyEventKind}};
-use crate::{components::{editor_view::EditorView, status_line::StatusLine, command_line::CommandLine}, compositor::{Compositor, Context}, editor::Editor, ui::{terminal::{self, Terminal}, Rect}};
+use crate::{components::{editor_view::EditorView, status_line::StatusLine}, compositor::{Compositor, Context}, editor::Editor, ui::{terminal::{self, Terminal}, Rect}};
 use anyhow::Result;
 
 pub struct Application {
@@ -19,9 +19,8 @@ impl Default for Application {
 
         let ctx = Context { editor: &mut editor };
 
-        compositor.push(Box::new(EditorView::new(size.clip_bottom(2), &ctx)));
-        compositor.push(Box::new(StatusLine::new(size.clip_top(size.height.saturating_sub(2)))));
-        compositor.push(Box::new(CommandLine::new(size.clip_top(size.height.saturating_sub(1)))));
+        compositor.push(Box::new(EditorView::default()));
+        compositor.push(Box::new(StatusLine {}));
 
         Self { editor, compositor, terminal }
     }
@@ -56,10 +55,9 @@ impl Application {
     fn handle_event(&mut self, event: Event) -> bool {
         match event {
             Event::Resize(width, height) => {
-                let mut ctx = Context { editor: &mut self.editor };
                 let size = Rect::from((width, height));
                 self.terminal.resize(size).expect("Couldn't resize the terminal");
-                self.compositor.resize(size, &mut ctx);
+                self.compositor.resize(size);
                 true
             },
             Event::Key(KeyEvent { kind: KeyEventKind::Release, .. }) => false,
