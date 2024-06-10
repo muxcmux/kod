@@ -62,7 +62,9 @@ impl<'a> BorderBox<'a> {
         // Sides
         if self.borders.intersects(Borders::LEFT) {
             for y in self.area.top()..self.area.bottom() {
-                buffer.put_symbol(symbols.vertical, self.area.left(), y, fg, bg)
+                buffer.put_symbol(symbols.vertical, self.area.left(), y, fg, bg);
+                // workaround to fix double width cells glitch
+                buffer.clear_cell_if_double_width(self.area.left().saturating_sub(1), y)
             }
         }
         if self.borders.intersects(Borders::TOP) {

@@ -1,6 +1,21 @@
+use crate::{
+    components::scroll_view::ScrollView,
+    compositor::{Component, Context, EventResult},
+    editable_text::EditableText,
+    editor::Mode,
+    ui::{
+        border_box::BorderBox,
+        borders::{BorderType, Borders},
+        buffer::Buffer,
+        Position, Rect,
+    },
+};
 use crop::Rope;
-use crossterm::{cursor::SetCursorStyle, event::{KeyCode, KeyEvent}, style::Color};
-use crate::{components::scroll_view::ScrollView, compositor::{Component, Compositor, Context, EventResult}, editable_text::EditableText, editor::Mode, ui::{border_box::BorderBox, borders::{BorderType, Borders}, buffer::Buffer, Position, Rect}};
+use crossterm::{
+    cursor::SetCursorStyle,
+    event::{KeyCode, KeyEvent},
+    style::Color,
+};
 
 use super::{Command, COMMANDS};
 
@@ -11,13 +26,14 @@ pub struct Pallette {
 
 impl Pallette {
     pub fn new() -> Self {
-        Self { input: TextInput::new(Rope::from("\n")), index: 0 }
+        Self {
+            input: TextInput::new(Rope::from("\n")),
+            index: 0,
+        }
     }
 
     fn run(&mut self, ctx: &mut Context) -> EventResult {
         let idx = self.index;
-
-        let close = Box::new(|compositor: &mut Compositor, _: &mut Context| { compositor.pop(); });
 
         if let Some(cmd) = self.commands().get(idx) {
             let mut ctx = crate::commands::Context {
@@ -29,7 +45,9 @@ impl Pallette {
             (cmd.func)(&mut ctx);
 
             if ctx.compositor_callbacks.is_empty() {
-                return EventResult::Consumed(Some(close))
+                return EventResult::Consumed(Some(Box::new(|compositor, _| {
+                    compositor.pop();
+                })));
             }
 
             return EventResult::Consumed(Some(Box::new(|compositor, cx| {
@@ -47,11 +65,10 @@ impl Pallette {
     fn commands(&mut self) -> Vec<&Command> {
         let text = self.input.text.rope.to_string();
         let text = text.trim();
-        COMMANDS.iter()
+        COMMANDS
+            .iter()
             .filter(|c| {
-                text == "\n" ||
-                    c.name.contains(text) ||
-                    c.aliases.iter().any(|c| *c == text)
+                text == "\n" || c.name.contains(text) || c.aliases.iter().any(|c| *c == text)
             })
             .collect()
     }
@@ -86,30 +103,25 @@ impl Component for Pallette {
             buffer.put_str(cmd.name, inner.left() + 2, y, fg, Color::Reset);
             buffer.put_str(cmd.desc, inner.right().saturating_sub(cmd.desc.chars().count() as u16), y, fg, Color::Reset);
         }
-
     }
 
     fn handle_key_event(&mut self, event: KeyEvent, ctx: &mut Context) -> EventResult {
         match event.code {
-            KeyCode::Enter =>  {
-                self.run(ctx)
-            },
+            KeyCode::Enter => self.run(ctx),
             KeyCode::Up => {
                 self.index = self.index.saturating_sub(1);
                 EventResult::Consumed(None)
-            },
+            }
             KeyCode::Down => {
                 self.index = (self.index + 1).min(COMMANDS.len().saturating_sub(1));
                 EventResult::Consumed(None)
-            },
+            }
             // scroll by a page
             // KeyCode::PageUp => todo!(),
             // KeyCode::PageDown => todo!(),
-            KeyCode::Esc => {
-                EventResult::Consumed(Some(Box::new(|compositor, _| {
-                    compositor.pop();
-                })))
-            },
+            KeyCode::Esc => EventResult::Consumed(Some(Box::new(|compositor, _| {
+                compositor.pop();
+            }))),
             _ => {
                 self.input.handle_key_event(event);
                 self.index = 0;
@@ -120,7 +132,8 @@ impl Component for Pallette {
 
     fn cursor(&self, _area: Rect, _ctx: &Context) -> (Option<Position>, Option<SetCursorStyle>) {
         (
-            Some(self.input.view.cursor_position), Some(SetCursorStyle::SteadyBar)
+            Some(self.input.view.cursor_position),
+            Some(SetCursorStyle::SteadyBar),
         )
     }
 }
@@ -134,7 +147,7 @@ impl TextInput {
     fn new(rope: Rope) -> Self {
         Self {
             view: ScrollView::default(),
-            text: EditableText::new(rope)
+            text: EditableText::new(rope),
         }
     }
 
@@ -144,14 +157,28 @@ impl TextInput {
 
     fn handle_key_event(&mut self, event: KeyEvent) {
         match event.code {
-            KeyCode::Left      => { self.text.cursor_left(&Mode::Insert); }
-            KeyCode::Right     => { self.text.cursor_right(&Mode::Insert); }
-            KeyCode::Up        => { self.text.cursor_up(&Mode::Insert); }
-            KeyCode::Down      => { self.text.cursor_down(&Mode::Insert); }
-            KeyCode::Home      => { self.text.move_cursor_to(Some(0), None, &Mode::Insert); }
-            KeyCode::End       => { self.text.move_cursor_to(Some(usize::MAX), None, &Mode::Insert); }
-            KeyCode::Backspace => { self.text.delete_to_the_left(&Mode::Insert); }
-            KeyCode::Char(c)   => {
+            KeyCode::Left => {
+                self.text.cursor_left(&Mode::Insert);
+            }
+            KeyCode::Right => {
+                self.text.cursor_right(&Mode::Insert);
+            }
+            KeyCode::Up => {
+                self.text.cursor_up(&Mode::Insert);
+            }
+            KeyCode::Down => {
+                self.text.cursor_down(&Mode::Insert);
+            }
+            KeyCode::Home => {
+                self.text.move_cursor_to(Some(0), None, &Mode::Insert);
+            }
+            KeyCode::End => {
+                self.text.move_cursor_to(Some(usize::MAX), None, &Mode::Insert);
+            }
+            KeyCode::Backspace => {
+                self.text.delete_to_the_left(&Mode::Insert);
+            }
+            KeyCode::Char(c) => {
                 self.text.insert_char_at_cursor(c, &Mode::Insert);
             }
             _ => {}
