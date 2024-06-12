@@ -3,7 +3,7 @@ use crate::ui::buffer::Buffer;
 use crate::ui::Rect;
 use std::any::Any;
 
-use crossterm::{cursor::SetCursorStyle, event::KeyEvent};
+use crossterm::{cursor::SetCursorStyle, event::{Event, KeyEvent}};
 
 use crate::editor::Editor;
 
@@ -20,6 +20,10 @@ pub enum EventResult {
 
 pub trait Component: Any {
     fn handle_key_event(&mut self, _event: KeyEvent, _ctx: &mut Context) -> EventResult {
+        EventResult::Ignored(None)
+    }
+
+    fn handle_paste(&mut self, _str: &str, _ctx: &mut Context) -> EventResult {
         EventResult::Ignored(None)
     }
 
@@ -84,12 +88,17 @@ impl Compositor {
         (None, None)
     }
 
-    pub fn handle_key_event(&mut self, event: KeyEvent, ctx: &mut Context) -> bool {
+    pub fn handle_event(&mut self, event: Event, ctx: &mut Context) -> bool {
         let mut callbacks = vec![];
         let mut consumed = false;
 
         for layer in self.layers.iter_mut().rev() {
-            match layer.handle_key_event(event, ctx) {
+            let result = match event {
+                Event::Key(key_event) => layer.handle_key_event(key_event, ctx),
+                Event::Paste(ref s) => layer.handle_paste(s, ctx),
+                _ => unreachable!()
+            };
+            match result {
                 EventResult::Consumed(callback) => {
                     if let Some(cb) = callback { callbacks.push(cb) }
                     consumed = true;

@@ -139,7 +139,7 @@ impl Buffer {
         }
     }
 
-    pub fn clear_cell_if_double_width(&mut self, x: u16, y: u16) {
+    pub fn clear_double_width_cell(&mut self, x: u16, y: u16) {
         let idx = self.index(x, y);
         if let Some(cell) = self.cells.get_mut(idx) {
             if unicode_display_width::width(&cell.symbol) == 2 {

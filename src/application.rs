@@ -13,13 +13,11 @@ impl Default for Application {
         let size = crossterm::terminal::size().expect("Can't get terminal size");
         let size = Rect::from(size);
 
-        let mut editor = Editor::default();
+        let editor = Editor::default();
         let terminal = Terminal::new(size);
         let mut compositor = Compositor::new(size);
 
-        let ctx = Context { editor: &mut editor };
-
-        compositor.push(Box::new(EditorView::default()));
+        compositor.push(Box::<EditorView>::default());
         compositor.push(Box::new(StatusLine {}));
 
         Self { editor, compositor, terminal }
@@ -61,14 +59,13 @@ impl Application {
                 true
             },
             Event::Key(KeyEvent { kind: KeyEventKind::Release, .. }) => false,
-            Event::Key(key_event) => {
+            Event::Key(_) | Event::Paste(_) => {
                 let mut ctx = Context { editor: &mut self.editor };
-                self.compositor.handle_key_event(key_event, &mut ctx)
+                self.compositor.handle_event(event, &mut ctx)
             },
             Event::FocusGained => false,
             Event::FocusLost => false,
             Event::Mouse(_) => false,
-            Event::Paste(_) => false,
         }
     }
 

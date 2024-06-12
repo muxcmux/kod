@@ -144,6 +144,12 @@ impl EditableText {
         }
     }
 
+    pub fn insert_str_at_cursor(&mut self, str: &str, _mode: &Mode) {
+        let offset = self.byte_offset_at_cursor(self.cursor_x, self.cursor_y);
+        self.rope.insert(offset, str);
+        // TODO: Move the cursor
+    }
+
     pub fn grapheme_at_cursor(&self) -> (usize, Option<Cow<'_, str>>)  {
         let mut idx = 0;
         let mut col = 0;

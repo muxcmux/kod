@@ -1,13 +1,14 @@
 use std::io::{stdout, Write};
 
 use anyhow::Result;
-use crossterm::{cursor::{self, SetCursorStyle}, style::{Color, Print, SetBackgroundColor, SetForegroundColor}, terminal::{self, Clear, ClearType}, ExecutableCommand, QueueableCommand};
+use crossterm::{cursor::{self, SetCursorStyle}, event, style::{Color, Print, SetBackgroundColor, SetForegroundColor}, terminal::{self, Clear, ClearType}, ExecutableCommand, QueueableCommand};
 
 use super::{buffer::{Buffer, Patch}, Position, Rect};
 
 pub fn enter_terminal_screen() -> Result<()> {
     let mut stdout = std::io::stdout();
     terminal::enable_raw_mode()?;
+    stdout.execute(event::EnableBracketedPaste)?;
     stdout.execute(terminal::EnterAlternateScreen)?;
     stdout.execute(terminal::Clear(terminal::ClearType::All))?;
 
@@ -23,6 +24,7 @@ pub fn enter_terminal_screen() -> Result<()> {
 
 pub fn leave_terminal_screen() -> Result<()> {
     terminal::disable_raw_mode()?;
+    stdout().execute(event::DisableBracketedPaste)?;
     stdout().execute(terminal::LeaveAlternateScreen)?;
 
     Ok(())

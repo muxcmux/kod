@@ -226,6 +226,12 @@ impl Component for EditorView {
         }
     }
 
+    fn handle_paste(&mut self, str: &str, ctx: &mut Context) -> EventResult {
+        ctx.editor.document.text.insert_str_at_cursor(str, &ctx.editor.mode);
+        ctx.editor.document.modified = true;
+        EventResult::Consumed(None)
+    }
+
     fn cursor(&self, _area: Rect, ctx: &Context) -> (Option<Position>, Option<SetCursorStyle>) {
         (
             Some(self.scroll_view.cursor_position),
