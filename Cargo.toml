@@ -12,6 +12,7 @@ log = "0.4"
 fern = "0.6"
 
 crop = { version = "0.4", features = ["graphemes", "simd"] }
+smartstring = "1"
 
 unicode-segmentation = "1"
 unicode-display-width = "0.3"

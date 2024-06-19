@@ -1,6 +1,7 @@
 use crossterm::event::KeyCode;
+use smartstring::SmartString;
 
-use crate::{editable_text::NEW_LINE, editor::Mode};
+use crate::{editable_text::{EditableText, NEW_LINE}, editor::Mode, history::Transaction};
 
 use super::{pallette::Pallette, Context};
 
@@ -37,16 +38,6 @@ pub fn enter_insert_mode_after_cursor(ctx: &mut Context) {
 pub fn enter_insert_mode_at_eol(ctx: &mut Context) {
     ctx.editor.mode = Mode::Insert;
     goto_eol(ctx);
-}
-
-pub fn append_character(c: char, ctx: &mut Context) {
-    ctx.editor.document.text.insert_char_at_cursor(c, &ctx.editor.mode);
-    ctx.editor.document.modified = true;
-}
-
-pub fn append_new_line(ctx: &mut Context) {
-    ctx.editor.document.text.insert_char_at_cursor(NEW_LINE, &ctx.editor.mode);
-    ctx.editor.document.modified = true;
 }
 
 pub fn cursor_up(ctx: &mut Context) {
@@ -129,22 +120,95 @@ pub fn goto_until_character_backward(ctx: &mut Context) {
     })
 }
 
+pub fn undo(ctx: &mut Context) {
+    ctx.editor.document.undo_redo(true, &ctx.editor.mode);
+}
+
+pub fn redo(ctx: &mut Context) {
+    ctx.editor.document.undo_redo(false, &ctx.editor.mode);
+}
+
+fn insert_char(c: char, ctx: &mut Context) {
+    let doc = &mut ctx.editor.document;
+
+    let offset = doc.text.byte_offset_at_cursor(doc.text.cursor_x, doc.text.cursor_y);
+
+    let mut string = SmartString::new();
+    string.push(c);
+
+    doc.apply(
+        &Transaction::change(
+            &doc.text.rope,
+            [(offset, offset, Some(string))].into_iter()
+        ).set_cursor(&doc.text)
+    );
+
+    doc.modified = true;
+}
+
+pub fn append_character(c: char, ctx: &mut Context) {
+    insert_char(c, ctx);
+    ctx.editor.document.text.cursor_right(&ctx.editor.mode);
+}
+
+pub fn append_new_line(ctx: &mut Context) {
+    insert_char(NEW_LINE, ctx);
+    ctx.editor.document.text.cursor_down(&ctx.editor.mode);
+}
+
 pub fn insert_line_below(ctx: &mut Context) {
     ctx.editor.mode = Mode::Insert;
     ctx.editor.document.text.move_cursor_to(Some(std::usize::MAX), None, &ctx.editor.mode);
-    ctx.editor.document.text.insert_char_at_cursor(NEW_LINE, &ctx.editor.mode);
+    insert_char(NEW_LINE, ctx);
+    ctx.editor.document.text.cursor_down(&ctx.editor.mode);
     ctx.editor.document.modified = true;
 }
 
 pub fn insert_line_above(ctx: &mut Context) {
     ctx.editor.mode = Mode::Insert;
     ctx.editor.document.text.move_cursor_to(Some(std::usize::MAX), Some(ctx.editor.document.text.cursor_y.saturating_sub(1)), &ctx.editor.mode);
-    ctx.editor.document.text.insert_char_at_cursor(NEW_LINE, &ctx.editor.mode);
+    insert_char(NEW_LINE, ctx);
+    ctx.editor.document.text.cursor_down(&ctx.editor.mode);
     ctx.editor.document.modified = true;
 }
 
+fn delete_to_the_left(text: &mut EditableText , mode: &Mode) -> Option<(usize, usize)> {
+    if text.cursor_x > 0 {
+        let mut start = text.rope.byte_of_line(text.cursor_y);
+        let mut end = start;
+        let idx = text.grapheme_at_cursor().0 - 1;
+
+        for (i, g) in text.current_line().graphemes().enumerate() {
+            if i < idx { start += g.len() }
+            if i == idx {
+                end = start + g.len();
+                break
+            }
+        }
+
+        text.cursor_left(mode);
+
+        return Some((start, end));
+    } else if text.cursor_y > 0  {
+        let to = text.rope.byte_of_line(text.cursor_y);
+        let from = to.saturating_sub(NEW_LINE.len_utf8());
+
+        text.move_cursor_to(Some(text.line_len(text.cursor_y - 1)), Some(text.cursor_y - 1), mode);
+
+        return Some((from, to));
+    }
+
+    None
+}
+
 pub fn delete_symbol_to_the_left(ctx: &mut Context) {
-    if ctx.editor.document.text.delete_to_the_left(&ctx.editor.mode) {
+    if let Some((from, to)) = delete_to_the_left(&mut ctx.editor.document.text, &ctx.editor.mode) {
+        ctx.editor.document.apply(
+            &Transaction::change(
+                &ctx.editor.document.text.rope,
+                [(from, to, None)].into_iter()
+            ).set_cursor(&ctx.editor.document.text)
+        );
         ctx.editor.document.modified = true;
     }
 }

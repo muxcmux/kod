@@ -94,7 +94,7 @@ impl EditableText {
         }
     }
 
-    fn byte_offset_at_cursor(&self, cursor_x: usize, cursor_y: usize) -> usize {
+    pub fn byte_offset_at_cursor(&self, cursor_x: usize, cursor_y: usize) -> usize {
         let mut offset = self.rope.byte_of_line(cursor_y);
         let mut col = 0;
         for g in self.rope.line(cursor_y).graphemes() {

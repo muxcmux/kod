@@ -77,7 +77,7 @@ impl Buffer {
     }
 
     pub fn diff<'a>(&'a self, other: &'a Self) -> Vec<Patch> {
-        assert!(self.size == other.size);
+        debug_assert!(self.size == other.size);
 
         let mut patches = vec![];
 

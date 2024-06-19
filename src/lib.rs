@@ -1,4 +1,5 @@
 pub mod application;
+mod history;
 mod components;
 mod commands;
 mod compositor;

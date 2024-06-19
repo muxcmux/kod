@@ -18,7 +18,7 @@ macro_rules! map {
                 $(
                     let key = $crate::keymap::parse_key_combo($key);
                     let duplicate = map.insert(key, map!(@action $value));
-                    assert!(duplicate.is_none(), "Duplicate key combo: {}", stringify!($key));
+                    debug_assert!(duplicate.is_none(), "Duplicate key combo: {}", stringify!($key));
                 )+
             )*
             map
@@ -154,7 +154,7 @@ fn parse_key_combo(combo: &str) -> KeyEvent {
         c if c.chars().count() == 1 => KeyCode::Char(c.chars().next().unwrap()),
         fun if fun.chars().count() > 1 && fun.starts_with('F') => {
             let number: u8 = fun.chars().skip(1).collect::<String>().parse().expect("Invalid function key combo");
-            assert!(number > 0 && number < 25, "Invalid function key combo: F{number}");
+            debug_assert!(number > 0 && number < 25, "Invalid function key combo: F{number}");
             KeyCode::F(number)
         }
         other if KEYS.get(other).is_some() => *KEYS.get(other).unwrap(),
@@ -171,7 +171,7 @@ fn parse_key_combo(combo: &str) -> KeyEvent {
             _ => panic!("Invalid key modifier '{}-'", token),
         };
 
-        assert!(!modifiers.contains(modifier), "Repeated key modifier '{token}-'");
+        debug_assert!(!modifiers.contains(modifier), "Repeated key modifier '{token}-'");
         modifiers.insert(modifier);
     }
 
@@ -208,6 +208,9 @@ fn normal_mode_keymap() -> Keymap {
             "g" => goto_first_line,
             "e" => goto_word_end_backward,
         },
+
+        "u" => undo,
+        "C-r" => redo,
 
         "i" => enter_insert_mode_at_cursor,
         "I" => enter_insert_mode_at_first_non_whitespace,

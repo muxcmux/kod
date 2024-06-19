@@ -220,6 +220,10 @@ impl Component for EditorView {
             Some(cb)
         };
 
+        if ctx.editor.mode != Mode::Insert {
+            ctx.editor.document.commit_transaction_to_history();
+        }
+
         match event_result {
             EventResult::Ignored(_) => EventResult::Ignored(callback),
             EventResult::Consumed(_) => EventResult::Consumed(callback),
