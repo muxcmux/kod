@@ -197,8 +197,8 @@ impl Transaction {
 
         let mut transaction = Self {
             operations: Vec::with_capacity(len),
-            cursor_x: self.cursor_x,
-            cursor_y: self.cursor_y,
+            cursor_x: other.cursor_x,
+            cursor_y: other.cursor_y,
         };
 
         loop {
