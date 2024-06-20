@@ -196,6 +196,7 @@ impl EditableText {
         false
     }
 
+    // this is wrong
     pub fn delete_lines(&mut self, from: usize, to: usize, mode: &Mode) -> bool {
         let from_line = from.min(to);
         let to_line = from.max(to).min(self.lines_len().saturating_sub(1));
@@ -219,7 +220,7 @@ impl EditableText {
             return true
         }
 
-        false
+        true
     }
 
     pub fn delete_until_eol(&mut self, mode: &Mode) -> bool {

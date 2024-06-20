@@ -128,10 +128,8 @@ pub fn redo(ctx: &mut Context) {
     ctx.editor.document.undo_redo(false, &ctx.editor.mode);
 }
 
-fn insert_char(c: char, ctx: &mut Context) {
+fn insert_char_at_offset(c: char, offset: usize, ctx: &mut Context) {
     let doc = &mut ctx.editor.document;
-
-    let offset = doc.text.byte_offset_at_cursor(doc.text.cursor_x, doc.text.cursor_y);
 
     let mut string = SmartString::new();
     string.push(c);
@@ -147,28 +145,37 @@ fn insert_char(c: char, ctx: &mut Context) {
 }
 
 pub fn append_character(c: char, ctx: &mut Context) {
-    insert_char(c, ctx);
+    let offset = ctx.editor.document.text.byte_offset_at_cursor(
+        ctx.editor.document.text.cursor_x,
+        ctx.editor.document.text.cursor_y
+    );
+    insert_char_at_offset(c, offset, ctx);
     ctx.editor.document.text.cursor_right(&ctx.editor.mode);
 }
 
 pub fn append_new_line(ctx: &mut Context) {
-    insert_char(NEW_LINE, ctx);
+    let offset = ctx.editor.document.text.byte_offset_at_cursor(
+        ctx.editor.document.text.cursor_x,
+        ctx.editor.document.text.cursor_y
+    );
+    insert_char_at_offset(NEW_LINE, offset, ctx);
     ctx.editor.document.text.cursor_down(&ctx.editor.mode);
 }
 
 pub fn insert_line_below(ctx: &mut Context) {
     ctx.editor.mode = Mode::Insert;
-    ctx.editor.document.text.move_cursor_to(Some(std::usize::MAX), None, &ctx.editor.mode);
-    insert_char(NEW_LINE, ctx);
+    let offset = ctx.editor.document.text.rope.byte_of_line(ctx.editor.document.text.cursor_y) +
+        ctx.editor.document.text.current_line_len();
+    insert_char_at_offset(NEW_LINE, offset, ctx);
     ctx.editor.document.text.cursor_down(&ctx.editor.mode);
     ctx.editor.document.modified = true;
 }
 
 pub fn insert_line_above(ctx: &mut Context) {
     ctx.editor.mode = Mode::Insert;
-    ctx.editor.document.text.move_cursor_to(Some(std::usize::MAX), Some(ctx.editor.document.text.cursor_y.saturating_sub(1)), &ctx.editor.mode);
-    insert_char(NEW_LINE, ctx);
-    ctx.editor.document.text.cursor_down(&ctx.editor.mode);
+    let offset = ctx.editor.document.text.rope.byte_of_line(ctx.editor.document.text.cursor_y);
+    insert_char_at_offset(NEW_LINE, offset, ctx);
+    ctx.editor.document.text.move_cursor_to(Some(0), None, &ctx.editor.mode);
     ctx.editor.document.modified = true;
 }
 
