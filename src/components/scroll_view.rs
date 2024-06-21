@@ -78,7 +78,7 @@ impl ScrollView {
                         buffer.put_symbol(&g, x, y, Color::Reset, Color::Reset);
                         skip_next_n_cols = width - 1;
 
-                        if matches!(GraphemeCategory::from(&g), GraphemeCategory::Whitespace) {
+                        if GraphemeCategory::from(&g) == GraphemeCategory::Whitespace {
                             trailing_whitespace.push(x);
                         } else {
                             trailing_whitespace.drain(..);

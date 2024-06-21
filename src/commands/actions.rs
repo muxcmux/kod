@@ -69,7 +69,7 @@ pub fn goto_line_first_non_whitespace(ctx: &mut Context) {
 }
 
 pub fn goto_eol(ctx: &mut Context) {
-    ctx.editor.document.text.move_cursor_to(Some(ctx.editor.document.text.current_line_width()), None, &ctx.editor.mode);
+    ctx.editor.document.text.move_cursor_to(Some(usize::MAX), None, &ctx.editor.mode);
 }
 
 pub fn goto_word_start_forward(ctx: &mut Context) {
@@ -220,21 +220,55 @@ pub fn delete_symbol_to_the_left(ctx: &mut Context) {
     }
 }
 
+fn delete_lines(from: usize, size: usize, ctx: &mut Context) -> bool {
+    let text = &mut ctx.editor.document.text;
+
+    if text.is_blank() { return false }
+
+    let to = (from + size).min(text.rope.line_len());
+
+    let s = text.rope.line_slice(from..to);
+
+    let start = text.rope.byte_of_line(from);
+    let mut end = start + s.byte_len();
+
+    // if we are deleting everything, remember to leave the newline byte
+    if start == 0 && to == text.rope.line_len() {
+        end -= NEW_LINE.len_utf8();
+    }
+
+    let t = Transaction::change(&text.rope,
+        [(start, end, None)].into_iter()
+    ).set_cursor(text);
+
+    ctx.editor.document.apply(&t);
+
+    true
+}
+
 pub fn delete_current_line(ctx: &mut Context) {
-    if ctx.editor.document.text.delete_lines(ctx.editor.document.text.cursor_y, ctx.editor.document.text.cursor_y, &ctx.editor.mode) {
+    if delete_lines(ctx.editor.document.text.cursor_y, 1, ctx) {
+        if ctx.editor.document.text.cursor_y > ctx.editor.document.text.rope.line_len().saturating_sub(1) {
+            ctx.editor.document.text.cursor_up(&ctx.editor.mode);
+        } else {
+            ctx.editor.document.text.move_cursor_to(None, None, &ctx.editor.mode);
+        }
         ctx.editor.document.modified = true;
     }
 }
 
 pub fn delete_until_eol(ctx: &mut Context) {
-    if ctx.editor.document.text.delete_until_eol(&ctx.editor.mode) {
+    if let Some((start, end)) = ctx.editor.document.text.byte_range_until_eol() {
+        ctx.editor.document.apply(&Transaction::change(&ctx.editor.document.text.rope,
+            [(start, end, None)].into_iter()
+            ).set_cursor(&ctx.editor.document.text)
+        );
+        ctx.editor.document.text.move_cursor_to(None, None, &ctx.editor.mode);
         ctx.editor.document.modified = true;
     }
 }
 
 pub fn change_until_eol(ctx: &mut Context) {
     ctx.editor.mode = Mode::Insert;
-    if ctx.editor.document.text.delete_until_eol(&ctx.editor.mode) {
-        ctx.editor.document.modified = true;
-    }
+    delete_until_eol(ctx);
 }

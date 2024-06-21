@@ -114,6 +114,10 @@ impl EditableText {
         }
     }
 
+    pub fn is_blank(&self) -> bool {
+        self.rope == NEW_LINE.to_string()
+    }
+
     pub fn line_width(&self, line: usize) -> usize {
         self.rope.line(line).graphemes().map(|g| unicode_display_width::width(&g) as usize).sum()
     }
@@ -192,44 +196,15 @@ impl EditableText {
         false
     }
 
-    // this is wrong
-    pub fn delete_lines(&mut self, from: usize, to: usize, mode: &Mode) -> bool {
-        let from_line = from.min(to);
-        let to_line = from.max(to).min(self.rope.line_len().saturating_sub(1));
-
-        let start = self.rope.byte_of_line(from_line);
-        let mut end = start + self.rope.line(to_line).byte_len();
-
-        if self.rope.line_len() > 1 {
-            end += NEW_LINE.len_utf8();
-        }
-
-        if end > 0 {
-            self.rope.delete(start..end);
-            // if removing last line, go up
-            if self.cursor_y > self.rope.line_len().saturating_sub(1) {
-                self.cursor_up(mode);
-            } else {
-                // ensure x is within bounds
-                self.move_cursor_to(None, None, mode);
-            }
-            return true
-        }
-
-        true
-    }
-
-    pub fn delete_until_eol(&mut self, mode: &Mode) -> bool {
+    pub fn byte_range_until_eol(&mut self) -> Option<(usize, usize)> {
         let start = self.byte_offset_at_cursor(self.cursor_x, self.cursor_y);
         let end = self.rope.byte_of_line(self.cursor_y) + self.current_line().byte_len();
 
         if end > 0 {
-            self.rope.delete(start..end);
-            self.move_cursor_to(None, None, mode);
-            return true
+            return Some((start, end));
         }
 
-        false
+        None
     }
 
     pub fn move_cursor_to(&mut self, x: Option<usize>, y: Option<usize>, mode: &Mode) {
@@ -266,7 +241,7 @@ impl EditableText {
                 if goto_prev {
                     self.cursor_x = acc;
                 } else if goto_next {
-                    if graphemes.peek().is_none() && !matches!(mode, Mode::Insert) {
+                    if graphemes.peek().is_none() && *mode == Mode::Insert {
                         self.cursor_x = acc;
                     } else {
                         self.cursor_x = next_grapheme_start;
@@ -297,7 +272,7 @@ impl EditableText {
 
     pub fn goto_line_first_non_whitespace(&mut self, line: usize, mode: &Mode) {
         for (i, g) in self.rope.line(line).graphemes().enumerate() {
-            if !matches!(GraphemeCategory::from(&g), GraphemeCategory::Whitespace) {
+            if GraphemeCategory::from(&g) == GraphemeCategory::Whitespace {
                 self.move_cursor_to(Some(i), Some(line), mode);
                 break;
             }

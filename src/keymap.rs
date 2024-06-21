@@ -59,7 +59,7 @@ impl Keymaps {
         // esc key clears the pending keys and returns a cancelled
         // event with the current pending keys, so they can be
         // used elsewhere
-        if matches!(event.code, KeyCode::Esc) && !self.pending.is_empty() {
+        if event.code == KeyCode::Esc && !self.pending.is_empty() {
             return KeymapResult::Cancelled(self.pending.drain(..).collect());
         }
 
