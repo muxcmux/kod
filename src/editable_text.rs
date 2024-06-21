@@ -109,21 +109,17 @@ impl EditableText {
 
     fn max_cursor_x(&self, line: usize, mode: &Mode) -> usize {
         match mode {
-            Mode::Insert => self.line_len(line),
-            Mode::Normal => self.line_len(line).saturating_sub(1),
+            Mode::Insert => self.line_width(line),
+            Mode::Normal => self.line_width(line).saturating_sub(1),
         }
     }
 
-    pub fn lines_len(&self) -> usize {
-        self.rope.lines().len()
-    }
-
-    pub fn line_len(&self, line: usize) -> usize {
+    pub fn line_width(&self, line: usize) -> usize {
         self.rope.line(line).graphemes().map(|g| unicode_display_width::width(&g) as usize).sum()
     }
 
-    pub fn current_line_len(&self) -> usize {
-        self.line_len(self.cursor_y)
+    pub fn current_line_width(&self) -> usize {
+        self.line_width(self.cursor_y)
     }
 
     pub fn current_line(&self) -> RopeSlice {
@@ -188,7 +184,7 @@ impl EditableText {
             let to = self.rope.byte_of_line(self.cursor_y);
             let from = to.saturating_sub(NEW_LINE.len_utf8());
             // need to move cursor before deleting
-            self.move_cursor_to(Some(self.line_len(self.cursor_y - 1)), Some(self.cursor_y - 1), mode);
+            self.move_cursor_to(Some(self.line_width(self.cursor_y - 1)), Some(self.cursor_y - 1), mode);
             self.rope.delete(from..to);
             return true;
         }
@@ -199,19 +195,19 @@ impl EditableText {
     // this is wrong
     pub fn delete_lines(&mut self, from: usize, to: usize, mode: &Mode) -> bool {
         let from_line = from.min(to);
-        let to_line = from.max(to).min(self.lines_len().saturating_sub(1));
+        let to_line = from.max(to).min(self.rope.line_len().saturating_sub(1));
 
         let start = self.rope.byte_of_line(from_line);
         let mut end = start + self.rope.line(to_line).byte_len();
 
-        if self.lines_len() > 1 {
+        if self.rope.line_len() > 1 {
             end += NEW_LINE.len_utf8();
         }
 
         if end > 0 {
             self.rope.delete(start..end);
             // if removing last line, go up
-            if self.cursor_y > self.lines_len().saturating_sub(1) {
+            if self.cursor_y > self.rope.line_len().saturating_sub(1) {
                 self.cursor_up(mode);
             } else {
                 // ensure x is within bounds
@@ -239,7 +235,7 @@ impl EditableText {
     pub fn move_cursor_to(&mut self, x: Option<usize>, y: Option<usize>, mode: &Mode) {
         let stick = x.is_some();
         // ensure x and y are within bounds
-        let y = self.lines_len().saturating_sub(1).min(y.unwrap_or(self.cursor_y));
+        let y = self.rope.line_len().saturating_sub(1).min(y.unwrap_or(self.cursor_y));
         let x = self.max_cursor_x(y, mode).min(x.unwrap_or(self.sticky_cursor_x));
 
         let cursor_move = move_direction((self.cursor_x, self.cursor_y), (&x, &y));
@@ -362,7 +358,7 @@ impl EditableText {
     pub fn goto_word_end_forward(&mut self, mode: &Mode) {
         let mut line = self.cursor_y;
 
-        'lines: while line < self.lines_len() {
+        'lines: while line < self.rope.line_len() {
             for word in self.words_of_line(line, true) {
                 if line > self.cursor_y || self.cursor_x < word.end {
                     self.move_cursor_to(Some(word.end), Some(line), mode);
@@ -377,7 +373,7 @@ impl EditableText {
     pub fn goto_word_start_forward(&mut self, mode: &Mode) {
         let mut line = self.cursor_y;
 
-        'lines: while line < self.lines_len() {
+        'lines: while line < self.rope.line_len() {
             for word in self.words_of_line(line, true) {
                 if line > self.cursor_y || self.cursor_x < word.start {
                     self.move_cursor_to(Some(word.start), Some(line), mode);
@@ -434,7 +430,7 @@ impl EditableText {
     }
 
     pub fn goto_character_backward(&mut self, c: char, mode: &Mode, offset: usize) {
-        let mut col = self.line_len(self.cursor_y);
+        let mut col = self.line_width(self.cursor_y);
         for g in self.rope.line(self.cursor_y).graphemes().rev() {
             if col <= self.cursor_x && g.starts_with(c) {
                 self.move_cursor_to(Some(col.saturating_sub(offset)), None, mode);

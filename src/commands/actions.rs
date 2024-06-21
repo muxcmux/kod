@@ -61,7 +61,7 @@ pub fn goto_first_line(ctx: &mut Context) {
 }
 
 pub fn goto_last_line(ctx: &mut Context) {
-    ctx.editor.document.text.move_cursor_to(None, Some(ctx.editor.document.text.lines_len() - 1), &ctx.editor.mode);
+    ctx.editor.document.text.move_cursor_to(None, Some(ctx.editor.document.text.rope.line_len() - 1), &ctx.editor.mode);
 }
 
 pub fn goto_line_first_non_whitespace(ctx: &mut Context) {
@@ -69,7 +69,7 @@ pub fn goto_line_first_non_whitespace(ctx: &mut Context) {
 }
 
 pub fn goto_eol(ctx: &mut Context) {
-    ctx.editor.document.text.move_cursor_to(Some(ctx.editor.document.text.current_line_len()), None, &ctx.editor.mode);
+    ctx.editor.document.text.move_cursor_to(Some(ctx.editor.document.text.current_line_width()), None, &ctx.editor.mode);
 }
 
 pub fn goto_word_start_forward(ctx: &mut Context) {
@@ -165,7 +165,7 @@ pub fn append_new_line(ctx: &mut Context) {
 pub fn insert_line_below(ctx: &mut Context) {
     ctx.editor.mode = Mode::Insert;
     let offset = ctx.editor.document.text.rope.byte_of_line(ctx.editor.document.text.cursor_y) +
-        ctx.editor.document.text.current_line_len();
+        ctx.editor.document.text.current_line_width();
     insert_char_at_offset(NEW_LINE, offset, ctx);
     ctx.editor.document.text.cursor_down(&ctx.editor.mode);
     ctx.editor.document.modified = true;
@@ -200,7 +200,7 @@ fn delete_to_the_left(text: &mut EditableText , mode: &Mode) -> Option<(usize, u
         let to = text.rope.byte_of_line(text.cursor_y);
         let from = to.saturating_sub(NEW_LINE.len_utf8());
 
-        text.move_cursor_to(Some(text.line_len(text.cursor_y - 1)), Some(text.cursor_y - 1), mode);
+        text.move_cursor_to(Some(text.line_width(text.cursor_y - 1)), Some(text.cursor_y - 1), mode);
 
         return Some((from, to));
     }

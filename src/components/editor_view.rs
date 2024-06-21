@@ -27,7 +27,8 @@ fn gutter_and_document_areas(size: Rect, ctx: &Context) -> (Rect, Rect) {
         .editor
         .document
         .text
-        .lines_len()
+        .rope
+        .line_len()
         .checked_ilog10()
         .unwrap_or(1) as u16
         + GUTTER_LINE_NUM_PAD_LEFT
@@ -70,7 +71,7 @@ impl EditorView {
     }
 
     fn render_gutter(&self, area: Rect, buffer: &mut Buffer, ctx: &Context) {
-        let max = ctx.editor.document.text.lines_len();
+        let max = ctx.editor.document.text.rope.line_len();
 
         for y in area.top()..=area.bottom() {
             let line_no = y as usize + self.scroll_view.scroll_y + 1;

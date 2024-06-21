@@ -81,7 +81,7 @@ impl Editor {
             match fs::write(path, self.document.text.rope.to_string()) {
                 Ok(_) => {
                     let size = format_size_units(self.document.text.rope.byte_len());
-                    self.set_status(format!("{} lines written ({})", self.document.text.lines_len(), size));
+                    self.set_status(format!("{} lines written ({})", self.document.text.rope.line_len(), size));
                     self.document.modified = false;
                 },
                 Err(err) => {

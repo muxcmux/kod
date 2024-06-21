@@ -44,7 +44,7 @@ impl ScrollView {
         self.ensure_cursor_is_in_view(area, text);
 
         for row in self.scroll_y..self.scroll_y + area.height as usize {
-            if row >= text.lines_len() {
+            if row >= text.rope.line_len() {
                 break;
             }
             let line = text.rope.line(row);
