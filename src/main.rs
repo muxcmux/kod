@@ -1,7 +1,6 @@
 use kod::application::Application;
 use anyhow::Result;
-use core::panic;
-use std::{env, fs, path::{self, PathBuf, Path}};
+use std::{env, fs, path::PathBuf};
 
 fn kod_dir() -> PathBuf {
     let home = env::var("HOME").expect("Can't find home dir");
