@@ -192,6 +192,8 @@ fn normal_mode_keymap() -> Keymap {
         "j" | "down" => cursor_down,
         "k" | "up" => cursor_up,
         "l" | "right" => cursor_right,
+        "C-u" | "pageup" => half_page_up,
+        "C-d" | "pagedown" => half_page_down,
         "w" => goto_word_start_forward,
         "b" => goto_word_start_backward,
         "e" => goto_word_end_forward,

@@ -56,6 +56,14 @@ pub fn cursor_right(ctx: &mut Context) {
     ctx.editor.document.text.cursor_right(&ctx.editor.mode);
 }
 
+pub fn half_page_up(ctx: &mut Context) {
+
+}
+
+pub fn half_page_down(ctx: &mut Context) {
+
+}
+
 pub fn goto_first_line(ctx: &mut Context) {
     ctx.editor.document.text.move_cursor_to(None, Some(0), &ctx.editor.mode);
 }
