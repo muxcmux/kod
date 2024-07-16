@@ -46,6 +46,7 @@ impl Default for Keymaps {
         let mut map = HashMap::new();
         map.insert(Mode::Normal, normal_mode_keymap());
         map.insert(Mode::Insert, insert_mode_keymap());
+        map.insert(Mode::Replace, replace_mode_keymap());
 
         Self { map, pending: vec![] }
     }
@@ -188,6 +189,8 @@ fn parse_key_combo(combo: &str) -> KeyEvent {
 fn normal_mode_keymap() -> Keymap {
     map!({
         ":" => command_pallette,
+        "R" => enter_replace_mode,
+
         "h" | "left" => cursor_left,
         "j" | "down" => cursor_down,
         "k" | "up" => cursor_up,
@@ -248,6 +251,26 @@ fn insert_mode_keymap() -> Keymap {
         },
 
         "backspace" => delete_symbol_to_the_left,
+
+        "enter" => append_new_line,
+    })
+}
+
+fn replace_mode_keymap() -> Keymap {
+    map!({
+        "esc" => enter_normal_mode,
+
+        "left" | "backspace" => cursor_left,
+        "down" => cursor_down,
+        "up" => cursor_up,
+        "right" => cursor_right,
+
+        "C-h" | "home" => goto_line_first_non_whitespace,
+        "C-l" | "end" => goto_eol,
+
+        "j" => {
+            "k" => enter_normal_mode,
+        },
 
         "enter" => append_new_line,
     })

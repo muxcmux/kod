@@ -9,6 +9,7 @@ use crate::document::Document;
 pub enum Mode {
     Normal,
     Insert,
+    Replace,
 }
 
 pub enum Severity {

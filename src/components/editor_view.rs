@@ -80,7 +80,7 @@ impl EditorView {
             }
 
             match ctx.editor.mode {
-                Mode::Insert => {
+                Mode::Insert | Mode::Replace => {
                     let label = format!(
                         "{: >1$}",
                         line_no,
@@ -142,15 +142,16 @@ impl EditorView {
         }
     }
 
-    fn handle_insert_mode_key_event(
+    fn handle_insert_or_replace_mode_key_event(
         &mut self,
         event: KeyEvent,
         ctx: &mut commands::Context,
+        char_func: fn(char, &mut commands::Context),
     ) -> EventResult {
         match self.handle_keymap_event(event, ctx) {
             Some(KeymapResult::NotFound) => {
                 if let KeyCode::Char(c) = event.code {
-                    actions::append_character(c, ctx);
+                    char_func(c, ctx);
                     EventResult::Consumed(None)
                 } else {
                     EventResult::Ignored(None)
@@ -161,11 +162,11 @@ impl EditorView {
                 for event in pending {
                     match event.code {
                         KeyCode::Char(c) => {
-                            actions::append_character(c, ctx);
+                            char_func(c, ctx);
                             result = EventResult::Consumed(None);
                         }
                         _ => {
-                            if let KeymapResult::Found(f) = self.keymaps.get(&Mode::Insert, event) {
+                            if let KeymapResult::Found(f) = self.keymaps.get(&ctx.editor.mode, event) {
                                 f(ctx);
                                 result = EventResult::Consumed(None)
                             }
@@ -203,7 +204,8 @@ impl Component for EditorView {
         } else {
             match action_ctx.editor.mode {
                 Mode::Normal => self.handle_normal_mode_key_event(event, &mut action_ctx),
-                Mode::Insert => self.handle_insert_mode_key_event(event, &mut action_ctx),
+                Mode::Insert => self.handle_insert_or_replace_mode_key_event(event, &mut action_ctx, actions::append_character),
+                Mode::Replace => self.handle_insert_or_replace_mode_key_event(event, &mut action_ctx, actions::append_or_replace_character),
             }
         };
 
@@ -221,7 +223,9 @@ impl Component for EditorView {
             Some(cb)
         };
 
-        if ctx.editor.mode != Mode::Insert {
+        // Escaping back to normal mode from insert and replace mode
+        // merges the transactions and commits to history
+        if ctx.editor.mode == Mode::Normal {
             ctx.editor.document.commit_transaction_to_history();
         }
 
@@ -243,6 +247,7 @@ impl Component for EditorView {
             Some(match ctx.editor.mode {
                 Mode::Normal => SetCursorStyle::SteadyBlock,
                 Mode::Insert => SetCursorStyle::SteadyBar,
+                Mode::Replace => SetCursorStyle::SteadyUnderScore,
             }),
         )
     }

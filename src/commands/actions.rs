@@ -22,6 +22,10 @@ pub fn enter_normal_mode(ctx: &mut Context) {
     ctx.editor.document.text.cursor_left(&ctx.editor.mode);
 }
 
+pub fn enter_replace_mode(ctx: &mut Context) {
+    ctx.editor.mode = Mode::Replace;
+}
+
 pub fn enter_insert_mode_at_cursor(ctx: &mut Context) {
     enter_insert_mode_relative_to_cursor(0, ctx);
 }
@@ -136,7 +140,7 @@ pub fn redo(ctx: &mut Context) {
     ctx.editor.document.undo_redo(false, &ctx.editor.mode);
 }
 
-fn insert_char_at_offset(c: char, offset: usize, ctx: &mut Context) {
+fn insert_or_replace_char_at_offset(c: char, offset_start: usize, offset_end: usize, ctx: &mut Context) {
     let doc = &mut ctx.editor.document;
 
     let mut string = SmartString::new();
@@ -145,7 +149,7 @@ fn insert_char_at_offset(c: char, offset: usize, ctx: &mut Context) {
     doc.apply(
         &Transaction::change(
             &doc.text.rope,
-            [(offset, offset, Some(string))].into_iter()
+            [(offset_start, offset_end, Some(string))].into_iter()
         ).set_cursor(&doc.text)
     );
 
@@ -157,7 +161,30 @@ pub fn append_character(c: char, ctx: &mut Context) {
         ctx.editor.document.text.cursor_x,
         ctx.editor.document.text.cursor_y
     );
-    insert_char_at_offset(c, offset, ctx);
+    insert_or_replace_char_at_offset(c, offset, offset, ctx);
+    ctx.editor.document.text.cursor_right(&ctx.editor.mode);
+}
+
+pub fn append_or_replace_character(c: char, ctx: &mut Context) {
+    let mut start_byte = ctx.editor.document.text.rope.byte_of_line(ctx.editor.document.text.cursor_y);
+    let mut end_byte = start_byte;
+
+    let mut col = 0;
+
+    for g in ctx.editor.document.text.current_line().graphemes() {
+        let width = unicode_display_width::width(&g) as usize;
+        let size = g.bytes().count();
+
+        if col >= ctx.editor.document.text.cursor_x {
+            end_byte = start_byte + size;
+            break;
+        }
+
+        col += width;
+        start_byte += size;
+    }
+
+    insert_or_replace_char_at_offset(c, start_byte, end_byte.max(start_byte), ctx);
     ctx.editor.document.text.cursor_right(&ctx.editor.mode);
 }
 
@@ -166,7 +193,7 @@ pub fn append_new_line(ctx: &mut Context) {
         ctx.editor.document.text.cursor_x,
         ctx.editor.document.text.cursor_y
     );
-    insert_char_at_offset(NEW_LINE, offset, ctx);
+    insert_or_replace_char_at_offset(NEW_LINE, offset, offset, ctx);
     ctx.editor.document.text.cursor_down(&ctx.editor.mode);
 }
 
@@ -174,7 +201,7 @@ pub fn insert_line_below(ctx: &mut Context) {
     ctx.editor.mode = Mode::Insert;
     let offset = ctx.editor.document.text.rope.byte_of_line(ctx.editor.document.text.cursor_y) +
         ctx.editor.document.text.current_line_width();
-    insert_char_at_offset(NEW_LINE, offset, ctx);
+    insert_or_replace_char_at_offset(NEW_LINE, offset, offset, ctx);
     ctx.editor.document.text.cursor_down(&ctx.editor.mode);
     ctx.editor.document.modified = true;
 }
@@ -182,7 +209,7 @@ pub fn insert_line_below(ctx: &mut Context) {
 pub fn insert_line_above(ctx: &mut Context) {
     ctx.editor.mode = Mode::Insert;
     let offset = ctx.editor.document.text.rope.byte_of_line(ctx.editor.document.text.cursor_y);
-    insert_char_at_offset(NEW_LINE, offset, ctx);
+    insert_or_replace_char_at_offset(NEW_LINE, offset, offset, ctx);
     ctx.editor.document.text.move_cursor_to(Some(0), None, &ctx.editor.mode);
     ctx.editor.document.modified = true;
 }

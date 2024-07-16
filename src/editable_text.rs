@@ -109,7 +109,7 @@ impl EditableText {
 
     fn max_cursor_x(&self, line: usize, mode: &Mode) -> usize {
         match mode {
-            Mode::Insert => self.line_width(line),
+            Mode::Insert | Mode::Replace => self.line_width(line),
             Mode::Normal => self.line_width(line).saturating_sub(1),
         }
     }
