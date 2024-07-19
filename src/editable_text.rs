@@ -115,7 +115,7 @@ impl EditableText {
     }
 
     pub fn is_blank(&self) -> bool {
-        self.rope == NEW_LINE.to_string()
+        self.rope.is_empty() || self.rope == NEW_LINE.to_string()
     }
 
     pub fn line_width(&self, line: usize) -> usize {
@@ -241,7 +241,7 @@ impl EditableText {
                 if goto_prev {
                     self.cursor_x = acc;
                 } else if goto_next {
-                    if graphemes.peek().is_none() && *mode == Mode::Insert {
+                    if graphemes.peek().is_none() && *mode != Mode::Insert {
                         self.cursor_x = acc;
                     } else {
                         self.cursor_x = next_grapheme_start;
@@ -272,7 +272,7 @@ impl EditableText {
 
     pub fn goto_line_first_non_whitespace(&mut self, line: usize, mode: &Mode) {
         for (i, g) in self.rope.line(line).graphemes().enumerate() {
-            if GraphemeCategory::from(&g) == GraphemeCategory::Whitespace {
+            if GraphemeCategory::from(&g) != GraphemeCategory::Whitespace {
                 self.move_cursor_to(Some(i), Some(line), mode);
                 break;
             }
