@@ -8,6 +8,7 @@ use crossterm::{
     event::{KeyCode, KeyEvent},
     style::Color,
 };
+use log::debug;
 
 use crate::{
     commands::{actions, KeyCallback},
@@ -31,6 +32,7 @@ fn gutter_and_document_areas(size: Rect, ctx: &Context) -> (Rect, Rect) {
         .line_len()
         .checked_ilog10()
         .unwrap_or(1) as u16
+        + 1
         + GUTTER_LINE_NUM_PAD_LEFT
         + GUTTER_LINE_NUM_PAD_RIGHT;
     let gutter_width = gutter_width.max(MIN_GUTTER_WIDTH);
