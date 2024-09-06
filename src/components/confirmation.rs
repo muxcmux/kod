@@ -1,6 +1,7 @@
+use crate::ui::border_box::BorderBox;
 use crate::ui::borders::{BorderType, Borders};
 use crate::ui::buffer::Buffer;
-use crate::{compositor::{Component, Compositor, Context, EventResult}, ui::{Position, Rect}};
+use crate::{compositor::{Component, Compositor, Context, EventResult}, ui::Rect};
 use crossterm::event::{KeyCode, KeyEvent};
 use crossterm::style::Color;
 use unicode_segmentation::UnicodeSegmentation;
@@ -34,7 +35,7 @@ const PROMPT: &str = " [Y]es, [N]o, [C]ancel ";
 const PROMPT_WIDTH: u16 = 23;
 
 impl Component for Dialog {
-    fn render(&mut self, area: Rect, buffer: &mut Buffer, ctx: &mut Context) {
+    fn render(&mut self, area: Rect, buffer: &mut Buffer, _ctx: &mut Context) {
         let width = self.title_width()
             .max(PROMPT_WIDTH)
             .max(self.text_width())
@@ -44,57 +45,15 @@ impl Component for Dialog {
         let height = 2 + u16::from(self.borders.intersects(Borders::TOP))
             + u16::from(self.borders.intersects(Borders::BOTTOM))
             .min(area.height);
-        let area = Rect {
-            width, height,
-            position: Position {
-                x: area.width.saturating_sub(width) / 2,
-                y: area.height.saturating_sub(height) / 2
-            }
-        };
 
-        buffer.clear(area);
+        let area = area.centered(width, height);
 
-        let symbols = self.border_type.line_symbols();
-        let fg = Color::Yellow;
-        let bg = Color::Reset;
+        let bbox = BorderBox::new(area)
+            .title(&self.title)
+            .borders(self.borders)
+            .border_type(self.border_type);
 
-        // Sides
-        if self.borders.intersects(Borders::LEFT) {
-            for y in area.top()..area.bottom() {
-                buffer.put_symbol(symbols.vertical, area.left(), y, fg, bg)
-            }
-        }
-        if self.borders.intersects(Borders::TOP) {
-            for x in area.left()..area.right() {
-                buffer.put_symbol(symbols.horizontal, x, area.top(), fg, bg)
-            }
-        }
-        if self.borders.intersects(Borders::RIGHT) {
-            let x = area.right().saturating_sub(1);
-            for y in area.top()..area.bottom() {
-                buffer.put_symbol(symbols.vertical, x, y, fg, bg)
-            }
-        }
-        if self.borders.intersects(Borders::BOTTOM) {
-            let y = area.bottom().saturating_sub(1);
-            for x in area.left()..area.right() {
-                buffer.put_symbol(symbols.horizontal, x, y, fg, bg)
-            }
-        }
-
-        // Corners
-        if self.borders.contains(Borders::RIGHT | Borders::BOTTOM) {
-            buffer.put_symbol(symbols.bottom_right, area.right().saturating_sub(1), area.bottom().saturating_sub(1), fg, bg)
-        }
-        if self.borders.contains(Borders::RIGHT | Borders::TOP) {
-            buffer.put_symbol(symbols.top_right, area.right().saturating_sub(1), area.top(), fg, bg)
-        }
-        if self.borders.contains(Borders::LEFT | Borders::BOTTOM) {
-            buffer.put_symbol(symbols.bottom_left, area.left(), area.bottom().saturating_sub(1), fg, bg)
-        }
-        if self.borders.contains(Borders::LEFT | Borders::TOP) {
-            buffer.put_symbol(symbols.top_left, area.left(), area.top(), fg, bg)
-        }
+        bbox.render(buffer);
 
         let x = area.left() + u16::from(self.borders.intersects(Borders::LEFT));
         buffer.put_str(&self.title, x, area.top(), Color::White, Color::Reset);
