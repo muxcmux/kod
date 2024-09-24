@@ -113,7 +113,7 @@ impl Component for Pallette {
                 EventResult::Consumed(None)
             }
             KeyCode::Down => {
-                self.index = (self.index + 1).min(COMMANDS.len().saturating_sub(1));
+                self.index = (self.index + 1).min(self.commands().len().saturating_sub(1));
                 EventResult::Consumed(None)
             }
             // scroll by a page
