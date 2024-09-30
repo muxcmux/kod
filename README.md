@@ -7,3 +7,9 @@ main goal of this project is to explore and learn about code editors.
 
 * Install [Rust](https://www.rust-lang.org/tools/install)
 * cargo run
+
+# Functionality from vim I want:
+
+* [x] replace mode
+* [ ] "o" to switch direction when in visual mode
+* [ ] % to jump between brackets
