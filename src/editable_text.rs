@@ -122,10 +122,6 @@ impl EditableText {
         self.rope.line(line).graphemes().map(|g| unicode_display_width::width(&g) as usize).sum()
     }
 
-    pub fn current_line_width(&self) -> usize {
-        self.line_width(self.cursor_y)
-    }
-
     pub fn current_line(&self) -> RopeSlice {
         self.rope.line(self.cursor_y)
     }

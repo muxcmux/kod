@@ -200,7 +200,7 @@ pub fn append_new_line(ctx: &mut Context) {
 pub fn insert_line_below(ctx: &mut Context) {
     ctx.editor.mode = Mode::Insert;
     let offset = ctx.editor.document.text.rope.byte_of_line(ctx.editor.document.text.cursor_y) +
-        ctx.editor.document.text.current_line_width();
+        ctx.editor.document.text.rope.line(ctx.editor.document.text.cursor_y).byte_len();
     insert_or_replace_char_at_offset(NEW_LINE, offset, offset, ctx);
     ctx.editor.document.text.cursor_down(&ctx.editor.mode);
     ctx.editor.document.modified = true;
