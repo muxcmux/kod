@@ -4,7 +4,9 @@ use crop::{Rope, RopeSlice};
 
 use crate::editor::Mode;
 
+#[derive(PartialEq)]
 enum HorizontalMove { Right, Left }
+#[derive(PartialEq)]
 enum VerticalMove { Down, Up }
 struct CursorMove {
     horizontal: Option<HorizontalMove>,
@@ -223,8 +225,10 @@ impl EditableText {
 
     fn ensure_cursor_is_on_grapheme_boundary(&mut self, mode: &Mode, cursor_move: CursorMove) {
         let mut acc = 0;
-        let goto_prev = cursor_move.vertical.is_some() || matches!(cursor_move.horizontal, Some(HorizontalMove::Left));
-        let goto_next = matches!(cursor_move.horizontal, Some(HorizontalMove::Right));
+        let mut goto_prev = cursor_move.vertical.is_some() || cursor_move.horizontal == Some(HorizontalMove::Left);
+        let goto_next = cursor_move.horizontal == Some(HorizontalMove::Right);
+
+        if !goto_next && !goto_prev { goto_prev = true }
 
         let mut graphemes = self.current_line().graphemes().peekable();
 
