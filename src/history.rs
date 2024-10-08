@@ -1,3 +1,6 @@
+/// Mostly copied from helix with the difference that
+/// this doesn't have a change set but operates with
+/// transactions straight away
 use std::{num::NonZeroUsize, time::Instant};
 
 use crop::Rope;
@@ -349,6 +352,8 @@ impl Transaction {
 #[cfg(test)]
 mod test {
     use crop::Rope;
+    use crate::history::State;
+
     use super::Transaction;
     use super::Operation::*;
 
@@ -373,6 +378,8 @@ mod test {
     #[test]
     fn transaction_composition() {
         let a = Transaction {
+            cursor_x: 1,
+            cursor_y: 0,
             operations: vec![
                 Retain(5),
                 Insert(" test!".into()),
@@ -383,6 +390,8 @@ mod test {
         };
 
         let b = Transaction {
+            cursor_x: 5,
+            cursor_y: 0,
             operations: vec![
                 Delete(10),
                 Insert("世orld".into()),
@@ -395,11 +404,15 @@ mod test {
         let composed = a.compose(b);
         composed.apply(&mut text);
         assert_eq!(text, "世orld! abc");
+        assert_eq!(composed.cursor_x, 5);
+        assert_eq!(composed.cursor_y, 0);
     }
 
     #[test]
     fn transaction_invert() {
         let transaction = Transaction {
+            cursor_x: 0,
+            cursor_y: 0,
             operations: vec![
                 Retain(3),
                 Insert("test".into()),
@@ -410,16 +423,29 @@ mod test {
 
         let doc = Rope::from("世界3 hello xz");
 
-        let revert = transaction.invert(&doc);
-
         let mut doc2 = doc.clone();
+
+        let state = State {
+            rope: doc.clone(),
+            cursor_x: 0,
+            cursor_y: 0,
+        };
+
+        let revert = transaction.invert(&state);
+
 
         transaction.apply(&mut doc2);
 
         assert_ne!(transaction, revert);
         assert_ne!(doc, doc2);
 
-        assert_eq!(transaction, revert.invert(&doc2));
+        let state2 = State {
+            rope: doc2.clone(),
+            cursor_x: 0,
+            cursor_y: 0,
+        };
+
+        assert_eq!(transaction, revert.invert(&state2));
 
         revert.apply(&mut doc2);
         assert_eq!(doc, doc2);
