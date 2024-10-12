@@ -12,7 +12,6 @@ const MIN_GUTTER_WIDTH: u16 = 6;
 
 fn gutter_and_document_areas(size: Rect, doc: &Document) -> (Rect, Rect) {
     let gutter_width = doc
-        .text
         .rope
         .line_len()
         .checked_ilog10()
@@ -21,6 +20,7 @@ fn gutter_and_document_areas(size: Rect, doc: &Document) -> (Rect, Rect) {
         + GUTTER_LINE_NUM_PAD_LEFT
         + GUTTER_LINE_NUM_PAD_RIGHT;
     let gutter_width = gutter_width.max(MIN_GUTTER_WIDTH);
+
     let gutter_area = size
         .clip_bottom(1)
         .clip_right(size.width.saturating_sub(gutter_width));
@@ -95,7 +95,7 @@ pub struct Pane {
     layout: Layout,
     parent_id: Option<PaneId>,
     child_id: Option<PaneId>,
-    pub scroll_view: ScrollView,
+    pub view: ScrollView,
 }
 
 impl Pane {
@@ -110,7 +110,7 @@ impl Pane {
             layout: Layout::Vertical,
             parent_id: None,
             child_id: None,
-            scroll_view: ScrollView::default(),
+            view: ScrollView::default(),
         }
     }
 
@@ -139,24 +139,24 @@ impl Pane {
             layout: self.layout,
             parent_id: Some(self.id),
             child_id: None,
-            scroll_view: ScrollView::default(),
+            view: ScrollView::default(),
         }
     }
 
     pub fn render(&mut self, buffer: &mut Buffer, doc: &Document, mode: &Mode) {
         let (gutter_area, document_area) = gutter_and_document_areas(self.area, doc);
 
-        (self.scroll_view.offset_x, self.scroll_view.offset_y) = compute_offset(document_area);
+        (self.view.offset_x, self.view.offset_y) = compute_offset(document_area);
 
         self.render_document(document_area, buffer, doc);
         self.render_gutter(gutter_area, buffer, doc, mode);
     }
 
     fn render_document(&mut self, area: Rect, buffer: &mut Buffer, doc: &Document) {
-        self.scroll_view.render(
+        self.view.render(
             area,
             buffer,
-            &doc.text,
+            &doc.rope,
             |buf: &mut Buffer, (x, y)| {
                 // render trailing whitespace
                 buf.put_symbol("~", x, y, Color::DarkGrey, Color::Reset);
@@ -165,10 +165,10 @@ impl Pane {
     }
 
     fn render_gutter(&self, area: Rect, buffer: &mut Buffer, doc: &Document, mode: &Mode) {
-        let max = doc.text.rope.line_len();
+        let max = doc.rope.line_len();
 
         for y in area.top()..=area.bottom() {
-            let line_no = y as usize + self.scroll_view.scroll_y + 1;
+            let line_no = y as usize + self.view.scroll_y + 1;
             if line_no > max {
                 break;
             }
@@ -180,7 +180,7 @@ impl Pane {
                         line_no,
                         area.width.saturating_sub(GUTTER_LINE_NUM_PAD_RIGHT) as usize
                     );
-                    let fg = if line_no == doc.text.cursor_y + 1 {
+                    let fg = if line_no == self.view.text_cursor_y + 1 {
                         Color::White
                     } else {
                         Color::DarkGrey
@@ -188,11 +188,11 @@ impl Pane {
                     buffer.put_str(&label, 0, y, fg, Color::Reset);
                 }
                 Mode::Normal => {
-                    let rel_line_no = self.scroll_view.cursor_position.y as isize - y as isize;
+                    let rel_line_no = self.view.view_cursor_position.y as isize - y as isize;
                     let (fg, label) = if rel_line_no == 0 {
                         (
                             Color::White,
-                            format!("  {}", doc.text.cursor_y + 1),
+                            format!("  {}", self.view.text_cursor_y + 1),
                         )
                     } else {
                         (

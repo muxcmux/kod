@@ -1,12 +1,12 @@
 use std::{borrow::Cow, cell::Cell, path::PathBuf};
 
 use crop::Rope;
-use crate::{editable_text::EditableText, editor::Mode, history::{History, State, Transaction}, NonZeroIncrementalId};
+use crate::{editor::Mode, history::{History, State, Transaction}, NonZeroIncrementalId};
 
 pub type DocumentId = NonZeroIncrementalId;
 
 pub struct Document {
-    pub text: EditableText,
+    pub rope: Rope,
     pub path: Option<PathBuf>,
     pub modified: bool,
     pub readonly: bool,
@@ -16,7 +16,7 @@ pub struct Document {
 }
 
 impl Document {
-    pub fn new(data: Rope, path: Option<PathBuf>) -> Self {
+    pub fn new(rope: Rope, path: Option<PathBuf>) -> Self {
         let readonly = match &path {
             Some(p) => {
                 std::fs::metadata(p).is_ok_and(|m| {
@@ -26,7 +26,7 @@ impl Document {
             None => false,
         };
         Self {
-            text: EditableText::new(data),
+            rope,
             transaction: Cell::new(Transaction::default()),
             history: Cell::new(History::default()),
             old_state: None,
@@ -55,13 +55,13 @@ impl Document {
 
         if t.is_empty() {
             self.old_state = Some(State {
-                rope: self.text.rope.clone(),
-                cursor_x: self.text.cursor_x,
-                cursor_y: self.text.cursor_y,
+                rope: self.rope.clone(),
+                cursor_x: transaction.cursor_x,
+                cursor_y: transaction.cursor_y,
             });
         }
 
-        transaction.apply(&mut self.text.rope);
+        transaction.apply(&mut self.rope);
 
         // Compose this transaction with the previous one
         self.transaction.set(t.compose(transaction.clone()));
@@ -86,7 +86,7 @@ impl Document {
 
         if let Some(t) = if undo { history.undo() } else { history.redo() } {
             self.apply(t);
-            self.text.move_cursor_to(Some(t.cursor_x), Some(t.cursor_y), mode);
+            //self.text.move_cursor_to(Some(t.cursor_x), Some(t.cursor_y), mode);
         }
 
         self.history.set(history);

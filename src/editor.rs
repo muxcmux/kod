@@ -1,4 +1,4 @@
-use crate::{current, document::DocumentId, editable_text::NEW_LINE, panes::Panes, ui::Rect};
+use crate::{current, document::DocumentId, graphemes::NEW_LINE, panes::Panes, ui::Rect};
 use std::{borrow::Cow, collections::BTreeMap, env, fs, path::PathBuf};
 
 use crop::Rope;
@@ -88,10 +88,10 @@ impl Editor {
     pub fn save_document(&mut self) {
         let doc = current!(self).1;
         if let Some(path) = &doc.path {
-            match fs::write(path, doc.text.rope.to_string()) {
+            match fs::write(path, doc.rope.to_string()) {
                 Ok(_) => {
-                    let size = format_size_units(doc.text.rope.byte_len());
-                    let lines = doc.text.rope.line_len();
+                    let size = format_size_units(doc.rope.byte_len());
+                    let lines = doc.rope.line_len();
                     doc.modified = false;
                     self.set_status(format!("{} lines written ({})", lines, size));
                 },

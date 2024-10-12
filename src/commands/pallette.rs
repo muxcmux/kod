@@ -1,14 +1,10 @@
 use crate::{
-    components::scroll_view::ScrollView,
-    compositor::{Component, Context, EventResult},
-    editable_text::EditableText,
-    editor::Mode,
-    ui::{
+    components::scroll_view::ScrollView, compositor::{Component, Context, EventResult}, editor::Mode, graphemes::NEW_LINE, ui::{
         border_box::BorderBox,
         borders::{BorderType, Borders},
         buffer::Buffer,
         Position, Rect,
-    },
+    }
 };
 use crop::Rope;
 use crossterm::{
@@ -63,7 +59,7 @@ impl Pallette {
     }
 
     fn commands(&mut self) -> Vec<&Command> {
-        let text = self.input.text.rope.to_string();
+        let text = self.input.rope.to_string();
         let text = text.trim();
         COMMANDS
             .iter()
@@ -132,7 +128,7 @@ impl Component for Pallette {
 
     fn cursor(&self, _area: Rect, _ctx: &Context) -> (Option<Position>, Option<SetCursorStyle>) {
         (
-            Some(self.input.view.cursor_position),
+            Some(self.input.view.view_cursor_position),
             Some(SetCursorStyle::SteadyBar),
         )
     }
@@ -140,46 +136,88 @@ impl Component for Pallette {
 
 struct TextInput {
     view: ScrollView,
-    text: EditableText,
+    rope: Rope,
 }
 
 impl TextInput {
     fn new(rope: Rope) -> Self {
         Self {
+            rope,
             view: ScrollView::default(),
-            text: EditableText::new(rope),
         }
     }
 
     fn render(&mut self, area: Rect, buffer: &mut Buffer) {
-        self.view.render(area, buffer, &self.text, |_, _| {});
+        self.view.render(area, buffer, &self.rope, |_, _| {});
+    }
+
+    fn insert_char_at_cursor(&mut self, char: char, mode: &Mode) {
+        let offset = self.view.byte_offset_at_cursor(&mut self.rope, self.view.text_cursor_x, self.view.text_cursor_y);
+        let mut buf = [0; 4];
+        let text = char.encode_utf8(&mut buf);
+
+        self.rope.insert(offset, text);
+
+        if char == NEW_LINE {
+            self.view.move_cursor_to(&mut self.rope, Some(0), Some(self.view.text_cursor_y + 1), mode);
+        } else {
+            self.view.move_cursor_to(&mut self.rope, Some(self.view.text_cursor_x + 1), None, mode);
+        }
+    }
+
+    pub fn delete_to_the_left(&mut self, mode: &Mode) -> bool {
+        if self.view.text_cursor_x > 0 {
+            let mut start = self.rope.byte_of_line(self.view.text_cursor_y);
+            let mut end = start;
+            let idx = self.view.grapheme_at_cursor(&self.rope).0 - 1;
+            for (i, g) in self.rope.line(self.view.text_cursor_y).graphemes().enumerate() {
+                if i < idx { start += g.len() }
+                if i == idx {
+                    end = start + g.len();
+                    break
+                }
+            }
+
+            self.view.cursor_left(&self.rope, &Mode::Insert);
+            self.rope.delete(start..end);
+            return true;
+        } else if self.view.text_cursor_y > 0  {
+            let to = self.rope.byte_of_line(self.view.text_cursor_y);
+            let from = to.saturating_sub(NEW_LINE.len_utf8());
+            // need to move cursor before deleting
+            self.view.move_cursor_to(&self.rope, Some(self.view.line_width(&self.rope, self.view.text_cursor_y - 1)), Some(self.view.text_cursor_y - 1), mode);
+            self.rope.delete(from..to);
+            return true;
+        }
+
+        false
     }
 
     fn handle_key_event(&mut self, event: KeyEvent) {
         match event.code {
             KeyCode::Left => {
-                self.text.cursor_left(&Mode::Insert);
+                self.view.cursor_left(&self.rope, &Mode::Insert);
             }
             KeyCode::Right => {
-                self.text.cursor_right(&Mode::Insert);
+                self.view.cursor_right(&self.rope, &Mode::Insert);
             }
             KeyCode::Up => {
-                self.text.cursor_up(&Mode::Insert);
+                self.view.cursor_up(&self.rope, &Mode::Insert);
             }
             KeyCode::Down => {
-                self.text.cursor_down(&Mode::Insert);
+                self.view.cursor_down(&self.rope, &Mode::Insert);
             }
             KeyCode::Home => {
-                self.text.move_cursor_to(Some(0), None, &Mode::Insert);
+                self.view.move_cursor_to(&self.rope, Some(0), None, &Mode::Insert);
             }
             KeyCode::End => {
-                self.text.move_cursor_to(Some(usize::MAX), None, &Mode::Insert);
+                self.view.move_cursor_to(&self.rope, Some(usize::MAX), None, &Mode::Insert);
             }
             KeyCode::Backspace => {
-                self.text.delete_to_the_left(&Mode::Insert);
+                self.delete_to_the_left(&Mode::Insert);
             }
             KeyCode::Char(c) => {
-                self.text.insert_char_at_cursor(c, &Mode::Insert);
+                self.insert_char_at_cursor(c, &Mode::Insert);
             }
             _ => {}
         }

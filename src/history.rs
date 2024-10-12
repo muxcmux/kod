@@ -28,8 +28,6 @@ pub enum Operation {
 
 use Operation::*;
 
-use crate::editable_text::EditableText;
-
 pub struct History {
     revisions: Vec<Revision>,
     current: usize,
@@ -136,9 +134,9 @@ impl Transaction {
         Self { operations, ..Default::default() }
     }
 
-    pub fn set_cursor(mut self, text: &EditableText) -> Self {
-        self.cursor_x = text.cursor_x;
-        self.cursor_y = text.cursor_y;
+    pub fn set_cursor(mut self, cursor_x: usize, cursor_y: usize) -> Self {
+        self.cursor_x;
+        self.cursor_y;
         self
     }
 

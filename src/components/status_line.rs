@@ -1,4 +1,5 @@
-use crate::{doc, ui::buffer::Buffer};
+use crate::current;
+use crate::ui::buffer::Buffer;
 use crate::ui::Rect;
 use crossterm::style::Color;
 use crate::compositor::{Component, Context};
@@ -27,7 +28,7 @@ impl Component for StatusLine {
         //x += (label.chars().count() + 1) as u16;
         x += 1_u16;
 
-        let doc = doc!(ctx.editor);
+        let (pane, doc) = current!(ctx.editor);
         match &ctx.editor.status {
             Some(status) => {
                 let fg = match status.severity {
@@ -57,7 +58,7 @@ impl Component for StatusLine {
             },
         }
 
-        let cursor_position = format!(" {}:{} ", doc.text.cursor_y + 1, doc.text.grapheme_at_cursor().0 + 1);
+        let cursor_position = format!(" {}:{} ", pane.view.text_cursor_y + 1, pane.view.grapheme_at_cursor(&doc.rope).0 + 1);
         let w = area.width.saturating_sub(cursor_position.chars().count() as u16);
         buffer.put_str(&cursor_position, w, y, Color::White, bg);
     }
