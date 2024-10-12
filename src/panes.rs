@@ -38,9 +38,8 @@ fn compute_offset(size: Rect) -> (usize, usize) {
 }
 
 
-#[derive(Default)]
-enum Layout {
-    #[default]
+#[derive(Clone, Copy)]
+pub enum Layout {
     Vertical,
     Horizontal,
 }
@@ -75,10 +74,22 @@ impl Panes {
     pub fn resize(&mut self, _area: Rect) {
         // recalc size for each pane
     }
+
+    pub fn split(&mut self, layout: Layout) {
+        let id = self.next_pane_id;
+        let pane = self.focused().split(layout, id);
+        self.panes.insert(id, pane);
+        self.focused_id = id;
+        self.next_pane_id.advance();
+    }
+
+    pub fn focused(&mut self) -> &mut Pane {
+        self.panes.get_mut(&self.focused_id).expect("Cannot get focused pane")
+    }
 }
 
-#[derive(Default)]
 pub struct Pane {
+    id: PaneId,
     pub area: Rect,
     pub doc_id: DocumentId,
     layout: Layout,
@@ -89,11 +100,46 @@ pub struct Pane {
 
 impl Pane {
     // This will always point to doc_id 1 (the default)
-    // use other builder methods to create non-default panes
+    // and have a default id of 1
+    // Use split to create subsequent panes
     fn new(area: Rect) -> Self {
         Self {
+            id: PaneId::default(),
             area,
-            ..Default::default()
+            doc_id: DocumentId::default(),
+            layout: Layout::Vertical,
+            parent_id: None,
+            child_id: None,
+            scroll_view: ScrollView::default(),
+        }
+    }
+
+    fn split(&mut self, layout: Layout, id: PaneId) -> Self {
+        // we have to subtract 1 for border, which we always take from the parent
+        let area = match layout {
+            Layout::Vertical => {
+                let new_area = self.area.clip_left(self.area.width / 2);
+                self.area = self.area.clip_right((self.area.width.saturating_sub(1) / 2) + 1);
+                new_area
+            },
+            Layout::Horizontal => {
+                let new_area = self.area.clip_top(self.area.height / 2);
+                self.area = self.area.clip_bottom((self.area.height.saturating_sub(1) / 2) + 1);
+                new_area
+            }
+        };
+
+        self.layout = layout;
+        self.child_id = Some(id);
+
+        Self {
+            id,
+            area,
+            doc_id: self.doc_id,
+            layout: self.layout,
+            parent_id: Some(self.id),
+            child_id: None,
+            scroll_view: ScrollView::default(),
         }
     }
 

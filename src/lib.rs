@@ -13,6 +13,10 @@ impl NonZeroIncrementalId {
     fn next(&self) -> Self {
         Self(NonZeroUsize::new(self.0.get() + 1).unwrap())
     }
+
+    fn advance(&mut self) {
+        self.0 = NonZeroUsize::new(self.0.get() + 1).unwrap();
+    }
 }
 
 pub mod application;

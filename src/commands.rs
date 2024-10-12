@@ -3,7 +3,7 @@ pub mod pallette;
 
 use crossterm::event::KeyEvent;
 
-use crate::{components::confirmation::Dialog, compositor::Component, doc, editor::Editor, ui::borders::BorderType};
+use crate::{components::confirmation::Dialog, compositor::Component, doc, editor::Editor, panes::Layout, ui::borders::BorderType};
 
 pub type KeyCallback = Box<dyn FnOnce(&mut Context, KeyEvent)>;
 
@@ -62,8 +62,18 @@ pub fn write_quit(ctx: &mut Context) {
     quit(ctx);
 }
 
+pub fn horizontal_split(ctx: &mut Context) {
+    ctx.editor.panes.split(Layout::Horizontal);
+}
+
+pub fn vertical_split(ctx: &mut Context) {
+    ctx.editor.panes.split(Layout::Vertical);
+}
+
 pub const COMMANDS: &[Command] = &[
     Command { name: "write", aliases: &["save", "s", "write", "w"], desc: "Save file to disc", func: save },
     Command { name: "quit", aliases: &["q", "exit"], desc: "Exit kod", func: quit },
     Command { name: "write-quit", aliases: &["wq", "x"], desc: "Save file to disc and exit", func: write_quit },
+    Command { name: "split", aliases: &[], desc: "Split pane horizontally", func: horizontal_split },
+    Command { name: "vsplit", aliases: &["vs"], desc: "Split pane vertically", func: vertical_split },
 ];
