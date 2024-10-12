@@ -1,7 +1,9 @@
 use std::{borrow::Cow, cell::Cell, path::PathBuf};
 
 use crop::Rope;
-use crate::{editable_text::EditableText, editor::Mode, history::{History, State, Transaction}};
+use crate::{editable_text::EditableText, editor::Mode, history::{History, State, Transaction}, NonZeroIncrementalId};
+
+pub type DocumentId = NonZeroIncrementalId;
 
 pub struct Document {
     pub text: EditableText,

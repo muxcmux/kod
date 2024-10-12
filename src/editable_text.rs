@@ -205,6 +205,8 @@ impl EditableText {
         None
     }
 
+    /// Moves cursor to x and y,
+    /// respecting bounds and grapheme boundaries
     pub fn move_cursor_to(&mut self, x: Option<usize>, y: Option<usize>, mode: &Mode) {
         let stick = x.is_some();
         // ensure x and y are within bounds
@@ -241,7 +243,7 @@ impl EditableText {
                 if goto_prev {
                     self.cursor_x = acc;
                 } else if goto_next {
-                    if graphemes.peek().is_none() && *mode != Mode::Insert {
+                    if graphemes.peek().is_none() && mode != &Mode::Insert {
                         self.cursor_x = acc;
                     } else {
                         self.cursor_x = next_grapheme_start;

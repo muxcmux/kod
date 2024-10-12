@@ -13,7 +13,7 @@ impl Default for Application {
         let size = crossterm::terminal::size().expect("Can't get terminal size");
         let size = Rect::from(size);
 
-        let editor = Editor::default();
+        let editor = Editor::new(size);
         let terminal = Terminal::new(size);
         let mut compositor = Compositor::new(size);
 

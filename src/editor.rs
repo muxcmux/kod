@@ -1,5 +1,5 @@
-use crate::editable_text::NEW_LINE;
-use std::{borrow::Cow, env, fs, path::PathBuf};
+use crate::{current, document::DocumentId, editable_text::NEW_LINE, panes::Panes, ui::Rect};
+use std::{borrow::Cow, collections::BTreeMap, env, fs, path::PathBuf};
 
 use crop::Rope;
 
@@ -26,7 +26,9 @@ pub struct EditorStatus {
 
 pub struct Editor {
     pub mode: Mode,
-    pub document: Document,
+    pub panes: Panes,
+    pub documents: BTreeMap<DocumentId, Document>,
+    next_doc_id: DocumentId,
     pub quit: bool,
     pub status: Option<EditorStatus>,
 }
@@ -43,8 +45,8 @@ fn format_size_units(bytes: usize) -> String {
     [value, SIZE_SUFFIX[base.floor() as usize]].join("")
 }
 
-impl Default for Editor {
-    fn default() -> Self {
+impl Editor {
+    pub fn new(area: Rect) -> Self {
         let mut args: Vec<String> = env::args().collect();
 
         let mut path = None;
@@ -66,24 +68,32 @@ impl Default for Editor {
             }
         }
 
-        let document = Document::new(Rope::from(contents), path);
+        let doc_id = DocumentId::default();
+        let doc = Document::new(Rope::from(contents), path);
+        let mut documents = BTreeMap::new();
+        documents.insert(doc_id, doc);
+
+        let panes = Panes::new(area);
 
         Self {
-            document,
-            status,
             mode: Mode::Normal,
+            next_doc_id: doc_id.next(),
+            documents,
+            status,
+            panes,
             quit: false,
         }
     }
-}
-impl Editor {
+
     pub fn save_document(&mut self) {
-        if let Some(path) = &self.document.path {
-            match fs::write(path, self.document.text.rope.to_string()) {
+        let doc = current!(self).1;
+        if let Some(path) = &doc.path {
+            match fs::write(path, doc.text.rope.to_string()) {
                 Ok(_) => {
-                    let size = format_size_units(self.document.text.rope.byte_len());
-                    self.set_status(format!("{} lines written ({})", self.document.text.rope.line_len(), size));
-                    self.document.modified = false;
+                    let size = format_size_units(doc.text.rope.byte_len());
+                    let lines = doc.text.rope.line_len();
+                    doc.modified = false;
+                    self.set_status(format!("{} lines written ({})", lines, size));
                 },
                 Err(err) => {
                     self.set_error(format!("{err}"));

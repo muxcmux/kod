@@ -3,7 +3,7 @@ pub mod pallette;
 
 use crossterm::event::KeyEvent;
 
-use crate::{components::confirmation::Dialog, compositor::Component, editor::Editor, ui::borders::BorderType};
+use crate::{components::confirmation::Dialog, compositor::Component, doc, editor::Editor, ui::borders::BorderType};
 
 pub type KeyCallback = Box<dyn FnOnce(&mut Context, KeyEvent)>;
 
@@ -37,8 +37,9 @@ pub fn save(ctx: &mut Context) {
 }
 
 pub fn quit(ctx: &mut Context) {
-    if ctx.editor.document.modified {
-        let text = format!(" Save changes to {}? ", ctx.editor.document.filename());
+    let doc = doc!(ctx.editor);
+    if doc.modified {
+        let text = format!(" Save changes to {}? ", doc.filename());
         let dialog = Dialog::new(
             "Exit".into(),
             text,
