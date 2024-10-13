@@ -1,6 +1,6 @@
 use std::{borrow::Cow, cmp::Ordering};
 
-use crop::{Rope, RopeSlice};
+use crop::Rope;
 use crossterm::style::Color;
 
 use crate::{editor::Mode, graphemes::{GraphemeCategory, Word}, ui::{buffer::Buffer, Position, Rect}};
@@ -56,7 +56,7 @@ pub struct ScrollView {
 }
 
 impl ScrollView {
-    fn ensure_cursor_is_in_view(&mut self, area: Rect, rope: &Rope) {
+    fn ensure_cursor_is_in_view(&mut self, area: Rect) {
         if let Some(s) = adjust_scroll(area.height as usize, self.text_cursor_y, self.offset_y, self.scroll_y) {
             self.scroll_y = s;
         }
@@ -73,7 +73,7 @@ impl ScrollView {
     pub fn render<F>(&mut self, area: Rect, buffer: &mut Buffer, rope: &Rope, mut ws_callback: F)
         where F: FnMut(&mut Buffer, (u16, u16))
     {
-        self.ensure_cursor_is_in_view(area, rope);
+        self.ensure_cursor_is_in_view(area);
 
         for row in self.scroll_y..self.scroll_y + area.height as usize {
             if row >= rope.line_len() {

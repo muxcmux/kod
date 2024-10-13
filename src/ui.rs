@@ -92,3 +92,72 @@ impl From<(u16, u16)> for Rect {
         Self { width,  height, ..Default::default() }
     }
 }
+
+#[cfg(test)]
+
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_area() {
+        assert_eq!(Rect::from((10, 10)).area(), 100);
+    }
+
+    #[test]
+    fn test_clip_bottom() {
+        let rect = Rect::from((10, 10));
+        let clipped = rect.clip_bottom(1);
+        assert_eq!(clipped.top(), 0);
+        assert_eq!(clipped.left(), 0);
+        assert_eq!(clipped.right(), 10);
+        assert_eq!(clipped.bottom(), 9);
+        assert_eq!(clipped.height, 9);
+        assert_eq!(clipped.width, 10);
+    }
+
+    #[test]
+    fn test_clip_top() {
+        let rect = Rect::from((10, 10));
+        let clipped = rect.clip_top(1);
+        assert_eq!(clipped.top(), 1);
+        assert_eq!(clipped.left(), 0);
+        assert_eq!(clipped.right(), 10);
+        assert_eq!(clipped.bottom(), 10);
+        assert_eq!(clipped.height, 9);
+        assert_eq!(clipped.width, 10);
+    }
+
+    #[test]
+    fn test_clip_left() {
+        let rect = Rect::from((10, 10));
+        let clipped = rect.clip_left(1);
+        assert_eq!(clipped.top(), 0);
+        assert_eq!(clipped.left(), 1);
+        assert_eq!(clipped.right(), 10);
+        assert_eq!(clipped.bottom(), 10);
+        assert_eq!(clipped.height, 10);
+        assert_eq!(clipped.width, 9);
+    }
+
+    #[test]
+    fn test_clip_right() {
+        let rect = Rect::from((10, 10));
+        let clipped = rect.clip_right(1);
+        assert_eq!(clipped.top(), 0);
+        assert_eq!(clipped.left(), 0);
+        assert_eq!(clipped.right(), 9);
+        assert_eq!(clipped.bottom(), 10);
+        assert_eq!(clipped.height, 10);
+        assert_eq!(clipped.width, 9);
+    }
+
+    #[test]
+    fn test_centered() {
+        let rect = Rect::from((100, 100));
+        let centered = rect.centered(10, 10);
+        assert_eq!(centered.top(), 45);
+        assert_eq!(centered.left(), 45);
+        assert_eq!(centered.right(), 55);
+        assert_eq!(centered.bottom(), 55);
+    }
+}

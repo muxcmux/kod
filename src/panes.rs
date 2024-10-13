@@ -118,13 +118,13 @@ impl Pane {
         // we have to subtract 1 for border, which we always take from the parent
         let area = match layout {
             Layout::Vertical => {
-                let new_area = self.area.clip_left(self.area.width / 2);
-                self.area = self.area.clip_right((self.area.width.saturating_sub(1) / 2) + 1);
+                let new_area = self.area.clip_left((self.area.width + 1) / 2);
+                self.area = self.area.clip_right((self.area.width + 2) / 2);
                 new_area
             },
             Layout::Horizontal => {
-                let new_area = self.area.clip_top(self.area.height / 2);
-                self.area = self.area.clip_bottom((self.area.height.saturating_sub(1) / 2) + 1);
+                let new_area = self.area.clip_top((self.area.height + 1) / 2);
+                self.area = self.area.clip_bottom((self.area.height + 2) / 2);
                 new_area
             }
         };
@@ -143,13 +143,13 @@ impl Pane {
         }
     }
 
-    pub fn render(&mut self, buffer: &mut Buffer, doc: &Document, mode: &Mode) {
+    pub fn render(&mut self, buffer: &mut Buffer, doc: &Document, mode: &Mode, active: bool) {
         let (gutter_area, document_area) = gutter_and_document_areas(self.area, doc);
 
         (self.view.offset_x, self.view.offset_y) = compute_offset(document_area);
 
         self.render_document(document_area, buffer, doc);
-        self.render_gutter(gutter_area, buffer, doc, mode);
+        self.render_gutter(gutter_area, buffer, doc, mode, active);
     }
 
     fn render_document(&mut self, area: Rect, buffer: &mut Buffer, doc: &Document) {
@@ -164,48 +164,59 @@ impl Pane {
         );
     }
 
-    fn render_gutter(&self, area: Rect, buffer: &mut Buffer, doc: &Document, mode: &Mode) {
+    fn render_gutter(&self, area: Rect, buffer: &mut Buffer, doc: &Document, mode: &Mode, active: bool) {
+        fn absolute(line_no: usize, y: u16, area: Rect, buffer: &mut Buffer, view: &ScrollView) {
+            let label = format!(
+                "{: >1$}",
+                line_no,
+                area.width.saturating_sub(GUTTER_LINE_NUM_PAD_RIGHT) as usize
+            );
+            let fg = if line_no == view.text_cursor_y + 1 {
+                Color::White
+            } else {
+                Color::DarkGrey
+            };
+            buffer.put_str(&label, area.left(), y, fg, Color::Reset);
+        }
+
+        fn relative(y: u16, area: Rect, buffer: &mut Buffer, view: &ScrollView) {
+            let rel_line_no = view.view_cursor_position.y as isize - y as isize;
+            let (fg, label) = if rel_line_no == 0 {
+                (
+                    Color::White,
+                    format!("  {}", view.text_cursor_y + 1),
+                )
+            } else {
+                (
+                    Color::DarkGrey,
+                    format!(
+                        "{: >1$}",
+                        rel_line_no.abs(),
+                        area.width.saturating_sub(GUTTER_LINE_NUM_PAD_RIGHT) as usize
+                    ),
+                )
+            };
+            buffer.put_str(&label, area.left(), y, fg, Color::Reset);
+        }
+
         let max = doc.rope.line_len();
 
-        for y in area.top()..=area.bottom() {
+        for y in 0..=area.height {
             let line_no = y as usize + self.view.scroll_y + 1;
+
             if line_no > max {
                 break;
             }
 
-            match mode {
-                Mode::Insert | Mode::Replace => {
-                    let label = format!(
-                        "{: >1$}",
-                        line_no,
-                        area.width.saturating_sub(GUTTER_LINE_NUM_PAD_RIGHT) as usize
-                    );
-                    let fg = if line_no == self.view.text_cursor_y + 1 {
-                        Color::White
-                    } else {
-                        Color::DarkGrey
-                    };
-                    buffer.put_str(&label, 0, y, fg, Color::Reset);
+            if active {
+                match mode {
+                    Mode::Insert | Mode::Replace =>
+                        absolute(line_no, y + area.top(), area, buffer, &self.view),
+                    Mode::Normal =>
+                        relative(y + area.top(), area, buffer, &self.view)
                 }
-                Mode::Normal => {
-                    let rel_line_no = self.view.view_cursor_position.y as isize - y as isize;
-                    let (fg, label) = if rel_line_no == 0 {
-                        (
-                            Color::White,
-                            format!("  {}", self.view.text_cursor_y + 1),
-                        )
-                    } else {
-                        (
-                            Color::DarkGrey,
-                            format!(
-                                "{: >1$}",
-                                rel_line_no.abs(),
-                                area.width.saturating_sub(GUTTER_LINE_NUM_PAD_RIGHT) as usize
-                            ),
-                        )
-                    };
-                    buffer.put_str(&label, 0, y, fg, Color::Reset);
-                }
+            } else {
+                absolute(line_no, y + area.top(), area, buffer, &self.view);
             }
         }
     }
