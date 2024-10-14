@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use crossterm::style::Color;
 
-use crate::{components::scroll_view::ScrollView, document::{Document, DocumentId}, editor::Mode, ui::{buffer::Buffer, Rect}, NonZeroIncrementalId};
+use crate::{components::scroll_view::ScrollView, document::{Document, DocumentId}, editor::Mode, ui::{borders::{HORIZONTAL, VERTICAL}, buffer::Buffer, Rect}, NonZeroIncrementalId};
 
 type PaneId = NonZeroIncrementalId;
 
@@ -21,6 +21,7 @@ fn gutter_and_document_areas(size: Rect, doc: &Document) -> (Rect, Rect) {
         + GUTTER_LINE_NUM_PAD_RIGHT;
     let gutter_width = gutter_width.max(MIN_GUTTER_WIDTH);
 
+    // why do we clip bottom here?
     let gutter_area = size
         .clip_bottom(1)
         .clip_right(size.width.saturating_sub(gutter_width));
@@ -45,18 +46,29 @@ pub enum Layout {
 }
 
 pub struct Panes {
-    root_id: PaneId,
     area: Rect,
     pub focused_id: PaneId,
     next_pane_id: PaneId,
     pub panes: BTreeMap<PaneId, Pane>,
 }
 
+struct Node {
+    parent_id: PaneId,
+    content: Content,
+}
+
+enum Content {
+    Pane(PaneId),
+    Container(Container)
+}
+
+struct Container {
+    layout: Layout,
+    childern: Vec<PaneId>
+}
+
 impl Panes {
     pub fn new(area: Rect) -> Self {
-        // remove 1 row for status line
-        let area = area.clip_bottom(1);
-
         let pane_id = PaneId::default();
         let pane = Pane::new(area);
         let mut panes = BTreeMap::new();
@@ -66,13 +78,17 @@ impl Panes {
             area,
             panes,
             next_pane_id: pane_id.next(),
-            root_id: pane_id,
             focused_id: pane_id,
         }
     }
 
     pub fn resize(&mut self, _area: Rect) {
         // recalc size for each pane
+    }
+
+    pub fn close(&mut self, id: PaneId) {
+        let pane = self.panes.get(&id).expect("Cannot get pane to close");
+
     }
 
     pub fn split(&mut self, layout: Layout) {
@@ -94,7 +110,6 @@ pub struct Pane {
     pub doc_id: DocumentId,
     layout: Layout,
     parent_id: Option<PaneId>,
-    child_id: Option<PaneId>,
     pub view: ScrollView,
 }
 
@@ -109,7 +124,6 @@ impl Pane {
             doc_id: DocumentId::default(),
             layout: Layout::Vertical,
             parent_id: None,
-            child_id: None,
             view: ScrollView::default(),
         }
     }
@@ -130,7 +144,6 @@ impl Pane {
         };
 
         self.layout = layout;
-        self.child_id = Some(id);
 
         Self {
             id,
@@ -138,7 +151,6 @@ impl Pane {
             doc_id: self.doc_id,
             layout: self.layout,
             parent_id: Some(self.id),
-            child_id: None,
             view: ScrollView::default(),
         }
     }
@@ -150,6 +162,21 @@ impl Pane {
 
         self.render_document(document_area, buffer, doc);
         self.render_gutter(gutter_area, buffer, doc, mode, active);
+    }
+
+    fn render_border(&self, buffer: &mut Buffer) {
+        match self.layout {
+            Layout::Vertical => {
+                for y in self.area.top()..=self.area.bottom() {
+                    buffer.put_symbol(VERTICAL, self.area.right(), y, Color::DarkGrey, Color::Reset);
+                }
+            },
+            Layout::Horizontal => {
+                for x in self.area.left()..=self.area.right() {
+                    buffer.put_symbol(HORIZONTAL, x, self.area.bottom(), Color::DarkGrey, Color::Reset);
+                }
+            },
+        }
     }
 
     fn render_document(&mut self, area: Rect, buffer: &mut Buffer, doc: &Document) {

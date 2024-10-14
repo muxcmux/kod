@@ -73,7 +73,8 @@ impl Editor {
         let mut documents = BTreeMap::new();
         documents.insert(doc_id, doc);
 
-        let panes = Panes::new(area);
+        // Remove 1 from bottom for status line
+        let panes = Panes::new(area.clip_bottom(1));
 
         Self {
             mode: Mode::Normal,

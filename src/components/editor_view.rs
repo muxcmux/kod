@@ -95,7 +95,7 @@ impl Component for EditorView {
         let mode = &ctx.editor.mode;
         for (id, pane) in ctx.editor.panes.panes.iter_mut() {
             let doc = ctx.editor.documents.get(&pane.doc_id).expect("Can't get doc from pane id");
-            pane.render(buffer, doc, mode, id == &ctx.editor.panes.focused_id);
+            pane.render(buffer, doc, mode, *id == ctx.editor.panes.focused_id);
         }
     }
 

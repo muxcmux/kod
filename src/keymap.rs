@@ -191,10 +191,10 @@ fn normal_mode_keymap() -> Keymap {
         ":" => command_pallette,
         "R" => enter_replace_mode,
 
-        "h" | "left" => cursor_left,
-        "j" | "down" => cursor_down,
-        "k" | "up" => cursor_up,
-        "l" | "right" => cursor_right,
+        "h" => cursor_left,
+        "j" => cursor_down,
+        "k" => cursor_up,
+        "l" => cursor_right,
         "C-u" | "pageup" => half_page_up,
         "C-d" | "pagedown" => half_page_down,
         "w" => goto_word_start_forward,
@@ -204,6 +204,11 @@ fn normal_mode_keymap() -> Keymap {
         "f" => goto_character_forward,
         "T" => goto_until_character_backward,
         "F" => goto_character_backward,
+
+        //"left" => switch_pane_left,
+        //"right" => switch_pane_right,
+        //"up" => switch_pane_top,
+        //"down" => switch_pane_bottom,
 
         "^" | "home" | "C-h" => goto_line_first_non_whitespace,
         "$" | "end" | "C-l" => goto_eol,
