@@ -43,11 +43,7 @@ fn compute_offset(size: Rect) -> (usize, usize) {
 fn find_and_intersect_with(symbol: Symbol, x: u16, y: u16, existing: &mut HashMap<(u16, u16), Symbol>) {
     let sym = match existing.get(&(x, y)) {
         None => symbol,
-        Some(s) => {
-            let new = s.intersect(symbol);
-            debug!("Changing {:?} with {:?}", s, new);
-            new
-        }
+        Some(s) => s.intersect(symbol),
     };
 
     existing.insert((x, y), sym);
@@ -139,7 +135,7 @@ impl Panes {
         }
 
         for ((x, y), symbol) in symbols {
-            buffer.put_symbol(symbol.as_str(Stroke::Thick), x, y, Color::DarkGrey, Color::Reset);
+            buffer.put_symbol(symbol.as_str(Stroke::Plain), x, y, Color::DarkGrey, Color::Reset);
         }
     }
 
@@ -210,34 +206,41 @@ impl Panes {
         match direction {
             Direction::Up => {
                 for (id, pane) in self.panes.iter() {
-                    if pane.area.bottom() + 1 == focused.area.top() {
+                    if pane.area.bottom() + 1 != focused.area.top() { continue }
+
+                    if (pane.area.left()..=pane.area.right()).contains(&focused.view.view_cursor_position.x) {
                         self.focused_id = *id
                     }
                 }
             },
             Direction::Down => {
                 for (id, pane) in self.panes.iter() {
-                    if focused.area.bottom() + 1 == pane.area.top() {
+                    if focused.area.bottom() + 1 != pane.area.top() { continue }
+
+                    if (pane.area.left()..=pane.area.right()).contains(&focused.view.view_cursor_position.x) {
                         self.focused_id = *id
                     }
                 }
             },
             Direction::Left => {
                 for (id, pane) in self.panes.iter() {
-                    if pane.area.right() + 1 == focused.area.left() {
+                    if focused.area.left() != pane.area.right() + 1 { continue }
+
+                    if (pane.area.top()..=pane.area.bottom()).contains(&focused.view.view_cursor_position.y) {
                         self.focused_id = *id
                     }
                 }
             },
             Direction::Right => {
                 for (id, pane) in self.panes.iter() {
-                    if focused.area.right() + 1 == pane.area.left() {
+                    if focused.area.right() + 1 != pane.area.left() { continue }
+
+                    if (pane.area.top()..=pane.area.bottom()).contains(&focused.view.view_cursor_position.y) {
                         self.focused_id = *id
                     }
                 }
             },
         }
-        debug!("Focused: {}", self.focused_id.0);
     }
 }
 
@@ -345,127 +348,91 @@ impl Pane {
 
     fn border_symbols(&self, existing: &mut HashMap<(u16, u16), Symbol>, area: Rect) {
         if self.area.left() > area.left() {
+            self.left_border_symbols(existing, area);
             if self.area.top() > area.top() {
                 self.top_left_border_symbol(existing, area);
             }
-            if self.area.right() < area.right() {
+            if self.area.bottom() < area.bottom() {
+                self.bottom_left_border_symbol(existing, area);
+            }
+        }
+
+        if self.area.right() < area.right() {
+            self.right_border_symbols(existing, area);
+            if self.area.top() > area.top() {
                 self.top_right_border_symbol(existing, area);
             }
-            self.left_border_symbols(existing, area);
+            if self.area.bottom() < area.bottom() {
+                self.bottom_right_border_symbol(existing, area);
+            }
         }
 
         if self.area.bottom() < area.bottom() {
-            if self.area.left() > area.left() {
-                self.bottom_left_border_symbol(existing, area);
-            }
-            if self.area.right() < area.right() {
-                self.bottom_right_border_symbol(existing, area);
-            }
-            self.bottom_border_symbols(existing, area)
+            self.bottom_border_symbols(existing, area);
         }
 
         if self.area.top() > area.top() {
             self.top_border_symbols(existing, area)
         }
-
-        if self.area.right() < area.right() {
-            self.right_border_symbols(existing, area)
-        }
     }
 
     fn top_left_border_symbol(&self, existing: &mut HashMap<(u16, u16), Symbol>, area: Rect) {
-        debug_assert!(self.area.left() > area.left());
         debug_assert!(self.area.top() > area.top());
+        debug_assert!(self.area.left() > area.left());
 
-        find_and_intersect_with(
-            Symbol::TopLeft,
-            self.area.left() - 1,
-            self.area.top() - 1,
-            existing
-        )
+        find_and_intersect_with(Symbol::TopLeft, self.area.left() - 1, self.area.top() - 1, existing)
     }
 
     fn top_right_border_symbol(&self, existing: &mut HashMap<(u16, u16), Symbol>, area: Rect) {
         debug_assert!(self.area.top() > area.top());
         debug_assert!(self.area.right() < area.right());
 
-        find_and_intersect_with(
-            Symbol::TopRight,
-            self.area.right(),
-            self.area.top() - 1,
-            existing
-        )
+        find_and_intersect_with(Symbol::TopRight, self.area.right(), self.area.top() - 1, existing)
     }
 
     fn bottom_left_border_symbol(&self, existing: &mut HashMap<(u16, u16), Symbol>, area: Rect) {
         debug_assert!(self.area.bottom() < area.bottom());
         debug_assert!(self.area.left() > area.left());
 
-        find_and_intersect_with(
-            Symbol::BottomLeft,
-            self.area.left() - 1,
-            self.area.bottom(),
-            existing
-        )
+        find_and_intersect_with(Symbol::BottomLeft, self.area.left() - 1, self.area.bottom(), existing)
     }
 
     fn bottom_right_border_symbol(&self, existing: &mut HashMap<(u16, u16), Symbol>, area: Rect) {
         debug_assert!(self.area.bottom() < area.bottom());
         debug_assert!(self.area.right() < area.right());
 
-        find_and_intersect_with(
-            Symbol::BottomRight,
-            self.area.right(),
-            self.area.bottom(),
-            existing
-        )
+        find_and_intersect_with(Symbol::BottomRight, self.area.right(), self.area.bottom(), existing)
     }
 
     fn left_border_symbols(&self, existing: &mut HashMap<(u16, u16), Symbol>, area: Rect) {
         debug_assert!(self.area.left() > area.left());
 
-        let from = self.area.top();
-        let to = self.area.bottom();
-        let x = self.area.left() - 1;
-
-        for y in from..to {
-            find_and_intersect_with(Symbol::Vertical, x, y, existing)
+        for y in self.area.top()..self.area.bottom() {
+            find_and_intersect_with(Symbol::Vertical, self.area.left() - 1, y, existing)
         }
     }
 
     fn right_border_symbols(&self, existing: &mut HashMap<(u16, u16), Symbol>, area: Rect) {
         debug_assert!(self.area.right() < area.right());
 
-        let from = self.area.top();
-        let to = self.area.bottom();
-        let x = self.area.right();
-
-        for y in from..to {
-            find_and_intersect_with(Symbol::Vertical, x, y, existing)
+        for y in self.area.top()..self.area.bottom() {
+            find_and_intersect_with(Symbol::Vertical, self.area.right(), y, existing)
         }
     }
 
     fn top_border_symbols(&self, existing: &mut HashMap<(u16, u16), Symbol>, area: Rect) {
         debug_assert!(self.area.top() > area.top());
 
-        let from = self.area.left();
-        let to = self.area.right();
-        let y = self.area.top() - 1;
-
-        for x in from..to {
-            find_and_intersect_with(Symbol::Horizontal, x, y, existing)
+        for x in self.area.left()..self.area.right() {
+            find_and_intersect_with(Symbol::Horizontal, x, self.area.top() - 1, existing)
         }
     }
 
     fn bottom_border_symbols(&self, existing: &mut HashMap<(u16, u16), Symbol>, area: Rect) {
         debug_assert!(self.area.bottom() < area.bottom());
 
-        let from = self.area.left();
-        let to = self.area.right();
-        let y = self.area.bottom();
-
-        for x in from..to {
-            find_and_intersect_with(Symbol::Horizontal, x, y, existing)
+        for x in self.area.left()..self.area.right() {
+            find_and_intersect_with(Symbol::Horizontal, x, self.area.bottom(), existing)
         }
     }
 }
