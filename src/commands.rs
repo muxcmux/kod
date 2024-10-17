@@ -3,7 +3,7 @@ pub mod pallette;
 
 use crossterm::event::KeyEvent;
 
-use crate::{components::confirmation::Dialog, compositor::Component, doc, editor::Editor, panes::Layout, ui::borders::BorderType};
+use crate::{components::confirmation::Dialog, compositor::Component, doc, editor::Editor, panes::Layout, ui::borders::Stroke};
 
 pub type KeyCallback = Box<dyn FnOnce(&mut Context, KeyEvent)>;
 
@@ -43,7 +43,7 @@ pub fn quit(ctx: &mut Context) {
         let dialog = Dialog::new(
             "Exit".into(),
             text,
-            BorderType::Rounded,
+            Stroke::Rounded,
             Box::new(|ctx| {
                 ctx.editor.save_document();
                 ctx.editor.quit = true;
@@ -65,18 +65,18 @@ pub fn write_quit(ctx: &mut Context) {
     quit(ctx);
 }
 
-pub fn horizontal_split(ctx: &mut Context) {
-    ctx.editor.panes.split(Layout::Horizontal);
+pub fn split_horizontally(ctx: &mut Context) {
+    ctx.editor.panes.split(Layout::Vertical);
 }
 
-pub fn vertical_split(ctx: &mut Context) {
-    ctx.editor.panes.split(Layout::Vertical);
+pub fn split_vertically(ctx: &mut Context) {
+    ctx.editor.panes.split(Layout::Horizontal);
 }
 
 pub const COMMANDS: &[Command] = &[
     Command { name: "write", aliases: &["save", "s", "write", "w"], desc: "Save file to disc", func: save },
     Command { name: "quit", aliases: &["q", "Q", "exit"], desc: "Exit kod", func: quit },
     Command { name: "write-quit", aliases: &["wq", "x"], desc: "Save file to disc and exit", func: write_quit },
-    Command { name: "split", aliases: &[], desc: "Split pane horizontally", func: horizontal_split },
-    Command { name: "vsplit", aliases: &["vs"], desc: "Split pane vertically", func: vertical_split },
+    Command { name: "split", aliases: &[], desc: "Split pane horizontally", func: split_horizontally },
+    Command { name: "vsplit", aliases: &["vs"], desc: "Split pane vertically", func: split_vertically },
 ];

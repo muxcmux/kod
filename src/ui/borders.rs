@@ -1,3 +1,6 @@
+use core::fmt;
+use std::fmt::Write;
+
 use bitflags::bitflags;
 
 pub const VERTICAL: &str = "│";
@@ -125,7 +128,7 @@ bitflags! {
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub enum BorderType {
+pub enum Stroke {
     #[default]
     Plain,
     Rounded,
@@ -133,7 +136,7 @@ pub enum BorderType {
     Thick,
 }
 
-impl BorderType {
+impl Stroke {
     pub fn line_symbols(&self) -> Set {
         match self {
             Self::Plain => NORMAL,
@@ -141,5 +144,45 @@ impl BorderType {
             Self::Double => DOUBLE,
             Self::Thick => THICK,
         }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Symbol {
+    Vertical,
+    Horizontal,
+    TopRight,
+    TopLeft,
+    BottomRight,
+    BottomLeft,
+    VerticalLeft,
+    VerticalRight,
+    HorizontalDown,
+    HorizontalUp,
+    Cross,
+}
+
+impl Symbol {
+    pub fn as_str(&self, stroke: Stroke) -> &str {
+        let symbols = stroke.line_symbols();
+        match self {
+            Symbol::Vertical       => symbols.vertical,
+            Symbol::Horizontal     => symbols.horizontal,
+            Symbol::TopRight       => symbols.top_right,
+            Symbol::TopLeft        => symbols.top_left,
+            Symbol::BottomRight    => symbols.bottom_right,
+            Symbol::BottomLeft     => symbols.bottom_left,
+            Symbol::VerticalLeft   => symbols.vertical_left,
+            Symbol::VerticalRight  => symbols.vertical_right,
+            Symbol::HorizontalDown => symbols.horizontal_down,
+            Symbol::HorizontalUp   => symbols.horizontal_up,
+            Symbol::Cross          => symbols.cross,
+        }
+    }
+}
+
+impl fmt::Debug for Symbol {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str(Stroke::Thick))
     }
 }

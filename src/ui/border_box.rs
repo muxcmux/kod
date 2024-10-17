@@ -1,13 +1,13 @@
 use crossterm::style::Color;
 
-use super::{borders::{BorderType, Borders}, buffer::Buffer, Rect};
+use super::{borders::{Stroke, Borders}, buffer::Buffer, Rect};
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct BorderBox<'a> {
     area: Rect,
     title: Option<&'a str>,
     borders: Borders,
-    border_type: BorderType,
+    border_type: Stroke,
 }
 
 impl<'a> BorderBox<'a> {
@@ -28,7 +28,7 @@ impl<'a> BorderBox<'a> {
         self
     }
 
-    pub fn border_type(mut self, border_type: BorderType) -> Self {
+    pub fn border_type(mut self, border_type: Stroke) -> Self {
         self.border_type = border_type;
         self
     }

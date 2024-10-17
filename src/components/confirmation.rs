@@ -1,5 +1,5 @@
 use crate::ui::border_box::BorderBox;
-use crate::ui::borders::{BorderType, Borders};
+use crate::ui::borders::{Stroke, Borders};
 use crate::ui::buffer::Buffer;
 use crate::{compositor::{Component, Compositor, Context, EventResult}, ui::Rect};
 use crossterm::event::{KeyCode, KeyEvent};
@@ -10,7 +10,7 @@ type Callback = Box<dyn FnMut(&mut Context)>;
 
 pub struct Dialog {
     borders: Borders,
-    border_type: BorderType,
+    border_type: Stroke,
     yes: Callback,
     no: Callback,
     title: String,
@@ -18,7 +18,7 @@ pub struct Dialog {
 }
 
 impl Dialog {
-    pub fn new(title: String, text: String, border_type: BorderType, yes: Callback, no: Callback) -> Self {
+    pub fn new(title: String, text: String, border_type: Stroke, yes: Callback, no: Callback) -> Self {
         Self { title, text, yes, no, borders: Borders::ALL, border_type }
     }
 

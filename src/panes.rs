@@ -1,10 +1,12 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 use crossterm::style::Color;
+use log::debug;
 
-use crate::{components::scroll_view::ScrollView, document::{Document, DocumentId}, editor::Mode, ui::{borders::{HORIZONTAL, VERTICAL}, buffer::Buffer, Rect}, NonZeroIncrementalId};
+use crate::{components::scroll_view::ScrollView, document::{Document, DocumentId}, editor::Mode, ui::{borders::{Stroke, Symbol}, buffer::Buffer, Rect}, IncrementalId};
 
-type PaneId = NonZeroIncrementalId;
+type PaneId = IncrementalId;
+type NodeId = IncrementalId;
 
 const GUTTER_LINE_NUM_PAD_LEFT: u16 = 2;
 const GUTTER_LINE_NUM_PAD_RIGHT: u16 = 1;
@@ -38,52 +40,149 @@ fn compute_offset(size: Rect) -> (usize, usize) {
     )
 }
 
+pub enum Direction {
+    Up,
+    Down,
+    Left,
+    Right,
+}
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum Layout {
     Vertical,
     Horizontal,
 }
 
+#[derive(Debug)]
 pub struct Panes {
-    area: Rect,
     pub focused_id: PaneId,
-    next_pane_id: PaneId,
     pub panes: BTreeMap<PaneId, Pane>,
+    area: Rect,
+    next_pane_id: PaneId,
+    next_node_id: NodeId,
+    nodes: BTreeMap<NodeId, Node>,
 }
 
+#[derive(Debug)]
 struct Node {
-    parent_id: PaneId,
+    id: NodeId,
+    parent_id: Option<NodeId>,
     content: Content,
 }
 
+impl Node {
+    fn root() -> Self {
+        Self { id: NodeId::default(), parent_id: None, content: Content::Pane(PaneId::default()) }
+    }
+}
+
+#[derive(Debug)]
 enum Content {
     Pane(PaneId),
     Container(Container)
 }
 
+#[derive(Debug)]
 struct Container {
     layout: Layout,
-    childern: Vec<PaneId>
+    area: Rect,
+    children: Vec<NodeId>
 }
 
 impl Panes {
     pub fn new(area: Rect) -> Self {
-        let pane_id = PaneId::default();
-        let pane = Pane::new(area);
         let mut panes = BTreeMap::new();
-        panes.insert(pane_id, pane);
+        let mut nodes = BTreeMap::new();
+        let pane = Pane::root(area);
+        let node = Node::root();
+        let focused_id = pane.id;
+        let next_pane_id = pane.id.next();
+        let next_node_id = node.id.next();
+        panes.insert(pane.id, pane);
+        nodes.insert(node.id, node);
 
         Self {
             area,
             panes,
-            next_pane_id: pane_id.next(),
-            focused_id: pane_id,
+            nodes,
+            next_pane_id,
+            next_node_id,
+            focused_id,
         }
     }
 
-    pub fn resize(&mut self, _area: Rect) {
-        // recalc size for each pane
+    pub fn resize(&mut self, new_size: Rect) {
+        // recalc size for each pane, only if size has actually changed
+        if new_size != self.area {
+            // do the recalc...
+        }
+    }
+
+    pub fn draw_borders(&mut self, buffer: &mut Buffer) {
+        let mut map = HashMap::new();
+
+        for (_, pane) in self.panes.iter() {
+            if pane.area.right() < self.area.right() {
+                // draw right borders
+                let from = pane.area.top().saturating_sub(1);
+                let to = (pane.area.bottom() + 1).min(self.area.bottom());
+                let x = pane.area.right();
+
+                for y in from..to {
+                    let symbol = match map.get(&(x, y)) {
+                        None => Symbol::Vertical,
+                        Some(s) => match s {
+                            Symbol::Horizontal => {
+                                debug!("existing {:?}", s);
+                                if y == pane.area.top().saturating_sub(1) {
+                                    Symbol::HorizontalDown
+                                } else if y == pane.area.bottom().saturating_sub(1) {
+                                    Symbol::HorizontalUp
+                                } else {
+                                    Symbol::VerticalRight
+                                }
+                            },
+                            _ => {
+                                debug!("existing {:?}", s);
+                                *s
+                            }
+                        }
+                    };
+
+                    map.insert((x, y), symbol);
+
+                    buffer.put_symbol(symbol.as_str(Stroke::Thick), x, y, Color::DarkGrey, Color::Reset);
+                }
+            }
+
+            if pane.area.bottom() < self.area.bottom() {
+                // draw bottom borders
+                let from = pane.area.left().saturating_sub(1);
+                let to = (pane.area.right() + 1).min(self.area.right());
+                let y = pane.area.bottom();
+
+                for x in from..to {
+                    let symbol = match map.get(&(x, y)) {
+                        None => Symbol::Horizontal,
+                        Some(s) => match s {
+                            Symbol::Vertical => {
+                                if x == pane.area.left().saturating_sub(1) {
+                                    Symbol::VerticalRight
+                                } else {
+                                    Symbol::VerticalLeft
+                                }
+                            },
+                            Symbol::VerticalLeft => Symbol::Cross,
+                            _ => *s
+                        }
+                    };
+
+                    map.insert((x, y), symbol);
+
+                    buffer.put_symbol(symbol.as_str(Stroke::Thick), x, y, Color::DarkGrey, Color::Reset);
+                }
+            }
+        }
     }
 
     pub fn close(&mut self, id: PaneId) {
@@ -92,66 +191,119 @@ impl Panes {
     }
 
     pub fn split(&mut self, layout: Layout) {
-        let id = self.next_pane_id;
-        let pane = self.focused().split(layout, id);
-        self.panes.insert(id, pane);
-        self.focused_id = id;
-        self.next_pane_id.advance();
+        let new_pane_id = self.next_pane_id.advance();
+        let new_pane_node_id = self.next_node_id.advance();
+        let new_parent_node_id = self.next_node_id.advance();
+
+        let focused = self.panes.get_mut(&self.focused_id).unwrap();
+        let node = self.nodes.get_mut(&focused.node_id).unwrap();
+
+
+        // Create a new "pane" node to hold our new split
+        let new_pane_node = Node {
+            id: new_pane_node_id,
+            parent_id: Some(node.id),
+            content: Content::Pane(new_pane_id),
+        };
+
+        // Create a new parent node for the new pane node
+        // and the original node that holds the focused pane
+        let new_parent = Node {
+            id: new_parent_node_id,
+            parent_id: node.parent_id,
+            content: Content::Container(
+                Container {
+                    layout,
+                    area: focused.area,
+                    children: vec![focused.node_id, new_pane_node.id]
+                }
+            ),
+        };
+
+        // remember to set the old focused node's parent
+        // to the newly created parent
+        node.parent_id = Some(new_parent.id);
+
+        let (old_area, new_area) = match layout {
+            Layout::Vertical => focused.area.split_vertically(1),
+            Layout::Horizontal => focused.area.split_horizontally(1),
+        };
+
+        focused.area = old_area;
+
+        let new_pane = Pane {
+            id: new_pane_id,
+            node_id: new_pane_node.id,
+            doc_id: focused.doc_id,
+            area: new_area,
+            view: ScrollView::default()
+        };
+
+
+        self.panes.insert(new_pane_id, new_pane);
+        self.nodes.insert(new_pane_node.id, new_pane_node);
+        self.nodes.insert(new_parent.id, new_parent);
+
+        self.focused_id = new_pane_id;
     }
 
-    pub fn focused(&mut self) -> &mut Pane {
-        self.panes.get_mut(&self.focused_id).expect("Cannot get focused pane")
+    pub fn switch(&mut self, direction: Direction) {
+        let focused = &self.panes[&self.focused_id];
+        match direction {
+            Direction::Up => {
+                for (id, pane) in self.panes.iter() {
+                    if pane.area.bottom() + 1 == focused.area.top() {
+                        self.focused_id = *id
+                    }
+                }
+            },
+            Direction::Down => {
+                for (id, pane) in self.panes.iter() {
+                    if focused.area.bottom() + 1 == pane.area.top() {
+                        self.focused_id = *id
+                    }
+                }
+            },
+            Direction::Left => {
+                for (id, pane) in self.panes.iter() {
+                    if pane.area.right() + 1 == focused.area.left() {
+                        self.focused_id = *id
+                    }
+                }
+            },
+            Direction::Right => {
+                for (id, pane) in self.panes.iter() {
+                    if focused.area.right() + 1 == pane.area.left() {
+                        self.focused_id = *id
+                    }
+                }
+            },
+        }
+        debug!("Focused: {}", self.focused_id.0);
     }
 }
 
+#[derive(Debug)]
 pub struct Pane {
     id: PaneId,
-    pub area: Rect,
+    node_id: NodeId,
     pub doc_id: DocumentId,
-    layout: Layout,
-    parent_id: Option<PaneId>,
+    pub area: Rect,
     pub view: ScrollView,
 }
 
 impl Pane {
     // This will always point to doc_id 1 (the default)
     // and have a default id of 1
+    // and have the root node (1)
     // Use split to create subsequent panes
-    fn new(area: Rect) -> Self {
+    fn root(area: Rect) -> Self {
         Self {
             id: PaneId::default(),
             area,
             doc_id: DocumentId::default(),
-            layout: Layout::Vertical,
-            parent_id: None,
             view: ScrollView::default(),
-        }
-    }
-
-    fn split(&mut self, layout: Layout, id: PaneId) -> Self {
-        // we have to subtract 1 for border, which we always take from the parent
-        let area = match layout {
-            Layout::Vertical => {
-                let new_area = self.area.clip_left((self.area.width + 1) / 2);
-                self.area = self.area.clip_right((self.area.width + 2) / 2);
-                new_area
-            },
-            Layout::Horizontal => {
-                let new_area = self.area.clip_top((self.area.height + 1) / 2);
-                self.area = self.area.clip_bottom((self.area.height + 2) / 2);
-                new_area
-            }
-        };
-
-        self.layout = layout;
-
-        Self {
-            id,
-            area,
-            doc_id: self.doc_id,
-            layout: self.layout,
-            parent_id: Some(self.id),
-            view: ScrollView::default(),
+            node_id: NodeId::default(),
         }
     }
 
@@ -162,21 +314,6 @@ impl Pane {
 
         self.render_document(document_area, buffer, doc);
         self.render_gutter(gutter_area, buffer, doc, mode, active);
-    }
-
-    fn render_border(&self, buffer: &mut Buffer) {
-        match self.layout {
-            Layout::Vertical => {
-                for y in self.area.top()..=self.area.bottom() {
-                    buffer.put_symbol(VERTICAL, self.area.right(), y, Color::DarkGrey, Color::Reset);
-                }
-            },
-            Layout::Horizontal => {
-                for x in self.area.left()..=self.area.right() {
-                    buffer.put_symbol(HORIZONTAL, x, self.area.bottom(), Color::DarkGrey, Color::Reset);
-                }
-            },
-        }
     }
 
     fn render_document(&mut self, area: Rect, buffer: &mut Buffer, doc: &Document) {

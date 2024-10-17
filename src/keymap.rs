@@ -205,10 +205,10 @@ fn normal_mode_keymap() -> Keymap {
         "T" => goto_until_character_backward,
         "F" => goto_character_backward,
 
-        //"left" => switch_pane_left,
-        //"right" => switch_pane_right,
-        //"up" => switch_pane_top,
-        //"down" => switch_pane_bottom,
+        "left" => switch_pane_left,
+        "right" => switch_pane_right,
+        "up" => switch_pane_top,
+        "down" => switch_pane_bottom,
 
         "^" | "home" | "C-h" => goto_line_first_non_whitespace,
         "$" | "end" | "C-l" => goto_eol,

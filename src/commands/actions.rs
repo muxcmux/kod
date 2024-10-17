@@ -2,7 +2,7 @@ use crop::Rope;
 use crossterm::event::KeyCode;
 use smartstring::SmartString;
 
-use crate::{document::Document, editor::Mode, graphemes::NEW_LINE, history::Transaction, panes::Pane};
+use crate::{document::Document, editor::Mode, graphemes::NEW_LINE, history::Transaction, panes::{Direction, Pane}};
 
 use super::{pallette::Pallette, Context};
 
@@ -415,4 +415,20 @@ pub fn delete_until_eol(ctx: &mut Context) {
 pub fn change_until_eol(ctx: &mut Context) {
     ctx.editor.mode = Mode::Insert;
     delete_until_eol(ctx);
+}
+
+pub fn switch_pane_top(ctx: &mut Context) {
+    ctx.editor.panes.switch(Direction::Up);
+}
+
+pub fn switch_pane_bottom(ctx: &mut Context) {
+    ctx.editor.panes.switch(Direction::Down);
+}
+
+pub fn switch_pane_left(ctx: &mut Context) {
+    ctx.editor.panes.switch(Direction::Left);
+}
+
+pub fn switch_pane_right(ctx: &mut Context) {
+    ctx.editor.panes.switch(Direction::Right);
 }

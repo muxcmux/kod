@@ -1,21 +1,25 @@
-use std::num::NonZeroUsize;
+use std::num::NonZeroIsize;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-pub struct NonZeroIncrementalId(NonZeroUsize);
+pub struct IncrementalId(NonZeroIsize);
 
-impl Default for NonZeroIncrementalId {
+impl Default for IncrementalId {
     fn default() -> Self {
-        Self(NonZeroUsize::new(1).unwrap())
+        Self(NonZeroIsize::new(1).unwrap())
     }
 }
 
-impl NonZeroIncrementalId {
+impl IncrementalId {
+    // return the next id
     fn next(&self) -> Self {
-        Self(NonZeroUsize::new(self.0.get() + 1).unwrap())
+        Self(NonZeroIsize::new(self.0.get() + 1).unwrap())
     }
 
-    fn advance(&mut self) {
-        self.0 = NonZeroUsize::new(self.0.get() + 1).unwrap();
+    // return the current id and advance it
+    fn advance(&mut self) -> Self {
+        let current = self.clone();
+        *self = self.next();
+        current
     }
 }
 

@@ -43,7 +43,7 @@ fn move_direction(from: (usize, usize), to: (&usize, &usize)) -> CursorMove {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct ScrollView {
     pub view_cursor_position: Position,
     pub text_cursor_x: usize,
