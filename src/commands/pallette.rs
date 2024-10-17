@@ -1,7 +1,7 @@
 use crate::{
     components::scroll_view::ScrollView, compositor::{Component, Context, EventResult}, editor::Mode, graphemes::NEW_LINE, ui::{
         border_box::BorderBox,
-        borders::{BorderType, Borders},
+        borders::{Stroke, Borders},
         buffer::Buffer,
         Position, Rect,
     }
@@ -77,7 +77,7 @@ impl Component for Pallette {
         let bbox = BorderBox::new(size)
             .title("Command")
             .borders(Borders::ALL)
-            .border_type(BorderType::Rounded);
+            .border_type(Stroke::Rounded);
 
         bbox.render(buffer).split_horizontally(2, buffer);
 

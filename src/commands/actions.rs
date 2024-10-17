@@ -2,7 +2,7 @@ use crop::Rope;
 use crossterm::event::KeyCode;
 use smartstring::SmartString;
 
-use crate::{document::Document, editor::Mode, graphemes::NEW_LINE, history::Transaction, panes::Pane};
+use crate::{document::Document, editor::Mode, graphemes::NEW_LINE, history::Transaction, panes::{Direction, Pane}};
 
 use super::{pallette::Pallette, Context};
 
@@ -54,7 +54,7 @@ macro_rules! doc_mut {
 #[macro_export]
 macro_rules! pane_mut {
     ($editor:expr, $id:expr) => {{
-        $editor.panes.panes.get_mut($id).expect("Couldn't get pane with id: {}", $id)
+        $editor.panes.panes.get_mut($id).expect(format!("Couldn't get pane with id: {:?}", $id))
     }};
     ($editor:expr) => {{
         $editor.panes.panes.get_mut(&$editor.panes.focused_id).expect("Couldn't get focused pane")
@@ -66,7 +66,7 @@ macro_rules! pane_mut {
 #[macro_export]
 macro_rules! pane {
     ($editor:expr, $id:expr) => {{
-        $editor.panes.panes.get($id).expect("Couldn't get pane with id: {}", $id)
+        $editor.panes.panes.get($id).expect(format!("Couldn't get pane with id: {:?}", $id))
     }};
     ($editor:expr) => {{
         $editor.panes.panes.get(&$editor.panes.focused_id).expect("Couldn't get focused pane")
@@ -415,4 +415,20 @@ pub fn delete_until_eol(ctx: &mut Context) {
 pub fn change_until_eol(ctx: &mut Context) {
     ctx.editor.mode = Mode::Insert;
     delete_until_eol(ctx);
+}
+
+pub fn switch_pane_top(ctx: &mut Context) {
+    ctx.editor.panes.switch(Direction::Up);
+}
+
+pub fn switch_pane_bottom(ctx: &mut Context) {
+    ctx.editor.panes.switch(Direction::Down);
+}
+
+pub fn switch_pane_left(ctx: &mut Context) {
+    ctx.editor.panes.switch(Direction::Left);
+}
+
+pub fn switch_pane_right(ctx: &mut Context) {
+    ctx.editor.panes.switch(Direction::Right);
 }

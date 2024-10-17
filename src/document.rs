@@ -1,9 +1,9 @@
 use std::{borrow::Cow, cell::Cell, path::PathBuf};
 
 use crop::Rope;
-use crate::{editor::Mode, history::{History, State, Transaction}, NonZeroIncrementalId};
+use crate::{editor::Mode, history::{History, State, Transaction}, IncrementalId};
 
-pub type DocumentId = NonZeroIncrementalId;
+pub type DocumentId = IncrementalId;
 
 pub struct Document {
     pub rope: Rope,

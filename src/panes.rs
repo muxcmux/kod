@@ -1,10 +1,12 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 use crossterm::style::Color;
+use log::debug;
 
-use crate::{components::scroll_view::ScrollView, document::{Document, DocumentId}, editor::Mode, ui::{buffer::Buffer, Rect}, NonZeroIncrementalId};
+use crate::{components::scroll_view::ScrollView, document::{Document, DocumentId}, editor::Mode, ui::{borders::{Stroke, Symbol}, buffer::Buffer, Rect}, IncrementalId};
 
-type PaneId = NonZeroIncrementalId;
+type PaneId = IncrementalId;
+type NodeId = IncrementalId;
 
 const GUTTER_LINE_NUM_PAD_LEFT: u16 = 2;
 const GUTTER_LINE_NUM_PAD_RIGHT: u16 = 1;
@@ -21,6 +23,7 @@ fn gutter_and_document_areas(size: Rect, doc: &Document) -> (Rect, Rect) {
         + GUTTER_LINE_NUM_PAD_RIGHT;
     let gutter_width = gutter_width.max(MIN_GUTTER_WIDTH);
 
+    // why do we clip bottom here?
     let gutter_area = size
         .clip_bottom(1)
         .clip_right(size.width.saturating_sub(gutter_width));
@@ -37,109 +40,228 @@ fn compute_offset(size: Rect) -> (usize, usize) {
     )
 }
 
+fn find_and_intersect_with(symbol: Symbol, x: u16, y: u16, existing: &mut HashMap<(u16, u16), Symbol>) {
+    let sym = match existing.get(&(x, y)) {
+        None => symbol,
+        Some(s) => {
+            let new = s.intersect(symbol);
+            debug!("Changing {:?} with {:?}", s, new);
+            new
+        }
+    };
 
-#[derive(Clone, Copy)]
+    existing.insert((x, y), sym);
+}
+
+pub enum Direction {
+    Up,
+    Down,
+    Left,
+    Right,
+}
+
+#[derive(Clone, Copy, Debug)]
 pub enum Layout {
     Vertical,
     Horizontal,
 }
 
+#[derive(Debug)]
 pub struct Panes {
-    root_id: PaneId,
-    area: Rect,
     pub focused_id: PaneId,
-    next_pane_id: PaneId,
     pub panes: BTreeMap<PaneId, Pane>,
+    area: Rect,
+    next_pane_id: PaneId,
+    next_node_id: NodeId,
+    nodes: BTreeMap<NodeId, Node>,
+}
+
+#[derive(Debug)]
+struct Node {
+    id: NodeId,
+    parent_id: Option<NodeId>,
+    content: Content,
+}
+
+impl Node {
+    fn root() -> Self {
+        Self { id: NodeId::default(), parent_id: None, content: Content::Pane(PaneId::default()) }
+    }
+}
+
+#[derive(Debug)]
+enum Content {
+    Pane(PaneId),
+    Container(Container)
+}
+
+#[derive(Debug)]
+struct Container {
+    layout: Layout,
+    area: Rect,
+    children: Vec<NodeId>
 }
 
 impl Panes {
     pub fn new(area: Rect) -> Self {
-        // remove 1 row for status line
-        let area = area.clip_bottom(1);
-
-        let pane_id = PaneId::default();
-        let pane = Pane::new(area);
         let mut panes = BTreeMap::new();
-        panes.insert(pane_id, pane);
+        let mut nodes = BTreeMap::new();
+        let pane = Pane::root(area);
+        let node = Node::root();
+        let focused_id = pane.id;
+        let next_pane_id = pane.id.next();
+        let next_node_id = node.id.next();
+        panes.insert(pane.id, pane);
+        nodes.insert(node.id, node);
 
         Self {
             area,
             panes,
-            next_pane_id: pane_id.next(),
-            root_id: pane_id,
-            focused_id: pane_id,
+            nodes,
+            next_pane_id,
+            next_node_id,
+            focused_id,
         }
     }
 
-    pub fn resize(&mut self, _area: Rect) {
-        // recalc size for each pane
+    pub fn resize(&mut self, new_size: Rect) {
+        // recalc size for each pane, only if size has actually changed
+        if new_size != self.area {
+            // do the recalc...
+        }
+    }
+
+    pub fn draw_borders(&mut self, buffer: &mut Buffer) {
+        let mut symbols: HashMap<(u16, u16), Symbol> = HashMap::new();
+
+        for (_, pane) in self.panes.iter() {
+            pane.border_symbols(&mut symbols, self.area);
+        }
+
+        for ((x, y), symbol) in symbols {
+            buffer.put_symbol(symbol.as_str(Stroke::Thick), x, y, Color::DarkGrey, Color::Reset);
+        }
+    }
+
+    pub fn close(&mut self, id: PaneId) {
+        let pane = self.panes.get(&id).expect("Cannot get pane to close");
+
     }
 
     pub fn split(&mut self, layout: Layout) {
-        let id = self.next_pane_id;
-        let pane = self.focused().split(layout, id);
-        self.panes.insert(id, pane);
-        self.focused_id = id;
-        self.next_pane_id.advance();
+        let new_pane_id = self.next_pane_id.advance();
+        let new_pane_node_id = self.next_node_id.advance();
+        let new_parent_node_id = self.next_node_id.advance();
+
+        let focused = self.panes.get_mut(&self.focused_id).unwrap();
+        let node = self.nodes.get_mut(&focused.node_id).unwrap();
+
+
+        // Create a new "pane" node to hold our new split
+        let new_pane_node = Node {
+            id: new_pane_node_id,
+            parent_id: Some(node.id),
+            content: Content::Pane(new_pane_id),
+        };
+
+        // Create a new parent node for the new pane node
+        // and the original node that holds the focused pane
+        let new_parent = Node {
+            id: new_parent_node_id,
+            parent_id: node.parent_id,
+            content: Content::Container(
+                Container {
+                    layout,
+                    area: focused.area,
+                    children: vec![focused.node_id, new_pane_node.id]
+                }
+            ),
+        };
+
+        // remember to set the old focused node's parent
+        // to the newly created parent
+        node.parent_id = Some(new_parent.id);
+
+        let (old_area, new_area) = match layout {
+            Layout::Vertical => focused.area.split_vertically(1),
+            Layout::Horizontal => focused.area.split_horizontally(1),
+        };
+
+        focused.area = old_area;
+
+        let new_pane = Pane {
+            id: new_pane_id,
+            node_id: new_pane_node.id,
+            doc_id: focused.doc_id,
+            area: new_area,
+            view: ScrollView::default()
+        };
+
+
+        self.panes.insert(new_pane_id, new_pane);
+        self.nodes.insert(new_pane_node.id, new_pane_node);
+        self.nodes.insert(new_parent.id, new_parent);
+
+        self.focused_id = new_pane_id;
     }
 
-    pub fn focused(&mut self) -> &mut Pane {
-        self.panes.get_mut(&self.focused_id).expect("Cannot get focused pane")
+    pub fn switch(&mut self, direction: Direction) {
+        let focused = &self.panes[&self.focused_id];
+        match direction {
+            Direction::Up => {
+                for (id, pane) in self.panes.iter() {
+                    if pane.area.bottom() + 1 == focused.area.top() {
+                        self.focused_id = *id
+                    }
+                }
+            },
+            Direction::Down => {
+                for (id, pane) in self.panes.iter() {
+                    if focused.area.bottom() + 1 == pane.area.top() {
+                        self.focused_id = *id
+                    }
+                }
+            },
+            Direction::Left => {
+                for (id, pane) in self.panes.iter() {
+                    if pane.area.right() + 1 == focused.area.left() {
+                        self.focused_id = *id
+                    }
+                }
+            },
+            Direction::Right => {
+                for (id, pane) in self.panes.iter() {
+                    if focused.area.right() + 1 == pane.area.left() {
+                        self.focused_id = *id
+                    }
+                }
+            },
+        }
+        debug!("Focused: {}", self.focused_id.0);
     }
 }
 
+#[derive(Debug)]
 pub struct Pane {
     id: PaneId,
-    pub area: Rect,
+    node_id: NodeId,
     pub doc_id: DocumentId,
-    layout: Layout,
-    parent_id: Option<PaneId>,
-    child_id: Option<PaneId>,
+    pub area: Rect,
     pub view: ScrollView,
 }
 
 impl Pane {
     // This will always point to doc_id 1 (the default)
     // and have a default id of 1
+    // and have the root node (1)
     // Use split to create subsequent panes
-    fn new(area: Rect) -> Self {
+    fn root(area: Rect) -> Self {
         Self {
             id: PaneId::default(),
             area,
             doc_id: DocumentId::default(),
-            layout: Layout::Vertical,
-            parent_id: None,
-            child_id: None,
             view: ScrollView::default(),
-        }
-    }
-
-    fn split(&mut self, layout: Layout, id: PaneId) -> Self {
-        // we have to subtract 1 for border, which we always take from the parent
-        let area = match layout {
-            Layout::Vertical => {
-                let new_area = self.area.clip_left((self.area.width + 1) / 2);
-                self.area = self.area.clip_right((self.area.width + 2) / 2);
-                new_area
-            },
-            Layout::Horizontal => {
-                let new_area = self.area.clip_top((self.area.height + 1) / 2);
-                self.area = self.area.clip_bottom((self.area.height + 2) / 2);
-                new_area
-            }
-        };
-
-        self.layout = layout;
-        self.child_id = Some(id);
-
-        Self {
-            id,
-            area,
-            doc_id: self.doc_id,
-            layout: self.layout,
-            parent_id: Some(self.id),
-            child_id: None,
-            view: ScrollView::default(),
+            node_id: NodeId::default(),
         }
     }
 
@@ -218,6 +340,132 @@ impl Pane {
             } else {
                 absolute(line_no, y + area.top(), area, buffer, &self.view);
             }
+        }
+    }
+
+    fn border_symbols(&self, existing: &mut HashMap<(u16, u16), Symbol>, area: Rect) {
+        if self.area.left() > area.left() {
+            if self.area.top() > area.top() {
+                self.top_left_border_symbol(existing, area);
+            }
+            if self.area.right() < area.right() {
+                self.top_right_border_symbol(existing, area);
+            }
+            self.left_border_symbols(existing, area);
+        }
+
+        if self.area.bottom() < area.bottom() {
+            if self.area.left() > area.left() {
+                self.bottom_left_border_symbol(existing, area);
+            }
+            if self.area.right() < area.right() {
+                self.bottom_right_border_symbol(existing, area);
+            }
+            self.bottom_border_symbols(existing, area)
+        }
+
+        if self.area.top() > area.top() {
+            self.top_border_symbols(existing, area)
+        }
+
+        if self.area.right() < area.right() {
+            self.right_border_symbols(existing, area)
+        }
+    }
+
+    fn top_left_border_symbol(&self, existing: &mut HashMap<(u16, u16), Symbol>, area: Rect) {
+        debug_assert!(self.area.left() > area.left());
+        debug_assert!(self.area.top() > area.top());
+
+        find_and_intersect_with(
+            Symbol::TopLeft,
+            self.area.left() - 1,
+            self.area.top() - 1,
+            existing
+        )
+    }
+
+    fn top_right_border_symbol(&self, existing: &mut HashMap<(u16, u16), Symbol>, area: Rect) {
+        debug_assert!(self.area.top() > area.top());
+        debug_assert!(self.area.right() < area.right());
+
+        find_and_intersect_with(
+            Symbol::TopRight,
+            self.area.right(),
+            self.area.top() - 1,
+            existing
+        )
+    }
+
+    fn bottom_left_border_symbol(&self, existing: &mut HashMap<(u16, u16), Symbol>, area: Rect) {
+        debug_assert!(self.area.bottom() < area.bottom());
+        debug_assert!(self.area.left() > area.left());
+
+        find_and_intersect_with(
+            Symbol::BottomLeft,
+            self.area.left() - 1,
+            self.area.bottom(),
+            existing
+        )
+    }
+
+    fn bottom_right_border_symbol(&self, existing: &mut HashMap<(u16, u16), Symbol>, area: Rect) {
+        debug_assert!(self.area.bottom() < area.bottom());
+        debug_assert!(self.area.right() < area.right());
+
+        find_and_intersect_with(
+            Symbol::BottomRight,
+            self.area.right(),
+            self.area.bottom(),
+            existing
+        )
+    }
+
+    fn left_border_symbols(&self, existing: &mut HashMap<(u16, u16), Symbol>, area: Rect) {
+        debug_assert!(self.area.left() > area.left());
+
+        let from = self.area.top();
+        let to = self.area.bottom();
+        let x = self.area.left() - 1;
+
+        for y in from..to {
+            find_and_intersect_with(Symbol::Vertical, x, y, existing)
+        }
+    }
+
+    fn right_border_symbols(&self, existing: &mut HashMap<(u16, u16), Symbol>, area: Rect) {
+        debug_assert!(self.area.right() < area.right());
+
+        let from = self.area.top();
+        let to = self.area.bottom();
+        let x = self.area.right();
+
+        for y in from..to {
+            find_and_intersect_with(Symbol::Vertical, x, y, existing)
+        }
+    }
+
+    fn top_border_symbols(&self, existing: &mut HashMap<(u16, u16), Symbol>, area: Rect) {
+        debug_assert!(self.area.top() > area.top());
+
+        let from = self.area.left();
+        let to = self.area.right();
+        let y = self.area.top() - 1;
+
+        for x in from..to {
+            find_and_intersect_with(Symbol::Horizontal, x, y, existing)
+        }
+    }
+
+    fn bottom_border_symbols(&self, existing: &mut HashMap<(u16, u16), Symbol>, area: Rect) {
+        debug_assert!(self.area.bottom() < area.bottom());
+
+        let from = self.area.left();
+        let to = self.area.right();
+        let y = self.area.bottom();
+
+        for x in from..to {
+            find_and_intersect_with(Symbol::Horizontal, x, y, existing)
         }
     }
 }

@@ -85,6 +85,27 @@ impl Rect {
     pub fn bottom(&self) -> u16 {
         self.position.y + self.height
     }
+
+    /// Splits the rect vertically in two
+    /// with space between the two parts
+    /// returns (top_area, bottom_area)
+    pub fn split_vertically(&self, space: u16) -> (Self, Self) {
+        (
+            self.clip_bottom((self.height + space + 1) / 2),
+            self.clip_top((self.height + space) / 2)
+        )
+    }
+
+
+    /// Splits the rect horizontally in two
+    /// with space between the two parts
+    /// returns (left_area, right_area)
+    pub fn split_horizontally(&self, space: u16) -> (Self, Self) {
+        (
+            self.clip_right((self.width + space + 1) / 2),
+            self.clip_left((self.width + space) / 2)
+        )
+    }
 }
 
 impl From<(u16, u16)> for Rect {

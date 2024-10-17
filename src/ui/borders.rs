@@ -1,3 +1,6 @@
+use core::fmt;
+use std::fmt::Write;
+
 use bitflags::bitflags;
 
 pub const VERTICAL: &str = "│";
@@ -125,7 +128,7 @@ bitflags! {
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub enum BorderType {
+pub enum Stroke {
     #[default]
     Plain,
     Rounded,
@@ -133,7 +136,7 @@ pub enum BorderType {
     Thick,
 }
 
-impl BorderType {
+impl Stroke {
     pub fn line_symbols(&self) -> Set {
         match self {
             Self::Plain => NORMAL,
@@ -141,5 +144,183 @@ impl BorderType {
             Self::Double => DOUBLE,
             Self::Thick => THICK,
         }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Symbol {
+    Vertical,
+    Horizontal,
+    TopRight,
+    TopLeft,
+    BottomRight,
+    BottomLeft,
+    VerticalLeft,
+    VerticalRight,
+    HorizontalDown,
+    HorizontalUp,
+    Cross,
+}
+
+impl Symbol {
+    pub fn as_str(&self, stroke: Stroke) -> &str {
+        let symbols = stroke.line_symbols();
+        match self {
+            Self::Vertical       => symbols.vertical,
+            Self::Horizontal     => symbols.horizontal,
+            Self::TopRight       => symbols.top_right,
+            Self::TopLeft        => symbols.top_left,
+            Self::BottomRight    => symbols.bottom_right,
+            Self::BottomLeft     => symbols.bottom_left,
+            Self::VerticalLeft   => symbols.vertical_left,
+            Self::VerticalRight  => symbols.vertical_right,
+            Self::HorizontalDown => symbols.horizontal_down,
+            Self::HorizontalUp   => symbols.horizontal_up,
+            Self::Cross          => symbols.cross,
+        }
+    }
+
+    pub fn intersect(&self, other: Self) -> Self {
+        use Symbol::*;
+
+        match self {
+            Vertical => match other {
+                Vertical       => Vertical,
+                Horizontal     => Cross,
+                TopRight       => VerticalLeft,
+                TopLeft        => VerticalRight,
+                BottomRight    => VerticalLeft,
+                BottomLeft     => VerticalRight,
+                VerticalLeft   => VerticalLeft,
+                VerticalRight  => VerticalRight,
+                HorizontalDown => Cross,
+                HorizontalUp   => Cross,
+                Cross          => Cross,
+            },
+            Horizontal => match other {
+                Vertical       => Cross,
+                Horizontal     => Horizontal,
+                TopRight       => HorizontalDown,
+                TopLeft        => HorizontalDown,
+                BottomRight    => HorizontalUp,
+                BottomLeft     => HorizontalUp,
+                VerticalLeft   => Cross,
+                VerticalRight  => Cross,
+                HorizontalDown => HorizontalDown,
+                HorizontalUp   => HorizontalUp,
+                Cross          => Cross,
+            },
+            TopRight => match other {
+                Vertical       => VerticalLeft,
+                Horizontal     => HorizontalDown,
+                TopRight       => TopRight,
+                TopLeft        => HorizontalDown,
+                BottomRight    => VerticalLeft,
+                BottomLeft     => Cross,
+                VerticalLeft   => VerticalLeft,
+                VerticalRight  => Cross,
+                HorizontalDown => HorizontalDown,
+                HorizontalUp   => Cross,
+                Cross          => Cross,
+            },
+            TopLeft => match other {
+                Vertical       => VerticalRight,
+                Horizontal     => HorizontalDown,
+                TopRight       => HorizontalDown,
+                TopLeft        => TopLeft,
+                BottomRight    => Cross,
+                BottomLeft     => VerticalRight,
+                VerticalLeft   => Cross,
+                VerticalRight  => VerticalRight,
+                HorizontalDown => HorizontalDown,
+                HorizontalUp   => Cross,
+                Cross          => Cross,
+            },
+            BottomRight => match other {
+                Vertical       => VerticalLeft,
+                Horizontal     => HorizontalUp,
+                TopRight       => VerticalLeft,
+                TopLeft        => Cross,
+                BottomRight    => BottomRight,
+                BottomLeft     => HorizontalUp,
+                VerticalLeft   => VerticalLeft,
+                VerticalRight  => Cross,
+                HorizontalDown => Cross,
+                HorizontalUp   => HorizontalUp,
+                Cross          => Cross,
+            },
+            BottomLeft => match other {
+                Vertical       => VerticalRight,
+                Horizontal     => HorizontalUp,
+                TopRight       => Cross,
+                TopLeft        => VerticalRight,
+                BottomRight    => HorizontalUp,
+                BottomLeft     => BottomLeft,
+                VerticalLeft   => Cross,
+                VerticalRight  => VerticalRight,
+                HorizontalDown => Cross,
+                HorizontalUp   => HorizontalUp,
+                Cross          => Cross,
+            },
+            VerticalLeft => match other {
+                Vertical       => VerticalLeft,
+                Horizontal     => Cross,
+                TopRight       => VerticalLeft,
+                TopLeft        => Cross,
+                BottomRight    => VerticalLeft,
+                BottomLeft     => Cross,
+                VerticalLeft   => VerticalLeft,
+                VerticalRight  => Cross,
+                HorizontalDown => Cross,
+                HorizontalUp   => Cross,
+                Cross          => Cross,
+            },
+            VerticalRight => match other {
+                Vertical       => VerticalRight,
+                Horizontal     => Cross,
+                TopRight       => Cross,
+                TopLeft        => VerticalRight,
+                BottomRight    => Cross,
+                BottomLeft     => VerticalRight,
+                VerticalLeft   => Cross,
+                VerticalRight  => VerticalRight,
+                HorizontalDown => Cross,
+                HorizontalUp   => Cross,
+                Cross          => Cross,
+            },
+            HorizontalDown => match other {
+                Vertical       => Cross,
+                Horizontal     => HorizontalDown,
+                TopRight       => HorizontalDown,
+                TopLeft        => HorizontalDown,
+                BottomRight    => Cross,
+                BottomLeft     => Cross,
+                VerticalLeft   => Cross,
+                VerticalRight  => Cross,
+                HorizontalDown => HorizontalDown,
+                HorizontalUp   => Cross,
+                Cross          => Cross,
+            },
+            HorizontalUp => match other {
+                Vertical       => Cross,
+                Horizontal     => HorizontalUp,
+                TopRight       => Cross,
+                TopLeft        => Cross,
+                BottomRight    => HorizontalUp,
+                BottomLeft     => HorizontalUp,
+                VerticalLeft   => Cross,
+                VerticalRight  => Cross,
+                HorizontalDown => Cross,
+                HorizontalUp   => HorizontalUp,
+                Cross          => Cross,
+            },
+            Cross => Cross
+        }
+    }
+}
+
+impl fmt::Debug for Symbol {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str(Stroke::Thick))
     }
 }
