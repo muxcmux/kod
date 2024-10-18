@@ -1,6 +1,6 @@
-use std::num::NonZeroIsize;
+use std::{fmt::{Debug, Write}, num::NonZeroIsize};
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct IncrementalId(NonZeroIsize);
 
 impl Default for IncrementalId {
@@ -17,9 +17,15 @@ impl IncrementalId {
 
     // return the current id and advance it
     fn advance(&mut self) -> Self {
-        let current = self.clone();
+        let current = *self;
         *self = self.next();
         current
+    }
+}
+
+impl Debug for IncrementalId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 

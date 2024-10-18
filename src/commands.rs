@@ -52,11 +52,10 @@ pub fn quit(ctx: &mut Context) {
             })
         );
         ctx.push_component(Box::new(dialog));
-    //} else if ctx.editor.panes.panes.len() == 1 {
-        //ctx.editor.quit = true;
-    } else {
+    } else if ctx.editor.panes.panes.len() == 1 {
         ctx.editor.quit = true;
-        //ctx.editor.panes.close(ctx.editor.panes.focused_id);
+    } else {
+        ctx.editor.panes.close(ctx.editor.panes.focused_id);
     }
 }
 

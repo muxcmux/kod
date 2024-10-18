@@ -1,5 +1,4 @@
 use core::fmt;
-use std::fmt::Write;
 
 use bitflags::bitflags;
 
