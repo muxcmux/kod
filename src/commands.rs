@@ -52,8 +52,8 @@ pub fn quit(ctx: &mut Context) {
             })
         );
         ctx.push_component(Box::new(dialog));
-    } else if ctx.editor.panes.panes.len() == 1 {
-        ctx.editor.quit = true;
+    //} else if ctx.editor.panes.panes.len() == 1 {
+        //ctx.editor.quit = true;
     } else {
         ctx.editor.quit = true;
         //ctx.editor.panes.close(ctx.editor.panes.focused_id);
@@ -74,9 +74,9 @@ pub fn split_vertically(ctx: &mut Context) {
 }
 
 pub const COMMANDS: &[Command] = &[
-    Command { name: "write", aliases: &["save", "s", "write", "w"], desc: "Save file to disc", func: save },
+    Command { name: "write", aliases: &["write", "w"], desc: "Save file to disc", func: save },
     Command { name: "quit", aliases: &["q", "Q", "exit"], desc: "Exit kod", func: quit },
     Command { name: "write-quit", aliases: &["wq", "x"], desc: "Save file to disc and exit", func: write_quit },
-    Command { name: "split", aliases: &[], desc: "Split pane horizontally", func: split_horizontally },
+    Command { name: "split", aliases: &["s"], desc: "Split pane horizontally", func: split_horizontally },
     Command { name: "vsplit", aliases: &["vs"], desc: "Split pane vertically", func: split_vertically },
 ];
