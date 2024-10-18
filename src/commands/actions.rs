@@ -31,7 +31,7 @@ macro_rules! current {
 #[macro_export]
 macro_rules! current_ref {
     ($editor:expr) => {{
-        let pane = $editor.panes.panes.get(&$editor.panes.focused_id).expect("Can't get focused pane");
+        let pane = $editor.panes.panes.get(&$editor.panes.focus).expect("Can't get focused pane");
         let doc = &$editor.documents[&pane.doc_id];
         (pane, doc)
     }};
@@ -57,7 +57,7 @@ macro_rules! pane_mut {
         $editor.panes.panes.get_mut($id).expect(format!("Couldn't get pane with id: {:?}", $id))
     }};
     ($editor:expr) => {{
-        $editor.panes.panes.get_mut(&$editor.panes.focused_id).expect("Couldn't get focused pane")
+        $editor.panes.panes.get_mut(&$editor.panes.focus).expect("Couldn't get focused pane")
     }};
 }
 
@@ -69,7 +69,7 @@ macro_rules! pane {
         $editor.panes.panes.get($id).expect(format!("Couldn't get pane with id: {:?}", $id))
     }};
     ($editor:expr) => {{
-        $editor.panes.panes.get(&$editor.panes.focused_id).expect("Couldn't get focused pane")
+        $editor.panes.panes.get(&$editor.panes.focus).expect("Couldn't get focused pane")
     }};
 }
 

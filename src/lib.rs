@@ -1,4 +1,4 @@
-use std::{fmt::{Debug, Write}, num::NonZeroIsize};
+use std::{fmt::Debug, num::NonZeroIsize};
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct IncrementalId(NonZeroIsize);

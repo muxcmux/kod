@@ -1,7 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
 
 use crossterm::style::Color;
-use log::debug;
 
 use crate::{components::scroll_view::ScrollView, document::{Document, DocumentId}, editor::Mode, ui::{borders::{Stroke, Symbol}, buffer::Buffer, Rect}, IncrementalId};
 
@@ -56,7 +55,7 @@ pub enum Direction {
     Right,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Layout {
     Vertical,
     Horizontal,
@@ -64,12 +63,12 @@ pub enum Layout {
 
 #[derive(Debug)]
 pub struct Panes {
-    pub focused_id: PaneId,
+    pub focus: PaneId,
     pub panes: BTreeMap<PaneId, Pane>,
     area: Rect,
+    root: Node,
     next_pane_id: PaneId,
     next_node_id: NodeId,
-    nodes: BTreeMap<NodeId, Node>,
 }
 
 #[derive(Debug)]
@@ -77,12 +76,6 @@ struct Node {
     id: NodeId,
     parent_id: Option<NodeId>,
     content: Content,
-}
-
-impl Node {
-    fn root() -> Self {
-        Self { id: NodeId::default(), parent_id: None, content: Content::Pane(PaneId::default()) }
-    }
 }
 
 #[derive(Debug)]
@@ -95,35 +88,141 @@ enum Content {
 struct Container {
     layout: Layout,
     area: Rect,
-    children: Vec<NodeId>
+    children: Vec<Node>,
+}
+
+impl Node {
+    fn pane_id(&self) -> PaneId {
+        match self.content {
+            Content::Pane(pid) => pid,
+            _ => unreachable!(),
+        }
+    }
+
+    fn layout(&self) -> Layout {
+        match &self.content {
+            Content::Container(cn) => cn.layout,
+            _ => unreachable!(),
+        }
+    }
+
+    fn area(&self) -> Rect {
+        match &self.content {
+            Content::Container(cn) => cn.area,
+            _ => unreachable!()
+        }
+    }
+
+    // panics when given a PaneId that doesn't exist
+    // or no node points to
+    fn find_by_pane_id(&mut self, pane_id: PaneId) -> &mut Self {
+        let mut stack = vec![self];
+
+        while let Some(node) = stack.pop() {
+            match node.content {
+                Content::Pane(pid) => {
+                    if pid == pane_id { return node }
+                },
+                Content::Container(ref mut cn) => {
+                    for child in cn.children.iter_mut() {
+                        stack.push(child);
+                    }
+                },
+            }
+        }
+
+        panic!("No node found that points to pane_id: {:?}", pane_id);
+    }
+
+    // panics when given a NodeId that doesn't exist
+    fn find(&mut self, id: NodeId) -> &mut Self {
+        let mut stack = vec![self];
+
+        while let Some(node) = stack.pop() {
+            if id == node.id {
+                return node
+            } else if let Content::Container(ref mut cn) = node.content {
+                for child in cn.children.iter_mut() {
+                    stack.push(child);
+                }
+            }
+        }
+
+        panic!("No node found with id: {:?}", id);
+    }
+
+    fn convert_to_container(&mut self, new_node_id: NodeId, layout: Layout, area: Rect) {
+        self.content = Content::Container(Container {
+            layout,
+            area,
+            children: vec![Node { id: new_node_id, parent_id: Some(self.id), content: Content::Pane(self.pane_id()) }]
+        });
+    }
+
+    fn insert_pane_child_at(&mut self, id: NodeId, pane_id: PaneId, position: usize) {
+        debug_assert!(matches!(self.content, Content::Container(_)));
+
+        let child = Node {
+            id,
+            parent_id: Some(self.id),
+            content: Content::Pane(pane_id)
+        };
+
+        match self.content {
+            Content::Pane(_) => unreachable!(),
+            Content::Container(ref mut cn) => cn.children.insert(position, child),
+        }
+    }
+
+    fn child_position_by_pane_id(&self, pane_id: PaneId) -> usize {
+        match &self.content {
+            Content::Pane(_) => unreachable!(),
+            Content::Container(c) => {
+                let mut pos = 0;
+                for child in c.children.iter() {
+                    if let Content::Pane(pid) = child.content {
+                        if pid == pane_id { break }
+                    }
+                    pos += 1;
+                }
+                pos
+            },
+        }
+    }
+
+    fn child_position_by_node_id(&self, node_id: NodeId) -> usize {
+        match &self.content {
+            Content::Pane(_) => unreachable!(),
+            Content::Container(c) => {
+                let mut pos = 0;
+                for child in c.children.iter() {
+                    if child.id == node_id { break }
+                    pos += 1;
+                }
+                pos
+            },
+        }
+    }
 }
 
 impl Panes {
     pub fn new(area: Rect) -> Self {
         let mut panes = BTreeMap::new();
-        let mut nodes = BTreeMap::new();
-        let pane = Pane::root(area);
-        let node = Node::root();
-        let focused_id = pane.id;
-        let next_pane_id = pane.id.next();
-        let next_node_id = node.id.next();
-        panes.insert(pane.id, pane);
-        nodes.insert(node.id, node);
+        let focus = PaneId::default();
+        let pane = Pane::new(area);
+        let root_id = NodeId::default();
+        let root = Node {id: root_id, parent_id: None, content: Content::Pane(focus) };
+        panes.insert(focus, pane);
 
-        Self {
-            area,
-            panes,
-            nodes,
-            next_pane_id,
-            next_node_id,
-            focused_id,
-        }
+        Self { area, panes, focus, root, next_pane_id: focus.next(), next_node_id: root_id.next() }
     }
 
     pub fn resize(&mut self, new_size: Rect) {
         // recalc size for each pane, only if size has actually changed
         if new_size != self.area {
-            // do the recalc...
+            self.area = new_size;
+            // For now we just resize children equally
+            self.resize_node_recursively(self.root.id, new_size);
         }
     }
 
@@ -140,76 +239,198 @@ impl Panes {
     }
 
     pub fn close(&mut self, id: PaneId) {
-        let pane = self.panes.get(&id).expect("Cannot get pane to close");
+        debug_assert!(self.panes.len() > 1);
 
+        let node = self.root.find_by_pane_id(id);
+        _ = self.panes.remove(&self.focus);
+        let parent_id = node.parent_id.unwrap();
+        let parent = self.root.find(parent_id);
+        let position = parent.child_position_by_pane_id(self.focus);
+
+        match parent.content {
+            Content::Pane(_) => unreachable!(),
+            Content::Container(ref mut parent_container) => {
+                parent_container.children.remove(position);
+
+                if parent_container.children.len() == 1 {
+                    let mut only_child = parent_container.children.remove(0);
+                    only_child.parent_id = parent.parent_id;
+                    // focus on:
+                    // - the only child if it's a pane node
+                    // - the first child of only_child that is a pane node
+                    let mut focus = vec![&only_child];
+                    while let Some(n) = focus.pop() {
+                        match &n.content {
+                            Content::Pane(pid) => self.focus = *pid,
+                            Content::Container(cn) => {
+                                for c in cn.children.iter().rev() {
+                                    focus.push(c);
+                                }
+                            },
+                        }
+                    }
+                    // Make the only child's new parent the grandparent.
+                    if let Some(grandparent_id) = only_child.parent_id {
+                        let grandparent = self.root.find(grandparent_id);
+                        let parent_position = grandparent.child_position_by_node_id(parent_id);
+                        // if the grandparent's layout is the same as the only child's layout
+                        // then we compact the tree even further by eliminating the only child
+                        // and only leaving its children
+                        let same_layout = matches!(only_child.content, Content::Container(_)) && grandparent.layout() == only_child.layout();
+                        if same_layout {
+                            match (only_child.content, &mut grandparent.content) {
+                                (Content::Container(only_child_container), Content::Container(ref mut grandparent_container)) => {
+                                    // drop the former parent at the end of the scope
+                                    _ = grandparent_container.children.remove(parent_position);
+                                    for (i, mut c) in only_child_container.children.into_iter().enumerate() {
+                                        c.parent_id = Some(grandparent.id);
+                                        grandparent_container.children.insert(parent_position + i, c);
+                                    }
+                                },
+                                _ => unreachable!(),
+                            }
+                        } else {
+                            // When the layouts of the grandparent and the only child don't match
+                            // we just make the only child a child of the grandparent
+                            match grandparent.content {
+                                Content::Pane(_) => unreachable!(),
+                                Content::Container(ref mut grandparent_container) => {
+                                    // Swap the parent position in the gransparent's children with the only child
+                                    // At the end of this scope, the former parent will be dropped
+                                    _ = std::mem::replace(&mut grandparent_container.children[parent_position], only_child);
+                                },
+                            }
+                        }
+                        // Finally resize strarting from the grandparent down
+                        let area = grandparent.area();
+                        self.resize_node_recursively(grandparent_id, area);
+                    } else {
+                        // When there is no grandparent, this means we've hit the root
+                        // so we just make the only child the new root by swapping the
+                        // parent with the only child
+                        let cid = only_child.id;
+                        _ = std::mem::replace(parent, only_child);
+                        self.resize_node_recursively(cid, self.area);
+                    }
+                } else {
+                    // focus on:
+                    //  - left/up neighbour
+                    //  - any other pane neighbour
+                    //  - the first pane child
+                    let mut focus = vec![];
+                    for (i, c) in parent_container.children.iter().rev().enumerate() {
+                        if i != position.saturating_sub(1) {
+                            focus.push(c);
+                        }
+                    }
+                    focus.push(&parent_container.children[position.saturating_sub(1)]);
+
+                    while let Some(node) = focus.pop() {
+                        match &node.content {
+                            Content::Pane(pid) => self.focus = *pid,
+                            Content::Container(cn) => {
+                                for c in cn.children.iter() {
+                                    focus.push(c);
+                                }
+                            },
+                        }
+                    }
+                    let area = parent_container.area;
+                    self.resize_node_recursively(parent_id, area);
+                }
+            },
+        }
+    }
+
+    fn resize_node_recursively(&mut self, node_id: NodeId, area: Rect) {
+        let node = self.root.find(node_id);
+        let mut to_resize = vec![(node, area)];
+
+        while let Some((node, area)) = to_resize.pop() {
+            match node.content {
+                Content::Container(ref mut c) => {
+                    c.area = area;
+                    let mut areas = match c.layout {
+                        Layout::Vertical => area.split_vertically(c.children.len() as u16),
+                        Layout::Horizontal => area.split_horizontally(c.children.len() as u16),
+                    };
+                    for child in c.children.iter_mut().rev() {
+                        to_resize.push((child, areas.pop().unwrap()));
+                    }
+                },
+                Content::Pane(pid) => { self.panes.get_mut(&pid).unwrap().area = area },
+            }
+        }
+    }
+
+    fn split_pane(&mut self, layout: Layout) {
+        let focused = self.panes.get_mut(&self.focus).unwrap();
+        let node = self.root.find_by_pane_id(self.focus);
+
+        node.convert_to_container(self.next_node_id.advance(), layout, focused.area);
+        node.insert_pane_child_at(self.next_node_id.advance(), self.next_pane_id, 1);
+
+        self.focus = self.next_pane_id;
+
+        let doc_id = focused.doc_id;
+        self.panes.insert(self.next_pane_id.advance(), Pane {
+            doc_id,
+            area: Rect::default(),
+            view: ScrollView::default()
+        });
+
+        let area = node.area();
+        let nid = node.id;
+        self.resize_node_recursively(nid, area);
     }
 
     pub fn split(&mut self, layout: Layout) {
-        let new_pane_id = self.next_pane_id.advance();
-        let new_pane_node_id = self.next_node_id.advance();
-        let new_parent_node_id = self.next_node_id.advance();
+        let node = self.root.find_by_pane_id(self.focus);
 
-        let focused = self.panes.get_mut(&self.focused_id).unwrap();
-        let node = self.nodes.get_mut(&focused.node_id).unwrap();
+        // if the node is root or its parent is a different layout
+        // Then we convert the current node to a container and split that
+        // Otherwise, we add a new child to the parent and then
+        // resize all the children
+        match node.parent_id {
+            Some(pid) => {
+                let parent = self.root.find(pid);
+                if parent.layout() == layout {
+                    let focused_pane = self.panes.get(&self.focus).unwrap();
 
+                    parent.insert_pane_child_at(
+                        self.next_node_id.advance(),
+                        self.next_pane_id,
+                        parent.child_position_by_pane_id(self.focus) + 1
+                    );
 
-        // Create a new "pane" node to hold our new split
-        let new_pane_node = Node {
-            id: new_pane_node_id,
-            parent_id: Some(node.id),
-            content: Content::Pane(new_pane_id),
-        };
+                    self.focus = self.next_pane_id;
 
-        // Create a new parent node for the new pane node
-        // and the original node that holds the focused pane
-        let new_parent = Node {
-            id: new_parent_node_id,
-            parent_id: node.parent_id,
-            content: Content::Container(
-                Container {
-                    layout,
-                    area: focused.area,
-                    children: vec![focused.node_id, new_pane_node.id]
+                    self.panes.insert(self.next_pane_id.advance(), Pane {
+                        doc_id: focused_pane.doc_id,
+                        area: Rect::default(),
+                        view: ScrollView::default()
+                    });
+
+                    let parent_id = parent.id;
+                    let area = parent.area();
+                    self.resize_node_recursively(parent_id, area);
+                } else {
+                    self.split_pane(layout)
                 }
-            ),
-        };
-
-        // remember to set the old focused node's parent
-        // to the newly created parent
-        node.parent_id = Some(new_parent.id);
-
-        let (old_area, new_area) = match layout {
-            Layout::Vertical => focused.area.split_vertically(1),
-            Layout::Horizontal => focused.area.split_horizontally(1),
-        };
-
-        focused.area = old_area;
-
-        let new_pane = Pane {
-            id: new_pane_id,
-            node_id: new_pane_node.id,
-            doc_id: focused.doc_id,
-            area: new_area,
-            view: ScrollView::default()
-        };
-
-
-        self.panes.insert(new_pane_id, new_pane);
-        self.nodes.insert(new_pane_node.id, new_pane_node);
-        self.nodes.insert(new_parent.id, new_parent);
-
-        self.focused_id = new_pane_id;
+            },
+            None => self.split_pane(layout),
+        }
     }
 
     pub fn switch(&mut self, direction: Direction) {
-        let focused = &self.panes[&self.focused_id];
+        let focused = &self.panes[&self.focus];
         match direction {
             Direction::Up => {
                 for (id, pane) in self.panes.iter() {
                     if pane.area.bottom() + 1 != focused.area.top() { continue }
 
                     if (pane.area.left()..=pane.area.right()).contains(&focused.view.view_cursor_position.x) {
-                        self.focused_id = *id
+                        self.focus = *id
                     }
                 }
             },
@@ -218,7 +439,7 @@ impl Panes {
                     if focused.area.bottom() + 1 != pane.area.top() { continue }
 
                     if (pane.area.left()..=pane.area.right()).contains(&focused.view.view_cursor_position.x) {
-                        self.focused_id = *id
+                        self.focus = *id
                     }
                 }
             },
@@ -227,7 +448,7 @@ impl Panes {
                     if focused.area.left() != pane.area.right() + 1 { continue }
 
                     if (pane.area.top()..=pane.area.bottom()).contains(&focused.view.view_cursor_position.y) {
-                        self.focused_id = *id
+                        self.focus = *id
                     }
                 }
             },
@@ -236,7 +457,7 @@ impl Panes {
                     if focused.area.right() + 1 != pane.area.left() { continue }
 
                     if (pane.area.top()..=pane.area.bottom()).contains(&focused.view.view_cursor_position.y) {
-                        self.focused_id = *id
+                        self.focus = *id
                     }
                 }
             },
@@ -246,8 +467,6 @@ impl Panes {
 
 #[derive(Debug)]
 pub struct Pane {
-    id: PaneId,
-    node_id: NodeId,
     pub doc_id: DocumentId,
     pub area: Rect,
     pub view: ScrollView,
@@ -255,16 +474,12 @@ pub struct Pane {
 
 impl Pane {
     // This will always point to doc_id 1 (the default)
-    // and have a default id of 1
-    // and have the root node (1)
     // Use split to create subsequent panes
-    fn root(area: Rect) -> Self {
+    fn new(area: Rect) -> Self {
         Self {
-            id: PaneId::default(),
             area,
             doc_id: DocumentId::default(),
             view: ScrollView::default(),
-            node_id: NodeId::default(),
         }
     }
 

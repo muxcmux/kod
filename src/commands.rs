@@ -55,7 +55,7 @@ pub fn quit(ctx: &mut Context) {
     } else if ctx.editor.panes.panes.len() == 1 {
         ctx.editor.quit = true;
     } else {
-        ctx.editor.panes.close(ctx.editor.panes.focused_id);
+        ctx.editor.panes.close(ctx.editor.panes.focus);
     }
 }
 

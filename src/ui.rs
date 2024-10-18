@@ -3,13 +3,13 @@ pub(crate) mod terminal;
 pub(crate) mod borders;
 pub(crate) mod border_box;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Default)]
 pub struct Position {
     pub x: u16,
     pub y: u16
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Default)]
 pub struct Rect {
     pub position: Position,
     pub width: u16,
@@ -86,25 +86,64 @@ impl Rect {
         self.position.y + self.height
     }
 
-    /// Splits the rect vertically in two
-    /// with space between the two parts
-    /// returns (top_area, bottom_area)
-    pub fn split_vertically(&self, space: u16) -> (Self, Self) {
-        (
-            self.clip_bottom((self.height + space + 1) / 2),
-            self.clip_top((self.height + space) / 2)
-        )
+    /// Splits the rect vertically into N parts
+    /// with a single row/col space between each part
+    pub fn split_vertically(&self, n: u16) -> Vec<Rect> {
+        debug_assert!(n > 0);
+
+        let height = self.height.saturating_sub(n.saturating_sub(1)) / n;
+        let rem = self.height.saturating_sub(n.saturating_sub(1)) % n;
+
+        let mut heights = Vec::with_capacity(n as usize);
+
+        for i in 1..=n {
+            heights.push(height + 1 - i.saturating_sub(rem).min(1));
+        }
+
+        let mut y = self.top();
+
+        heights.into_iter().map(|height| {
+            let area = Rect {
+                position: Position {
+                    y,
+                    x: self.left(),
+                },
+                height,
+                ..*self
+            };
+            y += height + 1;
+            area
+        }).collect()
     }
 
+    /// Splits the rect horizontally into N parts
+    /// with a single row/col space between each part
+    pub fn split_horizontally(&self, n: u16) -> Vec<Rect> {
+        debug_assert!(n > 0);
 
-    /// Splits the rect horizontally in two
-    /// with space between the two parts
-    /// returns (left_area, right_area)
-    pub fn split_horizontally(&self, space: u16) -> (Self, Self) {
-        (
-            self.clip_right((self.width + space + 1) / 2),
-            self.clip_left((self.width + space) / 2)
-        )
+        let width = self.width.saturating_sub(n.saturating_sub(1)) / n;
+        let rem = self.width.saturating_sub(n.saturating_sub(1)) % n;
+
+        let mut widths = Vec::with_capacity(n as usize);
+
+        for i in 1..=n {
+            widths.push(width + 1 - i.saturating_sub(rem).min(1));
+        }
+
+        let mut x = self.left();
+
+        widths.into_iter().map(|width| {
+            let area = Rect {
+                position: Position {
+                    x,
+                    y: self.top(),
+                },
+                width,
+                ..*self
+            };
+            x += width + 1;
+            area
+        }).collect()
     }
 }
 
@@ -180,5 +219,46 @@ mod test {
         assert_eq!(centered.left(), 45);
         assert_eq!(centered.right(), 55);
         assert_eq!(centered.bottom(), 55);
+    }
+
+    #[test]
+    fn test_split_vertically() {
+        let rect = Rect::from((10, 10));
+        let mut splits = rect.split_vertically(3);
+        println!("{:#?}", splits);
+        assert_eq!(splits.pop(), Some(Rect {
+            position: Position { x: 0, y: 8 },
+            width: 10,
+            height: 2,
+        }));
+        assert_eq!(splits.pop(), Some(Rect {
+            position: Position { x: 0, y: 4 },
+            width: 10,
+            height: 3,
+        }));
+        assert_eq!(splits.pop(), Some(Rect {
+            position: Position { x: 0, y: 0 },
+            width: 10,
+            height: 3,
+        }));
+        assert_eq!(splits.pop(), None);
+    }
+
+    #[test]
+    fn test_split_horizontally() {
+        let rect = Rect::from((11, 10));
+        let mut splits = rect.split_horizontally(2);
+        println!("{:#?}", splits);
+        assert_eq!(splits.pop(), Some(Rect {
+            position: Position { x: 6, y: 0 },
+            width: 5,
+            height: 10,
+        }));
+        assert_eq!(splits.pop(), Some(Rect {
+            position: Position { x: 0, y: 0 },
+            width: 5,
+            height: 10,
+        }));
+        assert_eq!(splits.pop(), None);
     }
 }
