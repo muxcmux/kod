@@ -40,3 +40,4 @@ mod keymap;
 mod ui;
 mod panes;
 mod graphemes;
+mod gutter;
