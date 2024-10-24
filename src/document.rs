@@ -6,6 +6,7 @@ use crate::{editor::Mode, history::{History, State, Transaction}, IncrementalId}
 pub type DocumentId = IncrementalId;
 
 pub struct Document {
+    pub id: DocumentId,
     pub rope: Rope,
     pub path: Option<PathBuf>,
     pub modified: bool,
@@ -16,7 +17,7 @@ pub struct Document {
 }
 
 impl Document {
-    pub fn new(rope: Rope, path: Option<PathBuf>) -> Self {
+    pub fn new(id: DocumentId, rope: Rope, path: Option<PathBuf>) -> Self {
         let readonly = match &path {
             Some(p) => {
                 std::fs::metadata(p).is_ok_and(|m| {
@@ -26,6 +27,7 @@ impl Document {
             None => false,
         };
         Self {
+            id,
             rope,
             transaction: Cell::new(Transaction::default()),
             history: Cell::new(History::default()),

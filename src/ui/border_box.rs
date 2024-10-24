@@ -7,7 +7,7 @@ pub struct BorderBox<'a> {
     area: Rect,
     title: Option<&'a str>,
     borders: Borders,
-    border_type: Stroke,
+    stroke: Stroke,
 }
 
 impl<'a> BorderBox<'a> {
@@ -28,8 +28,8 @@ impl<'a> BorderBox<'a> {
         self
     }
 
-    pub fn border_type(mut self, border_type: Stroke) -> Self {
-        self.border_type = border_type;
+    pub fn stroke(mut self, stroke: Stroke) -> Self {
+        self.stroke = stroke;
         self
     }
 
@@ -55,7 +55,7 @@ impl<'a> BorderBox<'a> {
     pub fn render(&self, buffer: &mut Buffer) -> &Self {
         buffer.clear(self.area);
 
-        let symbols = self.border_type.line_symbols();
+        let symbols = self.stroke.line_symbols();
         let fg = Color::White;
         let bg = Color::Reset;
 
@@ -112,11 +112,11 @@ impl<'a> BorderBox<'a> {
         let fg = Color::White;
         let bg = Color::Reset;
 
-        buffer.put_symbol(self.border_type.line_symbols().vertical_right, self.area.left(), y, fg, bg);
-        buffer.put_symbol(self.border_type.line_symbols().vertical_left, self.area.right().saturating_sub(1), y, fg, bg);
+        buffer.put_symbol(self.stroke.line_symbols().vertical_right, self.area.left(), y, fg, bg);
+        buffer.put_symbol(self.stroke.line_symbols().vertical_left, self.area.right().saturating_sub(1), y, fg, bg);
 
         for i in self.area.left() + 1..self.area.right().saturating_sub(1) {
-            buffer.put_symbol(self.border_type.line_symbols().horizontal, i, y, fg, bg);
+            buffer.put_symbol(self.stroke.line_symbols().horizontal, i, y, fg, bg);
         }
     }
 }

@@ -1,3 +1,4 @@
+use crate::document::{Document, DocumentId};
 use crate::ui::border_box::BorderBox;
 use crate::ui::borders::{Stroke, Borders};
 use crate::ui::buffer::Buffer;
@@ -6,77 +7,138 @@ use crossterm::event::{KeyCode, KeyEvent};
 use crossterm::style::Color;
 use unicode_segmentation::UnicodeSegmentation;
 
-type Callback = Box<dyn FnMut(&mut Context)>;
+fn doc<'c>(ctx: &'c mut Context, ignored: &[DocumentId]) -> Option<(&'c DocumentId, &'c Document)> {
+    ctx.editor.documents
+        .iter()
+        .find(|(id, doc)| doc.modified && !ignored.contains(id))
+}
+
+fn render_dialog(choice: u8, doc: &Document, area: Rect, buffer: &mut Buffer) {
+    let text = format!(" Save changes to {}? ", doc.filename());
+    let text_width = text.graphemes(true).map(|g| unicode_display_width::width(g) as u16).sum();
+
+    let width = TITLE_WIDTH
+        .max(PROMPT_WIDTH)
+        .max(text_width)
+        + 1 // for left border
+        + 1 // for right border
+        .min(area.width);
+    let height = 3
+        + 1 // for bottom border
+        + 1 // for top border
+        .min(area.height);
+
+    let area = area.centered(width, height);
+
+    let bbox = BorderBox::new(area)
+        .title(TITLE)
+        .borders(Borders::ALL)
+        .stroke(Stroke::Plain);
+
+    bbox.render(buffer);
+
+    let x = area.left() + 1;
+    buffer.put_str(TITLE, x, area.top(), Color::White, Color::Reset);
+    buffer.put_str(&text, x, area.top() + 1, Color::White, Color::Reset);
+
+    let (yfg, nfg, cfg, ybg, nbg, cbg) = match choice {
+        0 => (Color::Black, Color::White, Color::White, Color::White, Color::Reset, Color::Reset),
+        1 => (Color::White, Color::Black, Color::White, Color::Reset, Color::White, Color::Reset),
+        _ => (Color::White, Color::White, Color::Black, Color::Reset, Color::Reset, Color::White),
+    };
+
+    buffer.put_str(PROMPT_YES, x + 1, area.top() + 3, yfg, ybg);
+    buffer.put_str(PROMPT_NO, x + 1 + 5, area.top() + 3, nfg, nbg);
+    buffer.put_str(PROMPT_CANCEL, x + 1 + 5 + 4, area.top() + 3, cfg, cbg);
+}
+
+const TITLE: &str = "Exit";
+const TITLE_WIDTH: u16 = 4;
+const PROMPT_YES: &str = " Yes ";
+const PROMPT_NO: &str = " No ";
+const PROMPT_CANCEL: &str = " Cancel ";
+const PROMPT_WIDTH: u16 = 19;
 
 pub struct Dialog {
-    borders: Borders,
-    border_type: Stroke,
-    yes: Callback,
-    no: Callback,
-    title: String,
-    text: String,
+    choice: u8,
+    ignored_docs: Vec<DocumentId>,
 }
 
 impl Dialog {
-    pub fn new(title: String, text: String, border_type: Stroke, yes: Callback, no: Callback) -> Self {
-        Self { title, text, yes, no, borders: Borders::ALL, border_type }
+    pub fn new() -> Self {
+        Self { choice: 0, ignored_docs: vec![] }
     }
 
-    fn title_width(&self) -> u16 {
-        self.title.graphemes(true).map(|g| unicode_display_width::width(g) as u16).sum()
+    fn ignore(ignored_docs: Vec<DocumentId>) -> Self {
+        Self { choice: 0, ignored_docs }
     }
 
-    fn text_width(&self) -> u16 {
-        self.text.graphemes(true).map(|g| unicode_display_width::width(g) as u16).sum()
+    fn yes(&mut self, ctx: &mut Context) -> EventResult {
+        if let Some((id, _)) = doc(ctx, &self.ignored_docs) {
+            let id = *id;
+            ctx.editor.save_document(id);
+        }
+        let ignored = self.ignored_docs.clone();
+        EventResult::Consumed(Some(Box::new(move |compositor: &mut Compositor, c: &mut Context| {
+            _ = compositor.pop();
+            if doc(c, &ignored).is_some() {
+                compositor.push(Box::new(Dialog::new()))
+            } else {
+                c.editor.quit = true;
+            }
+        })))
+    }
+
+    fn no(&mut self, ctx: &mut Context) -> EventResult {
+        let mut ignored = self.ignored_docs.clone();
+        if let Some((id, _)) = doc(ctx, &self.ignored_docs) {
+            let id = *id;
+            ignored.push(id);
+        }
+        EventResult::Consumed(Some(Box::new(move |compositor: &mut Compositor, c: &mut Context| {
+            _ = compositor.pop();
+            if doc(c, &ignored).is_some() {
+                compositor.push(Box::new(Dialog::ignore(ignored)));
+            } else {
+                c.editor.quit = true;
+            }
+        })))
+    }
+
+    fn cancel(&mut self) -> EventResult {
+        EventResult::Consumed(Some(Box::new(|compositor: &mut Compositor, _: &mut Context| {
+            _ = compositor.pop();
+        })))
     }
 }
 
-const PROMPT: &str = " [Y]es, [N]o, [C]ancel ";
-const PROMPT_WIDTH: u16 = 23;
-
 impl Component for Dialog {
-    fn render(&mut self, area: Rect, buffer: &mut Buffer, _ctx: &mut Context) {
-        let width = self.title_width()
-            .max(PROMPT_WIDTH)
-            .max(self.text_width())
-            + u16::from(self.borders.intersects(Borders::LEFT))
-            + u16::from(self.borders.intersects(Borders::RIGHT))
-            .min(area.width);
-        let height = 2 + u16::from(self.borders.intersects(Borders::TOP))
-            + u16::from(self.borders.intersects(Borders::BOTTOM))
-            .min(area.height);
-
-        let area = area.centered(width, height);
-
-        let bbox = BorderBox::new(area)
-            .title(&self.title)
-            .borders(self.borders)
-            .border_type(self.border_type);
-
-        bbox.render(buffer);
-
-        let x = area.left() + u16::from(self.borders.intersects(Borders::LEFT));
-        buffer.put_str(&self.title, x, area.top(), Color::White, Color::Reset);
-        buffer.put_str(&self.text, x, area.top() + 1, Color::White, Color::Reset);
-        buffer.put_str(PROMPT, x, area.top() + 2, Color::White, Color::Reset);
+    fn render(&mut self, area: Rect, buffer: &mut Buffer, ctx: &mut Context) {
+        let (_, doc) = doc(ctx, &self.ignored_docs)
+            .expect("Rendering the save confirmation dialog without unsaved docs shouldn't happen");
+        render_dialog(self.choice, doc, area, buffer);
     }
 
     fn handle_key_event(&mut self, event: KeyEvent, ctx: &mut Context) -> EventResult {
-        let cb = Box::new(|compositor: &mut Compositor, _: &mut Context| {
-            _ = compositor.pop();
-        });
         match event.code {
-            KeyCode::Char('y') => {
-                (self.yes)(ctx);
-                EventResult::Consumed(Some(cb))
+            KeyCode::Char('y') => self.yes(ctx),
+            KeyCode::Char('n') => self.no(ctx),
+            KeyCode::Esc | KeyCode::Char('c') => self.cancel(),
+            KeyCode::Enter => {
+                match self.choice {
+                    0 => self.yes(ctx),
+                    1 => self.no(ctx),
+                    _ => self.cancel()
+                }
             },
-            KeyCode::Char('n') => {
-                (self.no)(ctx);
-                EventResult::Consumed(Some(cb))
+            KeyCode::Char('l') | KeyCode::Right => {
+                self.choice = (self.choice + 1) % 3;
+                EventResult::Consumed(None)
             },
-            KeyCode::Esc | KeyCode::Char('c') => {
-                EventResult::Consumed(Some(cb))
-            },
+            KeyCode::Char('h') | KeyCode::Left => {
+                self.choice = (self.choice + 2 ) % 3;
+                EventResult::Consumed(None)
+            }
             _ => EventResult::Consumed(None)
         }
     }

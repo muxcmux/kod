@@ -126,8 +126,8 @@ impl Component for EditorView {
             None
         } else {
             let cb: compositor::Callback = Box::new(|compositor, cx| {
-                for cb in action_ctx.compositor_callbacks {
-                    cb(compositor, cx);
+                for compositor_cb in action_ctx.compositor_callbacks {
+                    compositor_cb(compositor, cx);
                 }
             });
 

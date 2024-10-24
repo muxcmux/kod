@@ -1,4 +1,4 @@
-use crate::{current, document::DocumentId, graphemes::NEW_LINE, panes::Panes, ui::Rect};
+use crate::{document::DocumentId, graphemes::NEW_LINE, panes::Panes, ui::Rect};
 use std::{borrow::Cow, collections::BTreeMap, env, fs, path::PathBuf};
 
 use crop::Rope;
@@ -69,7 +69,7 @@ impl Editor {
         }
 
         let doc_id = DocumentId::default();
-        let doc = Document::new(Rope::from(contents), path);
+        let doc = Document::new(doc_id, Rope::from(contents), path);
         let mut documents = BTreeMap::new();
         documents.insert(doc_id, doc);
 
@@ -86,8 +86,8 @@ impl Editor {
         }
     }
 
-    pub fn save_document(&mut self) {
-        let doc = current!(self).1;
+    pub fn save_document(&mut self, doc_id: DocumentId) {
+        let doc = self.documents.get_mut(&doc_id).unwrap();
         if let Some(path) = &doc.path {
             match fs::write(path, doc.rope.to_string()) {
                 Ok(_) => {
@@ -103,6 +103,10 @@ impl Editor {
         } else {
             self.set_error("Don't know where to save to");
         }
+    }
+
+    pub fn has_unsaved_docs(&self) -> bool {
+        self.documents.iter().any(|(_, doc)| doc.modified)
     }
 
     pub fn set_error(&mut self, message: impl Into<Cow<'static, str>>) {

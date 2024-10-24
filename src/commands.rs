@@ -3,7 +3,7 @@ pub mod pallette;
 
 use crossterm::event::KeyEvent;
 
-use crate::{components::confirmation::Dialog, compositor::Component, doc, editor::Editor, panes::Layout, ui::borders::Stroke};
+use crate::{components::confirmation::Dialog, compositor::{self, Component, Compositor}, doc, editor::Editor, panes::Layout, ui::borders::Stroke};
 
 pub type KeyCallback = Box<dyn FnOnce(&mut Context, KeyEvent)>;
 
@@ -33,27 +33,18 @@ pub struct Command {
 }
 
 pub fn save(ctx: &mut Context) {
-    ctx.editor.save_document();
+    let doc = doc!(ctx.editor);
+    let id = doc.id;
+    ctx.editor.save_document(id);
 }
 
 pub fn quit(ctx: &mut Context) {
-    let doc = doc!(ctx.editor);
-    if doc.modified {
-        let text = format!(" Save changes to {}? ", doc.filename());
-        let dialog = Dialog::new(
-            "Exit".into(),
-            text,
-            Stroke::Rounded,
-            Box::new(|ctx| {
-                ctx.editor.save_document();
-                ctx.editor.quit = true;
-            }), Box::new(|ctx| {
-                ctx.editor.quit = true;
-            })
-        );
-        ctx.push_component(Box::new(dialog));
-    } else if ctx.editor.panes.panes.len() == 1 {
-        ctx.editor.quit = true;
+    if ctx.editor.panes.panes.len() == 1 {
+        if ctx.editor.has_unsaved_docs() {
+            ctx.push_component(Box::new(Dialog::new()));
+        } else {
+            ctx.editor.quit = true;
+        }
     } else {
         ctx.editor.panes.close(ctx.editor.panes.focus);
     }

@@ -77,7 +77,7 @@ impl Component for Pallette {
         let bbox = BorderBox::new(size)
             .title("Command")
             .borders(Borders::ALL)
-            .border_type(Stroke::Rounded);
+            .stroke(Stroke::Rounded);
 
         bbox.render(buffer).split_horizontally(2, buffer);
 
