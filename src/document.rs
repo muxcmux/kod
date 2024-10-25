@@ -1,7 +1,7 @@
 use std::{borrow::Cow, cell::Cell, path::PathBuf};
 
 use crop::Rope;
-use crate::{editor::Mode, history::{History, State, Transaction}, IncrementalId};
+use crate::{history::{History, State, Transaction}, IncrementalId};
 
 pub type DocumentId = IncrementalId;
 
@@ -83,15 +83,19 @@ impl Document {
         self.history.set(history);
     }
 
-    pub fn undo_redo(&mut self, undo: bool, mode: &Mode) {
+    pub fn undo_redo(&mut self, undo: bool) -> Option<(usize, usize)> {
         let mut history = self.history.take();
+
+        let mut ret = None;
 
         if let Some(t) = if undo { history.undo() } else { history.redo() } {
             self.apply(t);
-            //self.text.move_cursor_to(Some(t.cursor_x), Some(t.cursor_y), mode);
+            ret = Some((t.cursor_x, t.cursor_y));
         }
 
         self.history.set(history);
         self.transaction.take();
+
+        ret
     }
 }

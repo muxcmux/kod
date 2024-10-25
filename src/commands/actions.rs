@@ -236,11 +236,17 @@ pub fn goto_until_character_backward(ctx: &mut Context) {
 }
 
 pub fn undo(ctx: &mut Context) {
-    current!(ctx.editor).1.undo_redo(true, &ctx.editor.mode);
+    let (pane, doc) = current!(ctx.editor);
+    if let Some((x, y)) = doc.undo_redo(true) {
+        pane.view.move_cursor_to(&doc.rope, Some(x), Some(y), &ctx.editor.mode);
+    }
 }
 
 pub fn redo(ctx: &mut Context) {
-    current!(ctx.editor).1.undo_redo(false, &ctx.editor.mode);
+    let (pane, doc) = current!(ctx.editor);
+    if let Some((x, y)) = doc.undo_redo(false) {
+        pane.view.move_cursor_to(&doc.rope, Some(x), Some(y), &ctx.editor.mode);
+    }
 }
 
 fn insert_or_replace_char_at_offset(c: char, offset_start: usize, offset_end: usize, pane: &Pane, doc: &mut Document) {
@@ -351,7 +357,7 @@ fn delete_to_the_left(pane: &mut Pane, rope: &Rope , mode: &Mode) -> Option<(usi
 
 pub fn delete_symbol_to_the_left(ctx: &mut Context) {
     let (pane, doc) = current!(ctx.editor);
-    if let Some((from, to)) = delete_to_the_left(pane, &mut doc.rope, &ctx.editor.mode) {
+    if let Some((from, to)) = delete_to_the_left(pane, &doc.rope, &ctx.editor.mode) {
         doc.apply(
             &Transaction::change(
                 &doc.rope,
@@ -379,7 +385,7 @@ fn delete_lines(from: usize, size: usize, pane: &Pane, doc: &mut Document) -> bo
         end -= NEW_LINE.len_utf8();
     }
 
-    let t = Transaction::change(&rope,
+    let t = Transaction::change(rope,
         [(start, end, None)].into_iter()
     ).set_cursor(pane.view.text_cursor_x, pane.view.text_cursor_y);
 

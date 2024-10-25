@@ -152,16 +152,16 @@ impl TextInput {
     }
 
     fn insert_char_at_cursor(&mut self, char: char, mode: &Mode) {
-        let offset = self.view.byte_offset_at_cursor(&mut self.rope, self.view.text_cursor_x, self.view.text_cursor_y);
+        let offset = self.view.byte_offset_at_cursor(&self.rope, self.view.text_cursor_x, self.view.text_cursor_y);
         let mut buf = [0; 4];
         let text = char.encode_utf8(&mut buf);
 
         self.rope.insert(offset, text);
 
         if char == NEW_LINE {
-            self.view.move_cursor_to(&mut self.rope, Some(0), Some(self.view.text_cursor_y + 1), mode);
+            self.view.move_cursor_to(&self.rope, Some(0), Some(self.view.text_cursor_y + 1), mode);
         } else {
-            self.view.move_cursor_to(&mut self.rope, Some(self.view.text_cursor_x + 1), None, mode);
+            self.view.move_cursor_to(&self.rope, Some(self.view.text_cursor_x + 1), None, mode);
         }
     }
 

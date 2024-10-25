@@ -135,8 +135,8 @@ impl Transaction {
     }
 
     pub fn set_cursor(mut self, cursor_x: usize, cursor_y: usize) -> Self {
-        self.cursor_x;
-        self.cursor_y;
+        self.cursor_x = cursor_x;
+        self.cursor_y = cursor_y;
         self
     }
 

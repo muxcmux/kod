@@ -3,7 +3,7 @@ pub mod pallette;
 
 use crossterm::event::KeyEvent;
 
-use crate::{components::confirmation::Dialog, compositor::{self, Component, Compositor}, doc, editor::Editor, panes::Layout, ui::borders::Stroke};
+use crate::{components::confirmation::Dialog, compositor::Component, doc, editor::Editor, panes::Layout};
 
 pub type KeyCallback = Box<dyn FnOnce(&mut Context, KeyEvent)>;
 
