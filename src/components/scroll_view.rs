@@ -138,6 +138,21 @@ impl ScrollView {
         offset
     }
 
+    pub fn cursor_at_byte(&self, rope: &Rope, byte: usize) -> (usize, usize) {
+        let (mut cursor_x, cursor_y) = (0, rope.line_of_byte(byte));
+        let line = rope.line(cursor_y);
+        let mut offset = rope.byte_of_line(cursor_y);
+        for g in line.graphemes() {
+            if offset >= byte { break }
+
+            cursor_x += unicode_display_width::width(&g);
+
+            offset += g.bytes().len();
+        }
+
+        (cursor_x as usize, cursor_y)
+    }
+
     fn max_cursor_x(&self, rope: &Rope, line: usize, mode: &Mode) -> usize {
         match mode {
             Mode::Insert | Mode::Replace => self.line_width(rope, line),
