@@ -104,6 +104,14 @@ impl Buffer {
         self.size.width as usize * y as usize + x as usize
     }
 
+    pub fn get_symbol(&self, x: u16, y: u16) -> Option<&str> {
+        let index = self.index(x, y);
+        if let Some(cell) = self.cells.get(index) {
+            return Some(&cell.symbol);
+        }
+        None
+    }
+
     pub fn put_symbol(&mut self, symbol: &str, x: u16, y: u16, fg: Color, bg: Color) {
         let index = self.index(x, y);
         if let Some(cell) = self.cells.get_mut(index) {

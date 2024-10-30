@@ -3,9 +3,7 @@ use std::{borrow::Cow, cmp::Ordering};
 use crop::Rope;
 use crossterm::style::Color;
 
-use crate::{editor::Mode, graphemes::{GraphemeCategory, Word}, ui::{buffer::Buffer, Position, Rect}};
-
-pub const NEW_LINE: char = '\n';
+use crate::{editor::Mode, graphemes::{GraphemeCategory, Word, NEW_LINE_STR}, ui::{buffer::Buffer, Position, Rect}};
 
 #[derive(PartialEq)]
 enum HorizontalMove { Right, Left }
@@ -161,7 +159,7 @@ impl ScrollView {
     }
 
     pub fn is_blank(&self, rope: &Rope) -> bool {
-        rope.is_empty() || *rope == NEW_LINE.to_string()
+        rope.is_empty() || rope == NEW_LINE_STR
     }
 
     pub fn line_width(&self, rope: &Rope, line: usize) -> usize {

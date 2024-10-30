@@ -222,6 +222,10 @@ fn normal_mode_keymap() -> Keymap {
         "u" => undo,
         "C-r" => redo,
 
+        "/" => search,
+        "n" => next_search_match,
+        "N" => prev_search_match,
+
         "i" => enter_insert_mode_at_cursor,
         "I" => enter_insert_mode_at_first_non_whitespace,
         "a" => enter_insert_mode_after_cursor,

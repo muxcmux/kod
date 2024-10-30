@@ -1,9 +1,9 @@
 use std::{borrow::Cow, cell::Cell, path::PathBuf};
 
 use crop::Rope;
-use crate::{history::{History, State, Transaction}, IncrementalId};
+use crate::history::{History, State, Transaction};
 
-pub type DocumentId = IncrementalId;
+make_inc_id_type!(DocumentId);
 
 pub struct Document {
     pub id: DocumentId,

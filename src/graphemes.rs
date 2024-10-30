@@ -3,6 +3,7 @@ use std::borrow::Cow;
 use crop::RopeSlice;
 
 pub const NEW_LINE: char = '\n';
+pub const NEW_LINE_STR: &str = "\n";
 
 #[derive(Clone, Debug)]
 pub struct Word<'a> {

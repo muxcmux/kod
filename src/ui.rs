@@ -2,6 +2,7 @@ pub(crate) mod buffer;
 pub(crate) mod terminal;
 pub(crate) mod borders;
 pub(crate) mod border_box;
+pub(crate) mod text_input;
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Default)]
 pub struct Position {

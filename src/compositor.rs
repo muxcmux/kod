@@ -18,7 +18,7 @@ pub enum EventResult {
     Consumed(Option<Callback>),
 }
 
-pub trait Component: Any {
+pub trait Component: Any + AnyComponent {
     fn handle_key_event(&mut self, _event: KeyEvent, _ctx: &mut Context) -> EventResult {
         EventResult::Ignored(None)
     }
@@ -115,5 +115,52 @@ impl Compositor {
         }
 
         consumed
+    }
+
+    pub fn find<T: 'static>(&mut self) -> Option<&mut T> {
+        let type_name = std::any::type_name::<T>();
+        self.layers
+            .iter_mut()
+            .find(|component| component.type_name() == type_name)
+            .and_then(|component| component.as_any_mut().downcast_mut())
+    }
+
+    pub fn remove<T: 'static>(&mut self) -> Option<Box<dyn Component>> {
+        let type_name = std::any::type_name::<T>();
+        let idx = self
+            .layers
+            .iter()
+            .position(|component| component.type_name() == type_name)?;
+        Some(self.layers.remove(idx))
+    }
+}
+
+/// This trait is automatically implemented for any `T: Component`.
+pub trait AnyComponent {
+    /// Downcast self to a `Any`.
+    fn as_any(&self) -> &dyn Any;
+
+    /// Downcast self to a mutable `Any`.
+    fn as_any_mut(&mut self) -> &mut dyn Any;
+
+    /// Returns a boxed any from a boxed self.
+    ///
+    /// Can be used before `Box::downcast()`.
+    fn as_boxed_any(self: Box<Self>) -> Box<dyn Any>;
+}
+
+impl<T: Component> AnyComponent for T {
+    /// Downcast self to a `Any`.
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    /// Downcast self to a mutable `Any`.
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
+    fn as_boxed_any(self: Box<Self>) -> Box<dyn Any> {
+        self
     }
 }

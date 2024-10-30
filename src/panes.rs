@@ -2,10 +2,10 @@ use std::collections::{BTreeMap, HashMap};
 
 use crossterm::style::Color;
 
-use crate::{components::scroll_view::ScrollView, document::{Document, DocumentId}, editor::Mode, gutter, ui::{borders::{Stroke, Symbol}, buffer::Buffer, Rect}, IncrementalId};
+use crate::{components::scroll_view::ScrollView, document::{Document, DocumentId}, editor::Mode, gutter, ui::{borders::{Stroke, Symbol}, buffer::Buffer, Rect}};
 
-type PaneId = IncrementalId;
-type NodeId = IncrementalId;
+make_inc_id_type!(PaneId);
+make_inc_id_type!(NodeId);
 
 fn find_and_intersect_with(symbol: Symbol, x: u16, y: u16, existing: &mut HashMap<(u16, u16), Symbol>) {
     let sym = match existing.get(&(x, y)) {

@@ -9,10 +9,11 @@ crossterm = "0.28"
 anyhow = "1"
 
 log = "0.4"
-fern = "0.6"
+fern = "0.7"
 
 crop = { version = "0.4", features = ["graphemes", "simd"] }
 smartstring = "1"
+regex = "1"
 
 unicode-segmentation = "1"
 unicode-display-width = "0.3"

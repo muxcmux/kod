@@ -1,31 +1,33 @@
-use std::{fmt::Debug, num::NonZeroIsize};
+macro_rules! make_inc_id_type {
+    ($type:ident) => {
+        #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        pub struct $type(std::num::NonZeroIsize);
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct IncrementalId(NonZeroIsize);
+        impl Default for $type {
+            fn default() -> Self {
+                Self(std::num::NonZeroIsize::new(1).unwrap())
+            }
+        }
 
-impl Default for IncrementalId {
-    fn default() -> Self {
-        Self(NonZeroIsize::new(1).unwrap())
-    }
-}
+        impl $type {
+            // return the next id
+            fn next(&self) -> Self {
+                Self(std::num::NonZeroIsize::new(self.0.get() + 1).unwrap())
+            }
 
-impl IncrementalId {
-    // return the next id
-    fn next(&self) -> Self {
-        Self(NonZeroIsize::new(self.0.get() + 1).unwrap())
-    }
+            // return the current id and advance it
+            fn advance(&mut self) -> Self {
+                let current = *self;
+                *self = self.next();
+                current
+            }
+        }
 
-    // return the current id and advance it
-    fn advance(&mut self) -> Self {
-        let current = *self;
-        *self = self.next();
-        current
-    }
-}
-
-impl Debug for IncrementalId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
+        impl std::fmt::Debug for $type {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "{}", self.0)
+            }
+        }
     }
 }
 
@@ -41,3 +43,5 @@ mod ui;
 mod panes;
 mod graphemes;
 mod gutter;
+mod search;
+mod registers;

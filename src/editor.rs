@@ -1,4 +1,4 @@
-use crate::{document::DocumentId, graphemes::NEW_LINE, panes::Panes, ui::Rect};
+use crate::{document::DocumentId, graphemes::NEW_LINE, panes::Panes, registers::Registers, search::SearchState, ui::Rect};
 use std::{borrow::Cow, collections::BTreeMap, env, fs, path::PathBuf};
 
 use crop::Rope;
@@ -27,8 +27,10 @@ pub struct EditorStatus {
 pub struct Editor {
     pub mode: Mode,
     pub panes: Panes,
+    pub registers: Registers,
+    pub search: SearchState,
     pub documents: BTreeMap<DocumentId, Document>,
-    next_doc_id: DocumentId,
+    //next_doc_id: DocumentId,
     pub quit: bool,
     pub status: Option<EditorStatus>,
 }
@@ -78,10 +80,12 @@ impl Editor {
 
         Self {
             mode: Mode::Normal,
-            next_doc_id: doc_id.next(),
+            //next_doc_id: doc_id.next(),
             documents,
             status,
             panes,
+            registers: Registers::default(),
+            search: SearchState::default(),
             quit: false,
         }
     }
@@ -116,6 +120,12 @@ impl Editor {
         });
     }
 
+    pub fn set_warning(&mut self, message: impl Into<Cow<'static, str>>) {
+        self.status = Some(EditorStatus {
+            message: message.into(),
+            severity: Severity::Warning,
+        });
+    }
     pub fn set_status(&mut self, message: impl Into<Cow<'static, str>>) {
         self.status = Some(EditorStatus {
             message: message.into(),

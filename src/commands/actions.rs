@@ -2,7 +2,7 @@ use crop::Rope;
 use crossterm::event::KeyCode;
 use smartstring::SmartString;
 
-use crate::{document::Document, editor::Mode, graphemes::NEW_LINE, history::Transaction, panes::{Direction, Pane}};
+use crate::{document::Document, editor::Mode, graphemes::NEW_LINE, history::Transaction, panes::{Direction, Pane}, search::Search};
 
 use super::{pallette::Pallette, Context};
 
@@ -84,8 +84,19 @@ macro_rules! doc {
     }};
 }
 
-fn enter_insert_mode_relative_to_cursor(x: usize, ctx: &mut Context) {
+fn hide_search(ctx: &mut Context) {
+    ctx.compositor_callbacks.push(Box::new(|comp, _| {
+        comp.remove::<Search>();
+    }));
+}
+
+fn enter_insert_mode(ctx: &mut Context) {
     ctx.editor.mode = Mode::Insert;
+    hide_search(ctx);
+}
+
+fn enter_insert_mode_relative_to_cursor(x: usize, ctx: &mut Context) {
+    enter_insert_mode(ctx);
     let (pane, doc) = current!(ctx.editor);
     for _ in 0..x {
         pane.view.cursor_right(&doc.rope, &ctx.editor.mode);
@@ -105,6 +116,7 @@ pub fn enter_normal_mode(ctx: &mut Context) {
 
 pub fn enter_replace_mode(ctx: &mut Context) {
     ctx.editor.mode = Mode::Replace;
+    hide_search(ctx);
 }
 
 pub fn enter_insert_mode_at_cursor(ctx: &mut Context) {
@@ -112,7 +124,7 @@ pub fn enter_insert_mode_at_cursor(ctx: &mut Context) {
 }
 
 pub fn enter_insert_mode_at_first_non_whitespace(ctx: &mut Context) {
-    ctx.editor.mode = Mode::Insert;
+    enter_insert_mode(ctx);
     goto_line_first_non_whitespace(ctx);
 }
 
@@ -121,7 +133,7 @@ pub fn enter_insert_mode_after_cursor(ctx: &mut Context) {
 }
 
 pub fn enter_insert_mode_at_eol(ctx: &mut Context) {
-    ctx.editor.mode = Mode::Insert;
+    enter_insert_mode(ctx);
     goto_eol(ctx);
 }
 
@@ -310,7 +322,7 @@ pub fn append_new_line(ctx: &mut Context) {
 }
 
 pub fn insert_line_below(ctx: &mut Context) {
-    ctx.editor.mode = Mode::Insert;
+    enter_insert_mode(ctx);
     let (pane, doc) = current!(ctx.editor);
     let offset = doc.rope.byte_of_line(pane.view.text_cursor_y) +
         doc.rope.line(pane.view.text_cursor_y).byte_len();
@@ -319,7 +331,7 @@ pub fn insert_line_below(ctx: &mut Context) {
 }
 
 pub fn insert_line_above(ctx: &mut Context) {
-    ctx.editor.mode = Mode::Insert;
+    enter_insert_mode(ctx);
     let (pane, doc) = current!(ctx.editor);
     let offset = doc.rope.byte_of_line(pane.view.text_cursor_y);
     insert_or_replace_char_at_offset(NEW_LINE, offset, offset, pane, doc);
@@ -425,16 +437,58 @@ pub fn change_until_eol(ctx: &mut Context) {
 
 pub fn switch_pane_top(ctx: &mut Context) {
     ctx.editor.panes.switch(Direction::Up);
+    hide_search(ctx);
 }
 
 pub fn switch_pane_bottom(ctx: &mut Context) {
     ctx.editor.panes.switch(Direction::Down);
+    hide_search(ctx);
 }
 
 pub fn switch_pane_left(ctx: &mut Context) {
     ctx.editor.panes.switch(Direction::Left);
+    hide_search(ctx);
 }
 
 pub fn switch_pane_right(ctx: &mut Context) {
     ctx.editor.panes.switch(Direction::Right);
+    hide_search(ctx);
 }
+
+pub fn search(ctx: &mut Context) {
+    ctx.compositor_callbacks.push(Box::new(|comp, cx| {
+        cx.editor.search.focused = true;
+        cx.editor.search.total_matches = 0;
+        cx.editor.search.current_match = 0;
+        comp.remove::<Search>();
+        let qhistory = cx.editor.search.query_history.clone();
+        comp.push(Box::new(Search::new(qhistory)))
+    }));
+}
+
+pub fn next_search_match(ctx: &mut Context) {
+    if ctx.editor.search.query_history.is_empty() {
+        ctx.editor.set_error("No search term found");
+    } else {
+        ctx.compositor_callbacks.push(Box::new(|comp, cx| {
+            cx.editor.search.focused = false;
+            crate::search::search(cx, false);
+            comp.remove::<Search>();
+            comp.push(Box::new(Search::with_term(cx.editor.search.query_history.last().unwrap())));
+        }));
+    }
+}
+
+pub fn prev_search_match(ctx: &mut Context) {
+    if ctx.editor.search.query_history.is_empty() {
+        ctx.editor.set_error("No search term found");
+    } else {
+        ctx.compositor_callbacks.push(Box::new(|comp, cx| {
+            cx.editor.search.focused = false;
+            crate::search::search(cx, true);
+            comp.remove::<Search>();
+            comp.push(Box::new(Search::with_term(cx.editor.search.query_history.last().unwrap())));
+        }));
+    }
+}
+
