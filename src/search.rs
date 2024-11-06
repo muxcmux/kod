@@ -1,7 +1,6 @@
 use crossterm::{cursor::SetCursorStyle, event::{KeyCode, KeyEvent}, style::Color};
-use regex::Regex;
 
-use crate::{compositor::{Component, Compositor, Context, EventResult}, current, editor::Mode, ui::{borders::{BOTTOM_LEFT, BOTTOM_RIGHT, HORIZONTAL, HORIZONTAL_UP, VERTICAL, VERTICAL_LEFT, VERTICAL_RIGHT}, buffer::Buffer, text_input::TextInput, Position, Rect}};
+use crate::{compositor::{Component, Compositor, Context, EventResult}, current, editor::Mode, rope::RopeCursor, ui::{borders::{BOTTOM_LEFT, BOTTOM_RIGHT, HORIZONTAL, HORIZONTAL_UP, VERTICAL, VERTICAL_LEFT, VERTICAL_RIGHT}, buffer::Buffer, text_input::TextInput, Position, Rect}};
 
 #[derive(Default)]
 pub struct SearchState {
@@ -123,15 +122,18 @@ impl Component for Search {
 }
 
 pub fn search(ctx: &mut Context, backwards: bool) -> bool {
-    match Regex::new(ctx.editor.search.query_history.last().unwrap()) {
+    let query = ctx.editor.search.query_history.last().unwrap();
+    match regex_cursor::engines::meta::Regex::new(query) {
         Ok(re) => {
             let (pane, doc) = current!(ctx.editor);
-            let haystack = doc.rope.to_string();
-            let mut matches: Vec<_> = re.find_iter(&haystack).collect();
+
+            let haystack = regex_cursor::Input::new(RopeCursor::new(&doc.rope));
+
+            let mut matches: Vec<_> = re.find_iter(haystack).collect();
             matches.sort_by_key(|a| a.start());
 
             if matches.is_empty() {
-                ctx.editor.set_warning(format!("No matches found for {}", re));
+                ctx.editor.set_warning(format!("No matches found for {}", query));
             } else {
                 let offset = pane.view.byte_offset_at_cursor(&doc.rope, pane.view.text_cursor_x, pane.view.text_cursor_y);
 

@@ -13,11 +13,12 @@ fern = "0.7"
 
 crop = { version = "0.4", features = ["graphemes", "simd"] }
 smartstring = "1"
+regex-cursor = "0.1"
 regex = "1"
 
 unicode-segmentation = "1"
 unicode-display-width = "0.3"
-unicode-general-category = "0.6"
+unicode-general-category = "1"
 
 once_cell = "1"
 

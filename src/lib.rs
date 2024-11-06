@@ -45,3 +45,4 @@ mod graphemes;
 mod gutter;
 mod search;
 mod registers;
+mod rope;
