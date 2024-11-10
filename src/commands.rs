@@ -43,7 +43,7 @@ pub fn quit(ctx: &mut Context) {
         if ctx.editor.has_unsaved_docs() {
             ctx.push_component(Box::new(Dialog::new()));
         } else {
-            ctx.editor.quit = true;
+            ctx.editor.quit();
         }
     } else {
         ctx.editor.panes.close(ctx.editor.panes.focus);

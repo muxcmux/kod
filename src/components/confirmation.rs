@@ -84,7 +84,7 @@ impl Dialog {
             if doc(c, &ignored).is_some() {
                 compositor.push(Box::new(Dialog::new()))
             } else {
-                c.editor.quit = true;
+                c.editor.quit();
             }
         })))
     }
@@ -100,7 +100,7 @@ impl Dialog {
             if doc(c, &ignored).is_some() {
                 compositor.push(Box::new(Dialog::ignore(ignored)));
             } else {
-                c.editor.quit = true;
+                c.editor.quit();
             }
         })))
     }

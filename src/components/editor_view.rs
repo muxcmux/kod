@@ -91,7 +91,9 @@ impl EditorView {
 
 impl Component for EditorView {
     fn render(&mut self, area: Rect, buffer: &mut Buffer, ctx: &mut Context) {
+        // clip 1 row from the bottom for status line
         ctx.editor.panes.resize(area.clip_bottom(1));
+
         let mode = &ctx.editor.mode;
         for (id, pane) in ctx.editor.panes.panes.iter_mut() {
             let doc = ctx.editor.documents.get(&pane.doc_id).expect("Can't get doc from pane id");

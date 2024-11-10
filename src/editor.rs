@@ -1,5 +1,5 @@
-use crate::{document::DocumentId, graphemes::NEW_LINE, panes::Panes, registers::Registers, search::SearchState, ui::Rect};
-use std::{borrow::Cow, collections::BTreeMap, env, fs, path::PathBuf};
+use crate::{application::Event, document::DocumentId, graphemes::NEW_LINE, panes::Panes, registers::Registers, search::SearchState, ui::Rect};
+use std::{borrow::Cow, collections::BTreeMap, env, fs, path::PathBuf, sync::mpsc::{self, Receiver, Sender}};
 
 use crop::Rope;
 
@@ -31,8 +31,9 @@ pub struct Editor {
     pub search: SearchState,
     pub documents: BTreeMap<DocumentId, Document>,
     //next_doc_id: DocumentId,
-    pub quit: bool,
     pub status: Option<EditorStatus>,
+    pub tx: Sender<Event>,
+    pub rx: Receiver<Event>,
 }
 
 const SIZE_SUFFIX: [&str; 9] = ["b", "kb", "mb", "gb", "tb", "there is", "a special place", "in hell", "for you"];
@@ -78,15 +79,18 @@ impl Editor {
         // Remove 1 from bottom for status line
         let panes = Panes::new(area.clip_bottom(1));
 
+        let (tx, rx) = mpsc::channel();
+
         Self {
             mode: Mode::Normal,
             //next_doc_id: doc_id.next(),
             documents,
             status,
             panes,
+            rx,
+            tx,
             registers: Registers::default(),
             search: SearchState::default(),
-            quit: false,
         }
     }
 
@@ -126,10 +130,15 @@ impl Editor {
             severity: Severity::Warning,
         });
     }
+
     pub fn set_status(&mut self, message: impl Into<Cow<'static, str>>) {
         self.status = Some(EditorStatus {
             message: message.into(),
             severity: Severity::Info,
         });
+    }
+
+    pub fn quit(&self) {
+        _ = self.tx.send(Event::Quit);
     }
 }

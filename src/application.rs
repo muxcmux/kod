@@ -1,6 +1,14 @@
-use crossterm::{cursor::SetCursorStyle, event::{read, Event, KeyEvent, KeyEventKind}};
+use std::thread;
+
+use crossterm::{cursor::SetCursorStyle, event::{read, KeyEvent, KeyEventKind}};
 use crate::{components::{editor_view::EditorView, status_line::StatusLine}, compositor::{Compositor, Context}, editor::Editor, ui::{terminal::{self, Terminal}, Rect}};
 use anyhow::Result;
+
+pub enum Event {
+    Draw,
+    Quit,
+    Term(crossterm::event::Event),
+}
 
 pub struct Application {
     editor: Editor,
@@ -34,23 +42,40 @@ impl Application {
     fn event_loop(&mut self) -> Result<()> {
         self.draw()?;
 
-        loop {
-            if self.editor.quit { break }
+        let tx = self.editor.tx.clone();
 
-            match read() {
-                Ok(event) => {
-                    if self.handle_event(event) {
-                        self.draw()?
-                    }
-                }
-                Err(_) => { break },
+        thread::spawn(move || {
+            while let Ok(event) = read() {
+                _ = tx.send(Event::Term(event));
+            }
+
+            _ = tx.send(Event::Quit);
+        });
+
+        loop {
+            match self.editor.rx.recv() {
+                Ok(event) => match event {
+                    Event::Draw => { self.draw()? },
+                    Event::Quit => { break },
+                    Event::Term(e) => {
+                        if self.handle_crossterm_event(e) {
+                            self.draw()?
+                        }
+                    },
+                },
+                Err(err) => {
+                    log::error!("Application channel hung up {err}");
+                    break;
+                },
             }
         }
 
         Ok(())
     }
 
-    fn handle_event(&mut self, event: Event) -> bool {
+    fn handle_crossterm_event(&mut self, event: crossterm::event::Event) -> bool {
+        use crossterm::event::Event;
+
         match event {
             Event::Resize(width, height) => {
                 let size = Rect::from((width, height));
