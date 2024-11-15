@@ -1,9 +1,8 @@
 use std::{borrow::Cow, cmp::Ordering};
 
 use crop::Rope;
-use crossterm::style::Color;
 
-use crate::{editor::Mode, graphemes::{GraphemeCategory, Word, NEW_LINE_STR}, ui::{buffer::Buffer, Position, Rect}};
+use crate::{editor::Mode, graphemes::{GraphemeCategory, Word, NEW_LINE_STR}, ui::{buffer::Buffer, theme::THEME, Position, Rect}};
 
 #[derive(PartialEq)]
 enum HorizontalMove { Right, Left }
@@ -105,7 +104,7 @@ impl ScrollView {
                     Some(g) => {
                         let width = unicode_display_width::width(&g) as usize;
                         let x = col.saturating_sub(self.scroll_x) as u16 + area.left();
-                        buffer.put_symbol(&g, x, y, Color::Reset, Color::Reset);
+                        buffer.put_symbol(&g, x, y, THEME.get("ui.text"));
                         skip_next_n_cols = width - 1;
 
                         if GraphemeCategory::from(&g) == GraphemeCategory::Whitespace {

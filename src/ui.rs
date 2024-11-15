@@ -3,6 +3,8 @@ pub(crate) mod terminal;
 pub(crate) mod borders;
 pub(crate) mod border_box;
 pub(crate) mod text_input;
+pub(crate) mod style;
+pub(crate) mod theme;
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Default)]
 pub struct Position {

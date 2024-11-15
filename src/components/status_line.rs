@@ -1,7 +1,6 @@
-use crate::current;
+use crate::{current, ui::theme::THEME};
 use crate::ui::buffer::Buffer;
 use crate::ui::Rect;
-use crossterm::style::Color;
 use crate::compositor::{Component, Context};
 
 #[derive(Debug)]
@@ -10,57 +9,48 @@ pub struct StatusLine;
 impl Component for StatusLine {
     fn render(&mut self, area: Rect, buffer: &mut Buffer, ctx: &mut Context) {
         let area = area.clip_top(area.height.saturating_sub(1));
-        let bg = Color::Black;
 
         let (mut x, y) = (area.left(), area.top());
 
         // draw background
         let line = " ".repeat(area.width as usize);
-        buffer.put_str(&line, x, y, Color::White, bg);
+        buffer.put_str(&line, x, y, THEME.get("ui.statusline"));
 
-        //// draw mode
-        //let (label, label_fg, label_bg) = match ctx.editor.mode {
-        //    Mode::Normal => (" NOR ", bg, Color::Blue),
-        //    Mode::Insert => (" INS ", bg, Color::Green),
-        //};
-        //
-        //buffer.put_str(label, x, y, label_fg, label_bg);
-        //x += (label.chars().count() + 1) as u16;
         x += 1_u16;
 
         let (pane, doc) = current!(ctx.editor);
         match &ctx.editor.status {
             Some(status) => {
-                let fg = match status.severity {
-                    crate::editor::Severity::Hint => Color::Blue,
-                    crate::editor::Severity::Info => Color::White,
-                    crate::editor::Severity::Warning => Color::Yellow,
-                    crate::editor::Severity::Error => Color::Red,
+                let style = match status.severity {
+                    crate::editor::Severity::Hint => "hint",
+                    crate::editor::Severity::Info => "info",
+                    crate::editor::Severity::Warning => "warning",
+                    crate::editor::Severity::Error => "error",
                 };
 
-                buffer.put_str(&status.message, x, y, fg, bg);
+                buffer.put_str(&status.message, x, y, THEME.get(style));
             },
 
             None => {
                 let filename = doc.filename();
                 let filename_len = filename.chars().count();
-                buffer.put_str(&filename, x, y, Color::White, bg);
+                buffer.put_str(&filename, x, y, THEME.get("ui.statusline.filename"));
                 x += (filename_len + 1) as u16;
 
                 if doc.modified {
-                    buffer.put_str("[+]", x, y, Color::Yellow, bg);
+                    buffer.put_str("[+]", x, y, THEME.get("ui.statusline.modified"));
                     x += 4;
                 }
 
                 if doc.readonly {
-                    buffer.put_str("[readonly]", x, y, Color::DarkGrey, bg);
+                    buffer.put_str("[readonly]", x, y, THEME.get("ui.statusline.read_only"));
                 }
             },
         }
 
         let cursor_position = format!(" {}:{} ", pane.view.text_cursor_y + 1, pane.view.grapheme_at_cursor(&doc.rope).0 + 1);
         let w = area.width.saturating_sub(cursor_position.chars().count() as u16);
-        buffer.put_str(&cursor_position, w, y, Color::White, bg);
+        buffer.put_str(&cursor_position, w, y, THEME.get("ui.statusline.cursor_pos"));
     }
 }
 

@@ -1,13 +1,17 @@
 use crossterm::style::Color;
 use unicode_segmentation::UnicodeSegmentation;
 
-use super::Rect;
+use super::{style::{Modifier, Style, UnderlineStyle}, Rect};
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub struct Cell {
     pub symbol: String,
     pub fg: Color,
     pub bg: Color,
+    pub underline_color: Color,
+    pub underline_style: UnderlineStyle,
+    pub modifier: Modifier,
+
 }
 
 impl Cell {
@@ -16,6 +20,9 @@ impl Cell {
             symbol: " ".to_string(),
             fg: Color::Reset,
             bg: Color::Reset,
+            underline_color: Color::Reset,
+            underline_style: UnderlineStyle::Reset,
+            modifier: Modifier::empty(),
         }
     }
 
@@ -39,6 +46,37 @@ impl Cell {
         self.set_symbol(" ")
             .set_bg(Color::Reset)
             .set_fg(Color::Reset);
+        self.underline_color = Color::Reset;
+        self.underline_style = UnderlineStyle::Reset;
+        self.modifier = Modifier::empty();
+    }
+
+    pub fn set_style(&mut self, style: Style) -> &mut Self {
+        if let Some(c) = style.fg {
+            self.fg = c;
+        }
+        if let Some(c) = style.bg {
+            self.bg = c;
+        }
+        if let Some(c) = style.underline_color {
+            self.underline_color = c;
+        }
+        if let Some(style) = style.underline_style {
+            self.underline_style = style;
+        }
+
+        self.modifier.insert(style.add_modifier);
+        self.modifier.remove(style.sub_modifier);
+        self
+    }
+
+    pub fn style(&self) -> Style {
+        Style::default()
+            .fg(self.fg)
+            .bg(self.bg)
+            .underline_color(self.underline_color)
+            .underline_style(self.underline_style)
+            .add_modifier(self.modifier)
     }
 }
 
@@ -112,16 +150,15 @@ impl Buffer {
         None
     }
 
-    pub fn put_symbol(&mut self, symbol: &str, x: u16, y: u16, fg: Color, bg: Color) {
+    pub fn put_symbol(&mut self, symbol: &str, x: u16, y: u16, style: Style) {
         let index = self.index(x, y);
         if let Some(cell) = self.cells.get_mut(index) {
-            cell.set_symbol(symbol)
-                .set_fg(fg)
-                .set_bg(bg);
+            cell.set_symbol(symbol).set_style(style);
         }
     }
 
-    pub fn put_str(&mut self, str: &str, x: u16, y: u16, fg: Color, bg: Color) {
+    // This currently does not take into account the grapheme widths
+    pub fn put_str(&mut self, str: &str, x: u16, y: u16, style: Style) {
         let start = self.index(x, y);
 
         for (offset, g) in str.graphemes(true).enumerate() {
@@ -130,8 +167,18 @@ impl Buffer {
             }
             if let Some(cell) = self.cells.get_mut(start + offset) {
                 cell.set_symbol(g)
-                    .set_fg(fg)
-                    .set_bg(bg);
+                    .set_style(style);
+            }
+        }
+    }
+
+    pub fn set_style(&mut self, area: Rect, style: Style) {
+        for y in area.top()..area.bottom() {
+            for x in area.left()..area.right() {
+                let index = self.index(x, y);
+                if let Some(cell) = self.cells.get_mut(index) {
+                    cell.set_style(style);
+                }
             }
         }
     }

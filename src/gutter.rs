@@ -1,6 +1,4 @@
-use crossterm::style::Color;
-
-use crate::{components::scroll_view::ScrollView, document::Document, editor::Mode, ui::{buffer::Buffer, Rect}};
+use crate::{components::scroll_view::ScrollView, document::Document, editor::Mode, ui::{buffer::Buffer, theme::THEME, Rect}};
 
 const GUTTER_LINE_NUM_PAD_LEFT: u16 = 2;
 const GUTTER_LINE_NUM_PAD_RIGHT: u16 = 1;
@@ -42,24 +40,24 @@ pub fn render(view: &ScrollView, area: Rect, buffer: &mut Buffer, doc: &Document
             line_no,
             area.width.saturating_sub(GUTTER_LINE_NUM_PAD_RIGHT) as usize
         );
-        let fg = if line_no == view.text_cursor_y + 1 {
-            Color::White
+        let style = if line_no == view.text_cursor_y + 1 {
+            "ui.linenr.selected"
         } else {
-            Color::DarkGrey
+            "ui.linenr"
         };
-        buffer.put_str(&label, area.left(), y, fg, Color::Reset);
+        buffer.put_str(&label, area.left(), y, THEME.get(style));
     }
 
     fn relative(y: u16, area: Rect, buffer: &mut Buffer, view: &ScrollView) {
         let rel_line_no = view.view_cursor_position.y as isize - y as isize;
-        let (fg, label) = if rel_line_no == 0 {
+        let (style, label) = if rel_line_no == 0 {
             (
-                Color::White,
+                "ui.linenr.selected",
                 format!("  {}", view.text_cursor_y + 1),
             )
         } else {
             (
-                Color::DarkGrey,
+                "ui.linenr",
                 format!(
                     "{: >1$}",
                     rel_line_no.abs(),
@@ -67,7 +65,8 @@ pub fn render(view: &ScrollView, area: Rect, buffer: &mut Buffer, doc: &Document
                 ),
             )
         };
-        buffer.put_str(&label, area.left(), y, fg, Color::Reset);
+        let style = THEME.get(style);
+        buffer.put_str(&label, area.left(), y, style);
     }
 
     let max = doc.rope.line_len();

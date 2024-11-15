@@ -1,12 +1,11 @@
 use crate::{
     compositor::{Component, Context, EventResult}, ui::{
-        border_box::BorderBox, borders::{Stroke, Borders}, buffer::Buffer, text_input::TextInput, Position, Rect
+        border_box::BorderBox, borders::{Stroke, Borders}, buffer::Buffer, text_input::TextInput, theme::THEME, Position, Rect
     }
 };
 use crossterm::{
     cursor::SetCursorStyle,
     event::{KeyCode, KeyEvent},
-    style::Color,
 };
 
 use super::{Command, COMMANDS};
@@ -72,6 +71,7 @@ impl Component for Pallette {
         let bbox = BorderBox::new(size)
             .title("Command")
             .borders(Borders::ALL)
+            .style(THEME.get("ui.dialog.border"))
             .stroke(Stroke::Rounded);
 
         bbox.render(buffer).split_horizontally(2, buffer);
@@ -84,15 +84,15 @@ impl Component for Pallette {
         // render list
         let index = self.index;
         for (i, cmd) in self.commands().iter().enumerate() {
-            let (fg, caret) = if i == index {
-                (Color::White, " ")
+            let (style, caret) = if i == index {
+                (THEME.get("ui.menu.selected"), " ")
             } else {
-                (Color::DarkGrey, "  ")
+                (THEME.get("ui.menu"), "  ")
             };
             let y = inner.top() + (2 + i) as u16;
-            buffer.put_str(caret, inner.left(), y, fg, Color::Reset);
-            buffer.put_str(cmd.name, inner.left() + 2, y, fg, Color::Reset);
-            buffer.put_str(cmd.desc, inner.right().saturating_sub(cmd.desc.chars().count() as u16), y, fg, Color::Reset);
+            buffer.put_str(caret, inner.left(), y, style);
+            buffer.put_str(cmd.name, inner.left() + 2, y, style);
+            buffer.put_str(cmd.desc, inner.right().saturating_sub(cmd.desc.chars().count() as u16), y, style);
         }
     }
 

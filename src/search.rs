@@ -1,6 +1,6 @@
-use crossterm::{cursor::SetCursorStyle, event::{KeyCode, KeyEvent}, style::Color};
+use crossterm::{cursor::SetCursorStyle, event::{KeyCode, KeyEvent}};
 
-use crate::{compositor::{Component, Compositor, Context, EventResult}, current, editor::Mode, rope::RopeCursor, ui::{borders::{BOTTOM_LEFT, BOTTOM_RIGHT, HORIZONTAL, HORIZONTAL_UP, VERTICAL, VERTICAL_LEFT, VERTICAL_RIGHT}, buffer::Buffer, text_input::TextInput, Position, Rect}};
+use crate::{compositor::{Component, Compositor, Context, EventResult}, current, editor::Mode, rope::RopeCursor, ui::{borders::{BOTTOM_LEFT, BOTTOM_RIGHT, HORIZONTAL, HORIZONTAL_UP, VERTICAL, VERTICAL_LEFT, VERTICAL_RIGHT}, buffer::Buffer, text_input::TextInput, theme::THEME, Position, Rect}};
 
 #[derive(Default)]
 pub struct SearchState {
@@ -32,13 +32,13 @@ impl Component for Search {
     fn render(&mut self, area: Rect, buffer: &mut Buffer, ctx: &mut Context) {
         buffer.clear(area.clip_top(area.height.saturating_sub(1)));
 
-        let fg = if ctx.editor.search.focused {
-            Color::White
+        let style = if ctx.editor.search.focused {
+            "ui.text_input"
         } else {
-            Color::DarkGrey
+            "ui.text_input.blur"
         };
 
-        buffer.put_str("", area.left() + 1, area.bottom().saturating_sub(1), fg, Color::Reset);
+        buffer.put_str("", area.left() + 1, area.bottom().saturating_sub(1), THEME.get(style));
 
         let y = area.bottom().saturating_sub(2);
 
@@ -46,13 +46,13 @@ impl Component for Search {
             match buffer.get_symbol(i, y) {
                 Some(ref s) => {
                     if [VERTICAL, BOTTOM_RIGHT, BOTTOM_LEFT, VERTICAL_LEFT, VERTICAL_RIGHT, HORIZONTAL_UP].contains(s) {
-                        buffer.put_str(HORIZONTAL_UP, i, y, Color::DarkGrey, Color::Reset);
+                        buffer.put_str(HORIZONTAL_UP, i, y, THEME.get("ui.pane.border"));
                     } else {
-                        buffer.put_str(HORIZONTAL, i, y, Color::DarkGrey, Color::Reset);
+                        buffer.put_str(HORIZONTAL, i, y, THEME.get("ui.pane.border"));
                     }
                 },
                 None => {
-                    buffer.put_str(HORIZONTAL, i, y, Color::DarkGrey, Color::Reset);
+                    buffer.put_str(HORIZONTAL, i, y, THEME.get("ui.pane.border"));
                 },
             }
         }
@@ -62,13 +62,13 @@ impl Component for Search {
         if ctx.editor.search.focused {
             self.input.render(input_size, buffer);
         } else {
-            buffer.put_str(&self.input.value(), area.left() + 4, area.bottom().saturating_sub(1), Color::DarkGrey, Color::Reset);
+            buffer.put_str(&self.input.value(), area.left() + 4, area.bottom().saturating_sub(1), THEME.get("ui.text_input.blur"));
         }
 
         if ctx.editor.search.total_matches > 0 {
             let label = format!("Match {} of {}", ctx.editor.search.current_match + 1, ctx.editor.search.total_matches);
             let label_len = label.chars().count();
-            buffer.put_str(&label, area.right().saturating_sub(1 + label_len as u16), area.bottom().saturating_sub(1), Color::DarkGrey, Color::Reset);
+            buffer.put_str(&label, area.right().saturating_sub(1 + label_len as u16), area.bottom().saturating_sub(1), THEME.get("ui.text_input.blur"));
         }
     }
 

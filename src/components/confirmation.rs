@@ -2,9 +2,9 @@ use crate::document::{Document, DocumentId};
 use crate::ui::border_box::BorderBox;
 use crate::ui::borders::{Stroke, Borders};
 use crate::ui::buffer::Buffer;
+use crate::ui::theme::THEME;
 use crate::{compositor::{Component, Compositor, Context, EventResult}, ui::Rect};
 use crossterm::event::{KeyCode, KeyEvent};
-use crossterm::style::Color;
 use unicode_segmentation::UnicodeSegmentation;
 
 fn doc<'c>(ctx: &'c mut Context, ignored: &[DocumentId]) -> Option<(&'c DocumentId, &'c Document)> {
@@ -38,18 +38,22 @@ fn render_dialog(choice: u8, doc: &Document, area: Rect, buffer: &mut Buffer) {
     bbox.render(buffer);
 
     let x = area.left() + 1;
-    buffer.put_str(TITLE, x, area.top(), Color::White, Color::Reset);
-    buffer.put_str(&text, x, area.top() + 1, Color::White, Color::Reset);
+    buffer.put_str(&text, x, area.top() + 1, THEME.get("ui.dialog.text"));
 
-    let (yfg, nfg, cfg, ybg, nbg, cbg) = match choice {
-        0 => (Color::Black, Color::White, Color::White, Color::White, Color::Reset, Color::Reset),
-        1 => (Color::White, Color::Black, Color::White, Color::Reset, Color::White, Color::Reset),
-        _ => (Color::White, Color::White, Color::Black, Color::Reset, Color::Reset, Color::White),
+    let (first, second, third) = match choice {
+        0 => ("ui.dialog.button.selected", "ui.dialog.button", "ui.dialog.button"),
+        1 => ("ui.dialog.button", "ui.dialog.button.selected", "ui.dialog.button"),
+        _ => ("ui.dialog.button", "ui.dialog.button", "ui.dialog.button.selected"),
     };
 
-    buffer.put_str(PROMPT_YES, x + 1, area.top() + 3, yfg, ybg);
-    buffer.put_str(PROMPT_NO, x + 1 + 5, area.top() + 3, nfg, nbg);
-    buffer.put_str(PROMPT_CANCEL, x + 1 + 5 + 4, area.top() + 3, cfg, cbg);
+    let x = x + 1;
+    let y = area.top() + 3;
+
+    buffer.put_str(PROMPT_YES, x, y, THEME.get(first));
+    let x = x + PROMPT_YES.len() as u16;
+    buffer.put_str(PROMPT_NO, x, y, THEME.get(second));
+    let x = x + PROMPT_NO.len() as u16;
+    buffer.put_str(PROMPT_CANCEL, x, y, THEME.get(third));
 }
 
 const TITLE: &str = "Exit";

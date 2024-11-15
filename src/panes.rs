@@ -1,8 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
 
-use crossterm::style::Color;
-
-use crate::{components::scroll_view::ScrollView, document::{Document, DocumentId}, editor::Mode, gutter, ui::{borders::{Stroke, Symbol}, buffer::Buffer, Rect}};
+use crate::{components::scroll_view::ScrollView, document::{Document, DocumentId}, editor::Mode, gutter, ui::{borders::{Stroke, Symbol}, buffer::Buffer, theme::THEME, Rect}};
 
 make_inc_id_type!(PaneId);
 make_inc_id_type!(NodeId);
@@ -202,7 +200,7 @@ impl Panes {
         }
 
         for ((x, y), symbol) in symbols {
-            buffer.put_symbol(symbol.as_str(Stroke::Plain), x, y, Color::DarkGrey, Color::Reset);
+            buffer.put_symbol(symbol.as_str(Stroke::Plain), x, y, THEME.get("ui.pane.border"));
         }
     }
 
@@ -467,7 +465,7 @@ impl Pane {
             &doc.rope,
             |buf: &mut Buffer, (x, y)| {
                 // render trailing whitespace
-                buf.put_symbol("~", x, y, Color::DarkGrey, Color::Reset);
+                buf.put_symbol("~", x, y, THEME.get("ui.text.whitespace"));
             },
         );
     }
