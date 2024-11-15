@@ -17,9 +17,15 @@ fn setup_logging() -> Result<()> {
     let mut kod_dir = kod_dir();
     kod_dir.push("log.log");
 
+    let log_level = if cfg!(debug_assertions) {
+        log::LevelFilter::Debug
+    } else {
+        log::LevelFilter::Error
+    };
+
     fern::Dispatch::new()
         .format(|out, message, record| out.finish(format_args!("{}: {}", record.level(), message)))
-        .level(log::LevelFilter::Debug)
+        .level(log_level)
         .chain(fern::log_file(&kod_dir)?)
         .apply()?;
 
