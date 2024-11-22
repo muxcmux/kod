@@ -283,7 +283,21 @@ pub fn append_character(c: char, ctx: &mut Context) {
         pane.view.text_cursor_y
     );
     insert_or_replace_char_at_offset(c, offset, offset, pane, doc);
-    pane.view.cursor_right(&doc.rope, &ctx.editor.mode);
+
+    // if the current or previous chars are zero-width
+    // joiners we don't move the cursor to the right
+    let zwj = '\u{200d}';
+    if c != zwj {
+        let zwj_bytes: [u8; 3] = [226, 128, 141];
+        let prev_bytes = [
+            doc.rope.byte(offset.saturating_sub(3)),
+            doc.rope.byte(offset.saturating_sub(2)),
+            doc.rope.byte(offset.saturating_sub(1))
+        ];
+        if prev_bytes != zwj_bytes {
+            pane.view.cursor_right(&doc.rope, &ctx.editor.mode);
+        }
+    }
 }
 
 pub fn append_or_replace_character(c: char, ctx: &mut Context) {
