@@ -255,7 +255,7 @@ impl Transaction {
                     }
                 },
                 (Some(Insert(s)), Some(Retain(j))) => {
-                    let len = s.chars().count();
+                    let len = s.bytes().count();
                     match len.cmp(&j) {
                         Ordering::Less => {
                             transaction.insert(s);
