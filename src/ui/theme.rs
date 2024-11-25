@@ -54,23 +54,23 @@ use crossterm::style::Color;
 // Returns a crossterm Color from a str
 fn color(str: &str) -> Color {
     match str {
-        "reset"        => PALLETTE.get(str).map(|c| color(c)).unwrap_or(Color::Reset),
-        "black"        => PALLETTE.get(str).map(|c| color(c)).unwrap_or(Color::Black),
-        "dark_grey"    => PALLETTE.get(str).map(|c| color(c)).unwrap_or(Color::DarkGrey),
-        "red"          => PALLETTE.get(str).map(|c| color(c)).unwrap_or(Color::Red),
-        "dark_red"     => PALLETTE.get(str).map(|c| color(c)).unwrap_or(Color::DarkRed),
-        "green"        => PALLETTE.get(str).map(|c| color(c)).unwrap_or(Color::Green),
-        "dark_green"   => PALLETTE.get(str).map(|c| color(c)).unwrap_or(Color::DarkGreen),
-        "yellow"       => PALLETTE.get(str).map(|c| color(c)).unwrap_or(Color::Yellow),
-        "dark_yellow"  => PALLETTE.get(str).map(|c| color(c)).unwrap_or(Color::DarkYellow),
-        "blue"         => PALLETTE.get(str).map(|c| color(c)).unwrap_or(Color::Blue),
-        "dark_blue"    => PALLETTE.get(str).map(|c| color(c)).unwrap_or(Color::DarkBlue),
-        "magenta"      => PALLETTE.get(str).map(|c| color(c)).unwrap_or(Color::Magenta),
-        "dark_magenta" => PALLETTE.get(str).map(|c| color(c)).unwrap_or(Color::DarkMagenta),
-        "cyan"         => PALLETTE.get(str).map(|c| color(c)).unwrap_or(Color::Cyan),
-        "dark_cyan"    => PALLETTE.get(str).map(|c| color(c)).unwrap_or(Color::DarkCyan),
-        "white"        => PALLETTE.get(str).map(|c| color(c)).unwrap_or(Color::White),
-        "grey"         => PALLETTE.get(str).map(|c| color(c)).unwrap_or(Color::Grey),
+        "reset"        => PALETTE.get(str).map(|c| color(c)).unwrap_or(Color::Reset),
+        "black"        => PALETTE.get(str).map(|c| color(c)).unwrap_or(Color::Black),
+        "dark_grey"    => PALETTE.get(str).map(|c| color(c)).unwrap_or(Color::DarkGrey),
+        "red"          => PALETTE.get(str).map(|c| color(c)).unwrap_or(Color::Red),
+        "dark_red"     => PALETTE.get(str).map(|c| color(c)).unwrap_or(Color::DarkRed),
+        "green"        => PALETTE.get(str).map(|c| color(c)).unwrap_or(Color::Green),
+        "dark_green"   => PALETTE.get(str).map(|c| color(c)).unwrap_or(Color::DarkGreen),
+        "yellow"       => PALETTE.get(str).map(|c| color(c)).unwrap_or(Color::Yellow),
+        "dark_yellow"  => PALETTE.get(str).map(|c| color(c)).unwrap_or(Color::DarkYellow),
+        "blue"         => PALETTE.get(str).map(|c| color(c)).unwrap_or(Color::Blue),
+        "dark_blue"    => PALETTE.get(str).map(|c| color(c)).unwrap_or(Color::DarkBlue),
+        "magenta"      => PALETTE.get(str).map(|c| color(c)).unwrap_or(Color::Magenta),
+        "dark_magenta" => PALETTE.get(str).map(|c| color(c)).unwrap_or(Color::DarkMagenta),
+        "cyan"         => PALETTE.get(str).map(|c| color(c)).unwrap_or(Color::Cyan),
+        "dark_cyan"    => PALETTE.get(str).map(|c| color(c)).unwrap_or(Color::DarkCyan),
+        "white"        => PALETTE.get(str).map(|c| color(c)).unwrap_or(Color::White),
+        "grey"         => PALETTE.get(str).map(|c| color(c)).unwrap_or(Color::Grey),
         s if s.starts_with('#') && s.len() >= 7 => {
             Color::Rgb {
                 r: u8::from_str_radix(&s[1..3], 16).unwrap_or_else(|_| panic!("Bad color hex value: {s}")),
@@ -81,7 +81,7 @@ fn color(str: &str) -> Color {
         s if s.parse::<u8>().is_ok() => {
             Color::AnsiValue(s.parse::<u8>().unwrap())
         },
-        s => PALLETTE.get(s).map(|c| color(c)).unwrap_or_else(|| panic!("Unknown color: {}", s)),
+        s => PALETTE.get(s).map(|c| color(c)).unwrap_or_else(|| panic!("Unknown color: {}", s)),
     }
 }
 
@@ -104,9 +104,10 @@ impl Theme {
 }
 
 // kanagawabones
-pub static PALLETTE: Lazy<HashMap<&str, &str>> = Lazy::new(|| {
+pub static PALETTE: Lazy<HashMap<&str, &str>> = Lazy::new(|| {
     HashMap::from([
         ("fg", "#ddd8bb"),
+        ("bg", "#1f1f28"),
         ("light_bg", "#363644"),
         ("muted", "#646476"),
         ("muted1", "#696977"),

@@ -10,12 +10,12 @@ use crossterm::{
 
 use super::{Command, COMMANDS};
 
-pub struct Pallette {
+pub struct Palette {
     input: TextInput,
     index: usize,
 }
 
-impl Pallette {
+impl Palette {
     pub fn new() -> Self {
         Self {
             input: TextInput::empty(),
@@ -42,7 +42,7 @@ impl Pallette {
             }
 
             return EventResult::Consumed(Some(Box::new(|compositor, cx| {
-                // close the pallette first
+                // close the palette first
                 compositor.pop();
                 for cb in ctx.compositor_callbacks {
                     cb(compositor, cx);
@@ -64,7 +64,7 @@ impl Pallette {
     }
 }
 
-impl Component for Pallette {
+impl Component for Palette {
     fn render(&mut self, area: Rect, buffer: &mut Buffer, _ctx: &mut Context) {
         let size = area.clip_bottom(1).centered(50, 10);
 

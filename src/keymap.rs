@@ -188,7 +188,7 @@ fn parse_key_combo(combo: &str) -> KeyEvent {
 
 fn normal_mode_keymap() -> Keymap {
     map!({
-        ":" => command_pallette,
+        ":" => command_palette,
         "R" => enter_replace_mode,
 
         "h" => cursor_left,

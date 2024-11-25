@@ -1,6 +1,8 @@
 use crossterm::style::Color;
 use unicode_segmentation::UnicodeSegmentation;
 
+use crate::graphemes;
+
 use super::{style::{Modifier, Style, UnderlineStyle}, Rect};
 
 #[derive(PartialEq, Eq, Debug, Clone)]
@@ -128,10 +130,10 @@ impl Buffer {
                 patches.push(Patch { x, y, cell: &other.cells[i] });
             }
 
-            let current_width = unicode_display_width::width(&current.symbol);
+            let current_width = graphemes::width(&current.symbol);
             to_skip = current_width.saturating_sub(1);
 
-            let affected_width = current_width.max(unicode_display_width::width(&previous.symbol));
+            let affected_width = current_width.max(graphemes::width(&previous.symbol));
             invalidated = affected_width.max(invalidated).saturating_sub(1);
         }
 
@@ -197,7 +199,7 @@ impl Buffer {
     pub fn clear_double_width_cell(&mut self, x: u16, y: u16) {
         let idx = self.index(x, y);
         if let Some(cell) = self.cells.get_mut(idx) {
-            if unicode_display_width::width(&cell.symbol) == 2 {
+            if graphemes::width(&cell.symbol) == 2 {
                 cell.set_symbol(" ");
             }
         }

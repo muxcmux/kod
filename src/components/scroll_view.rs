@@ -2,7 +2,7 @@ use std::{borrow::Cow, cmp::Ordering};
 
 use crop::Rope;
 
-use crate::{editor::Mode, graphemes::{GraphemeCategory, Word, NEW_LINE_STR}, ui::{buffer::Buffer, theme::THEME, Position, Rect}};
+use crate::{editor::Mode, graphemes::{self, GraphemeCategory, Word, NEW_LINE_STR}, ui::{buffer::Buffer, theme::THEME, Position, Rect}};
 
 #[derive(PartialEq)]
 enum HorizontalMove { Right, Left }
@@ -84,7 +84,7 @@ impl ScrollView {
             let mut advance = 0;
             while advance < self.scroll_x {
                 if let Some(g) = graphemes.next() {
-                    advance += unicode_display_width::width(&g) as usize;
+                    advance += graphemes::width(&g);
                     skip_next_n_cols = advance.saturating_sub(self.scroll_x);
                 } else {
                     break
@@ -102,7 +102,7 @@ impl ScrollView {
                 match graphemes.next() {
                     None => break,
                     Some(g) => {
-                        let width = unicode_display_width::width(&g) as usize;
+                        let width = graphemes::width(&g);
                         let x = col.saturating_sub(self.scroll_x) as u16 + area.left();
                         buffer.put_symbol(&g, x, y, THEME.get("ui.text"));
                         skip_next_n_cols = width - 1;
@@ -129,7 +129,7 @@ impl ScrollView {
             if col == cursor_x {
                 break;
             }
-            col += unicode_display_width::width(&g) as usize;
+            col += graphemes::width(&g);
             offset += g.len();
         }
         offset
@@ -142,7 +142,7 @@ impl ScrollView {
         for g in line.graphemes() {
             if offset >= byte { break }
 
-            cursor_x += unicode_display_width::width(&g);
+            cursor_x += graphemes::width(&g);
 
             offset += g.bytes().len();
         }
@@ -162,7 +162,7 @@ impl ScrollView {
     }
 
     pub fn line_width(&self, rope: &Rope, line: usize) -> usize {
-        rope.line(line).graphemes().map(|g| unicode_display_width::width(&g) as usize).sum()
+        rope.line(line).graphemes().map(|g| graphemes::width(&g)).sum()
     }
 
     // This needs to work with transactions
@@ -180,7 +180,7 @@ impl ScrollView {
         let mut iter = rope.line(self.text_cursor_y).graphemes().enumerate().peekable();
         while let Some((i, g)) = iter.next() {
             idx = i;
-            let width = unicode_display_width::width(&g) as usize;
+            let width = graphemes::width(&g);
             grapheme = Some(g);
             if col >= self.text_cursor_x { break }
             if iter.peek().is_none() { idx += 1 }
@@ -231,7 +231,7 @@ impl ScrollView {
         let mut graphemes = rope.line(self.text_cursor_y).graphemes().peekable();
 
         while let Some(g) = graphemes.next() {
-            let width = unicode_display_width::width(&g) as usize;
+            let width = graphemes::width(&g);
 
             let next_grapheme_start = acc + width;
 
@@ -287,7 +287,7 @@ impl ScrollView {
         let mut iter = line.graphemes().peekable();
 
         while let Some(g) = iter.next() {
-            let width = unicode_display_width::width(&g) as usize;
+            let width = graphemes::width(&g);
             let size = g.len();
             let this_cat = GraphemeCategory::from(&g);
             match iter.peek() {
@@ -397,7 +397,7 @@ impl ScrollView {
                 self.move_cursor_to(rope, Some(col.saturating_sub(offset)), None, mode);
                 break;
             }
-            let width = unicode_display_width::width(&g) as usize;
+            let width = graphemes::width(&g);
             col += width;
         }
     }
@@ -409,7 +409,7 @@ impl ScrollView {
                 self.move_cursor_to(rope, Some(col.saturating_sub(offset)), None, mode);
                 break;
             }
-            let width = unicode_display_width::width(&g) as usize;
+            let width = graphemes::width(&g);
             col -= width;
         }
     }

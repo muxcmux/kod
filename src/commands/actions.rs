@@ -2,9 +2,9 @@ use crop::Rope;
 use crossterm::event::KeyCode;
 use smartstring::SmartString;
 
-use crate::{document::Document, editor::Mode, graphemes::NEW_LINE, history::Transaction, panes::{Direction, Pane}, search::Search};
+use crate::{document::Document, editor::Mode, graphemes::{self, NEW_LINE}, history::Transaction, panes::{Direction, Pane}, search::Search};
 
-use super::{pallette::Pallette, Context};
+use super::{palette::Palette, Context};
 
 // From helix:
 // These are macros to make getting very nested fields in the `Editor` struct easier
@@ -103,9 +103,9 @@ fn enter_insert_mode_relative_to_cursor(x: usize, ctx: &mut Context) {
     }
 }
 
-pub fn command_pallette(ctx: &mut Context) {
-    let pallette = Box::new(Pallette::new());
-    ctx.push_component(pallette);
+pub fn command_palette(ctx: &mut Context) {
+    let palette = Box::new(Palette::new());
+    ctx.push_component(palette);
 }
 
 pub fn enter_normal_mode(ctx: &mut Context) {
@@ -308,7 +308,7 @@ pub fn append_or_replace_character(c: char, ctx: &mut Context) {
     let mut col = 0;
 
     for g in doc.rope.line(pane.view.text_cursor_y).graphemes() {
-        let width = unicode_display_width::width(&g) as usize;
+        let width = graphemes::width(&g);
         let size = g.bytes().count();
 
         if col >= pane.view.text_cursor_x {

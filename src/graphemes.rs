@@ -5,6 +5,10 @@ use crop::RopeSlice;
 pub const NEW_LINE: char = '\n';
 pub const NEW_LINE_STR: &str = "\n";
 
+pub fn width(s: &str) -> usize {
+    unicode_display_width::width(s) as usize
+}
+
 #[derive(Clone, Debug)]
 pub struct Word<'a> {
     pub slice: RopeSlice<'a>,
@@ -17,7 +21,6 @@ impl<'a> Word<'a> {
         self.slice.chars().all(|c| c.is_whitespace())
     }
 }
-
 
 #[derive(PartialEq)]
 pub enum GraphemeCategory {

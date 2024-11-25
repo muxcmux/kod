@@ -1,5 +1,5 @@
 pub mod actions;
-pub mod pallette;
+pub mod palette;
 
 use crossterm::event::KeyEvent;
 

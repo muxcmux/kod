@@ -1,4 +1,5 @@
 use crate::document::{Document, DocumentId};
+use crate::graphemes;
 use crate::ui::border_box::BorderBox;
 use crate::ui::borders::{Stroke, Borders};
 use crate::ui::buffer::Buffer;
@@ -15,7 +16,7 @@ fn doc<'c>(ctx: &'c mut Context, ignored: &[DocumentId]) -> Option<(&'c Document
 
 fn render_dialog(choice: u8, doc: &Document, area: Rect, buffer: &mut Buffer) {
     let text = format!(" Save changes to {}? ", doc.filename());
-    let text_width = text.graphemes(true).map(|g| unicode_display_width::width(g) as u16).sum();
+    let text_width = text.graphemes(true).map(|g| graphemes::width(g) as u16).sum();
 
     let width = TITLE_WIDTH
         .max(PROMPT_WIDTH)
