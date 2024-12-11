@@ -31,21 +31,25 @@ This is a high-level, unordered, non-exhaustive list of features I want in kod.
   [-] Commands
   [-] Registers
   [-] Count before a motion e.g. `5dw`
+  [ ] Jump lists
   [ ] Built-in fuzzy finder ala Telescope (suitable for more than finding files)
   [ ] Project-wide search/replace
   [ ] Basic file explorer ala mini.files
   [ ] LSP diagnostics, goto definition/impl, actions, hover, etc.
+  [ ] Quickfix lists
   [ ] Syntax highlighting
   [ ] Support for multiple languages
   [ ] Visual mode
   [ ] Themes
   [ ] Snippets
+  [ ] Mouse
   [ ] Git gutter highlights
   [ ] Autosuggest (very low on the list)
 
 ## Build
 
-To build and run kod you need Rust + C combiler for treesitter.
+To build kod you need Rust and C for treesitter.
 
 * Install [Rust](https://www.rust-lang.org/tools/install)
+* TBD: build TS grammars
 * cargo run

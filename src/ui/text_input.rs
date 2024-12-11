@@ -43,7 +43,7 @@ impl TextInput {
 
     pub fn remember(&mut self) {
         let val = self.value();
-        if !self.history.last().is_some_and(|v| *v == val) {
+        if self.history.last().is_none_or(|v| *v != val) {
             self.history.push(val);
         }
         self.history_idx = self.history.len();
@@ -60,7 +60,8 @@ impl TextInput {
     }
 
     pub fn render(&mut self, area: Rect, buffer: &mut Buffer) {
-        self.view.render(area, buffer, &self.rope, |_, _| {});
+        self.view.ensure_cursor_is_in_view(area);
+        self.view.render(area, buffer, &self.rope, [].into_iter(), false);
     }
 
     fn insert_char_at_cursor(&mut self, char: char, mode: &Mode) {

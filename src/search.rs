@@ -127,7 +127,7 @@ pub fn search(ctx: &mut Context, backwards: bool) -> bool {
         Ok(re) => {
             let (pane, doc) = current!(ctx.editor);
 
-            let haystack = regex_cursor::Input::new(RopeCursor::new(&doc.rope));
+            let haystack = regex_cursor::Input::new(RopeCursor::new(doc.rope.byte_slice(..)));
 
             let mut matches: Vec<_> = re.find_iter(haystack).collect();
             matches.sort_by_key(|a| a.start());

@@ -46,4 +46,4 @@ mod gutter;
 mod search;
 mod registers;
 mod rope;
-mod syntax;
+mod language;

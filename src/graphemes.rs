@@ -4,6 +4,7 @@ use crop::RopeSlice;
 
 pub const NEW_LINE: char = '\n';
 pub const NEW_LINE_STR: &str = "\n";
+pub const NEW_LINE_STR_WIN: &str = "\r\n";
 
 pub fn width(s: &str) -> usize {
     unicode_display_width::width(s) as usize
@@ -16,7 +17,7 @@ pub struct Word<'a> {
     pub end: usize,
 }
 
-impl<'a> Word<'a> {
+impl Word<'_> {
     pub fn is_blank(&self) -> bool {
         self.slice.chars().all(|c| c.is_whitespace())
     }
@@ -28,6 +29,10 @@ pub enum GraphemeCategory {
     Word,
     Punctuation,
     Other,
+}
+
+pub fn grapheme_is_line_ending(grapheme: &str) -> bool {
+    matches!(grapheme, NEW_LINE_STR | NEW_LINE_STR_WIN)
 }
 
 impl From<&Cow<'_, str>> for GraphemeCategory {

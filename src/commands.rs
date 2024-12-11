@@ -13,7 +13,7 @@ pub struct Context<'a> {
     pub on_next_key_callback: Option<KeyCallback>,
 }
 
-impl<'a> Context<'a> {
+impl Context<'_> {
     fn push_component(&mut self, component: Box<dyn Component>) {
         self.compositor_callbacks.push(Box::new(|compositor, _| {
             compositor.push(component)

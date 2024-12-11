@@ -459,14 +459,15 @@ impl Pane {
     }
 
     fn render_document(&mut self, area: Rect, buffer: &mut Buffer, doc: &Document) {
+        // ensure cursor is in view needs to happen before obtaining
+        // the view's visible byte range
+        self.view.ensure_cursor_is_in_view(area);
         self.view.render(
             area,
             buffer,
             &doc.rope,
-            |buf: &mut Buffer, (x, y)| {
-                // render trailing whitespace
-                buf.put_symbol("~", x, y, THEME.get("ui.text.whitespace"));
-            },
+            doc.syntax_highlights(self.view.visible_byte_range(&doc.rope, area.height)),
+            true
         );
     }
 

@@ -62,7 +62,7 @@ impl Editor {
                 match std::fs::read_to_string(&pa) {
                     Ok(c) => {
                         if !c.is_empty() { contents = c; }
-                        path = Some(pa);
+                        path = pa.canonicalize().ok();
                     },
                     Err(err) => {
                         status = Some(EditorStatus { severity: Severity::Error, message: format!("{err}").into() })

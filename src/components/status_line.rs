@@ -32,7 +32,14 @@ impl Component for StatusLine {
             },
 
             None => {
-                let filename = doc.filename();
+                if let Some(lang) = &doc.language {
+                    if let Some(ref icon) = lang.icon {
+                        buffer.put_str(icon, x, y, THEME.get("ui.statusline.filename"));
+                        x += 2;
+                    }
+                }
+
+                let filename = doc.filename_display();
                 let filename_len = filename.chars().count();
                 buffer.put_str(&filename, x, y, THEME.get("ui.statusline.filename"));
                 x += (filename_len + 1) as u16;

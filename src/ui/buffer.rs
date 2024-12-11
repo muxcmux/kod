@@ -116,7 +116,7 @@ impl Buffer {
         }
     }
 
-    pub fn diff<'a>(&'a self, other: &'a Self) -> Vec<Patch> {
+    pub fn diff<'a>(&'a self, other: &'a Self) -> Vec<Patch<'a>> {
         debug_assert!(self.size == other.size);
 
         let mut patches = vec![];
@@ -200,7 +200,7 @@ impl Buffer {
         let idx = self.index(x, y);
         if let Some(cell) = self.cells.get_mut(idx) {
             if graphemes::width(&cell.symbol) == 2 {
-                cell.set_symbol(" ");
+                cell.reset();
             }
         }
     }

@@ -1,8 +1,8 @@
-use std::{borrow::Cow, cmp::Ordering};
+use std::{borrow::Cow, cmp::Ordering, ops::Range};
 
 use crop::Rope;
 
-use crate::{editor::Mode, graphemes::{self, GraphemeCategory, Word, NEW_LINE_STR}, ui::{buffer::Buffer, theme::THEME, Position, Rect}};
+use crate::{document::StyleIter, editor::Mode, graphemes::{self, GraphemeCategory, Word, NEW_LINE_STR}, language::syntax::HighlightEvent, ui::{buffer::Buffer, theme::THEME, Position, Rect}};
 
 #[derive(PartialEq)]
 enum HorizontalMove { Right, Left }
@@ -40,6 +40,10 @@ fn move_direction(from: (usize, usize), to: (&usize, &usize)) -> CursorMove {
     }
 }
 
+// TODO: Really need to decouple the whole
+// cursor business from the view business
+// which means that whoever keeps the scroll_view
+// also needs to keep the cursor state
 #[derive(Default, Debug)]
 pub struct ScrollView {
     pub view_cursor_position: Position,
@@ -53,7 +57,7 @@ pub struct ScrollView {
 }
 
 impl ScrollView {
-    fn ensure_cursor_is_in_view(&mut self, area: Rect) {
+    pub fn ensure_cursor_is_in_view(&mut self, area: Rect) {
         if let Some(s) = adjust_scroll(area.height as usize, self.text_cursor_y, self.offset_y, self.scroll_y) {
             self.scroll_y = s;
         }
@@ -67,23 +71,48 @@ impl ScrollView {
         self.view_cursor_position.x = area.left() + self.text_cursor_x.saturating_sub(self.scroll_x) as u16;
     }
 
-    pub fn render<F>(&mut self, area: Rect, buffer: &mut Buffer, rope: &Rope, mut ws_callback: F)
-        where F: FnMut(&mut Buffer, (u16, u16))
-    {
-        self.ensure_cursor_is_in_view(area);
+    pub fn render(
+        &mut self,
+        area: Rect,
+        buffer: &mut Buffer,
+        rope: &Rope,
+        highlight_iter: impl Iterator<Item = HighlightEvent>,
+        render_trailing_whitespace: bool,
+    ) {
+        let mut styles = StyleIter::new(highlight_iter);
+        let (mut style, mut highlight_until) = styles.next()
+            .unwrap_or((THEME.get("text"), usize::MAX));
 
+        // loop through each visible line
         for row in self.scroll_y..self.scroll_y + area.height as usize {
-            if row >= rope.line_len() {
-                break;
+            if row >= rope.line_len() { break }
+
+            let mut offset = rope.byte_of_line(row);
+            // at the start of each line we have to check if the byte offset
+            // is more than the current highlight_until (accounting for new lines)
+            while offset > highlight_until {
+                match styles.next() {
+                    Some((s, h)) => (style, highlight_until) = (s, h),
+                    None => break
+                }
             }
+
+            if offset > highlight_until {
+                if let Some((s, h)) = styles.next() {
+                    (style, highlight_until) = (s, h);
+                }
+            }
+
             let line = rope.line(row);
             let mut graphemes = line.graphemes();
+            // accounts for multi-width graphemes
             let mut skip_next_n_cols = 0;
 
             // advance the iterator to account for scroll
             let mut advance = 0;
             while advance < self.scroll_x {
                 if let Some(g) = graphemes.next() {
+                    offset += g.len();
                     advance += graphemes::width(&g);
                     skip_next_n_cols = advance.saturating_sub(self.scroll_x);
                 } else {
@@ -104,8 +133,19 @@ impl ScrollView {
                     Some(g) => {
                         let width = graphemes::width(&g);
                         let x = col.saturating_sub(self.scroll_x) as u16 + area.left();
-                        buffer.put_symbol(&g, x, y, THEME.get("ui.text"));
+
                         skip_next_n_cols = width - 1;
+
+                        offset += g.len();
+
+                        while offset > highlight_until {
+                            match styles.next() {
+                                Some((s, h)) => (style, highlight_until) = (s, h),
+                                None => break
+                            }
+                        }
+
+                        buffer.put_symbol(&g, x, y, style);
 
                         if GraphemeCategory::from(&g) == GraphemeCategory::Whitespace {
                             trailing_whitespace.push(x);
@@ -116,10 +156,22 @@ impl ScrollView {
                 }
             }
 
-            for x in trailing_whitespace {
-                ws_callback(buffer, (x, y));
+            if render_trailing_whitespace {
+                for x in trailing_whitespace {
+                    // render trailing whitespace
+                    buffer.put_symbol("~", x, y, THEME.get("text.whitespace"));
+                }
             }
         }
+    }
+
+    pub fn visible_byte_range(&self, rope: &Rope, height: u16) -> Range<usize> {
+        let from = self.scroll_y;
+        let to = (from + height.saturating_sub(1) as usize).min(rope.line_len().saturating_sub(1));
+        let start = rope.byte_of_line(from);
+        let end = rope.byte_of_line(to + 1);
+
+        start..end
     }
 
     pub fn byte_offset_at_cursor(&self, rope: &Rope, cursor_x: usize, cursor_y: usize) -> usize {
@@ -147,7 +199,7 @@ impl ScrollView {
             offset += g.bytes().len();
         }
 
-        (cursor_x as usize, cursor_y)
+        (cursor_x, cursor_y)
     }
 
     fn max_cursor_x(&self, rope: &Rope, line: usize, mode: &Mode) -> usize {
@@ -172,7 +224,7 @@ impl ScrollView {
         // TODO: Move the cursor
     }
 
-    pub fn grapheme_at_cursor<'a>(&'a self, rope: &'a Rope) -> (usize, Option<Cow<'_, str>>)  {
+    pub fn grapheme_at_cursor<'a>(&'a self, rope: &'a Rope) -> (usize, Option<Cow<'a, str>>)  {
         let mut idx = 0;
         let mut col = 0;
         let mut grapheme = None;
@@ -277,7 +329,7 @@ impl ScrollView {
         }
     }
 
-    fn words_of_line<'a>(&'a self, rope: &'a Rope, y: usize, exclude_blank_words: bool) -> Vec<Word> {
+    fn words_of_line<'a>(&'a self, rope: &'a Rope, y: usize, exclude_blank_words: bool) -> Vec<Word<'a>> {
         let line = rope.line(y);
         let mut offset = 0;
         let mut word_start_byte = offset;

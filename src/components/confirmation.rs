@@ -15,7 +15,7 @@ fn doc<'c>(ctx: &'c mut Context, ignored: &[DocumentId]) -> Option<(&'c Document
 }
 
 fn render_dialog(choice: u8, doc: &Document, area: Rect, buffer: &mut Buffer) {
-    let text = format!(" Save changes to {}? ", doc.filename());
+    let text = format!(" Save changes to {}? ", doc.filename_display());
     let text_width = text.graphemes(true).map(|g| graphemes::width(g) as u16).sum();
 
     let width = TITLE_WIDTH

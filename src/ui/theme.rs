@@ -48,6 +48,8 @@ macro_rules! theme {
 
 use std::collections::HashMap;
 use once_cell::sync::Lazy;
+use crate::language::syntax::Highlight;
+
 use super::style::Style;
 use crossterm::style::Color;
 
@@ -101,6 +103,30 @@ impl Theme {
         std::iter::successors(Some(scope), |s| Some(s.rsplit_once('.')?.0))
             .find_map(|s| self.styles.get(s).copied())
     }
+
+    pub fn scopes(&self) -> &[&str] {
+        &[
+            "comment",
+            "variable",
+            "constant.numeric",
+            "constant",
+            "attributes",
+            "type",
+            "string",
+            "variable.other.member",
+            "constant.character.escape",
+            "function",
+            "constructor",
+            "special",
+            "keyword",
+            "label",
+            "namespace"
+        ]
+    }
+
+    pub fn highlight_style(&self, highlight: Highlight) -> Style {
+        self.get(self.scopes()[highlight.0])
+    }
 }
 
 // kanagawabones
@@ -122,6 +148,9 @@ pub static PALETTE: Lazy<HashMap<&str, &str>> = Lazy::new(|| {
 
 pub static THEME: Lazy<Theme> = Lazy::new(|| {
     theme!(
+        "text" => "fg",
+        "text.whitespace" => "muted1",
+
         "ui.pane.border" => "muted",
         "ui.dialog.border" => "fg",
         "ui.dialog.text" => "fg",
@@ -146,9 +175,6 @@ pub static THEME: Lazy<Theme> = Lazy::new(|| {
         "ui.text_input" => "fg",
         "ui.text_input.blur" => "muted1",
 
-        "ui.text" => "fg",
-        "ui.text.whitespace" => "muted1",
-
         "ui.statusline" => {
             "bg" => "light_bg",
         },
@@ -161,7 +187,6 @@ pub static THEME: Lazy<Theme> = Lazy::new(|| {
         "constant" => "yellow",
         "attributes" => "yellow",
         "type" => "yellow",
-        "ui.cursor_match" => "yellow",
         "string"  => "green",
         "variable.other.member" => "green",
         "constant.character.escape" => "cyan",

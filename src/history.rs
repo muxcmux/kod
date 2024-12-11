@@ -103,6 +103,14 @@ pub struct Transaction {
 }
 
 impl Transaction {
+    pub fn empty() -> Self {
+        Self {
+            operations: vec![],
+            cursor_x: 0,
+            cursor_y: 0,
+        }
+    }
+
     pub fn is_empty(&self) -> bool {
         self.operations.is_empty()
     }

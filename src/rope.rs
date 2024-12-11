@@ -6,7 +6,7 @@ pub struct RopeCursor<'a> {
 }
 
 impl<'a> RopeCursor<'a> {
-    pub fn new(rope: &'a crop::Rope) -> Self {
+    pub fn new(rope: crop::RopeSlice<'a>) -> Self {
         let mut slices: Vec<(usize, &str)> = vec![];
         let mut offset = 0;
 
