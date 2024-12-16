@@ -27,6 +27,7 @@ This is a high-level, unordered, non-exhaustive list of features I want in kod.
   [x] Undo/Redo
   [x] Replace mode
   [x] Split windows
+  [-] Syntax highlighting (need to adjust themes and automate grammar compilation)
   [-] Search (search working, but no replace at the moment)
   [-] Commands
   [-] Registers
@@ -37,7 +38,6 @@ This is a high-level, unordered, non-exhaustive list of features I want in kod.
   [ ] Basic file explorer ala mini.files
   [ ] LSP diagnostics, goto definition/impl, actions, hover, etc.
   [ ] Quickfix lists
-  [ ] Syntax highlighting
   [ ] Support for multiple languages
   [ ] Visual mode
   [ ] Themes
