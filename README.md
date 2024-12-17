@@ -27,7 +27,7 @@ This is a high-level, unordered, non-exhaustive list of features I want in kod.
 * [x] Undo/Redo
 * [x] Replace mode
 * [x] Split windows
-* [-] Syntax highlighting (need to adjust themes and automate grammar compilation)
+* [x] Syntax highlighting
 * [-] Search (search working, but no replace at the moment)
 * [-] Commands
 * [-] Registers
@@ -46,27 +46,17 @@ This is a high-level, unordered, non-exhaustive list of features I want in kod.
 * [ ] Git gutter highlights
 * [ ] Autosuggest (very low on the list)
 
-## Build
+## Running kod
 
-To build kod you need Rust
+To build kod you need Rust and a C/C++ compiler and build tools
 
 * Install [Rust](https://www.rust-lang.org/tools/install)
-* cargo run
 
-This will build and run the editor, but it will not not include any grammars.
+Then do one of these things:
 
-Kod links with tree-sitter grammars under `./grammars` statically at compile time.
+* `$ cargo run` to run kod in dev mode
+* `$ cargo run --release` to compile an optimised build
+* `$ cargo install --path .` to install kod on your system
 
-To use a tree-sitter grammar for a language, you have to download and build it.
-For example, to include grammar for `rust`, clone it from github:
-
-    $ cd ./grammars && git clone https://github.com/tree-sitter/tree-sitter-rust
-    $ cd tree-sitter-rust && make
-
-Until there is an automated system for downloading and compiling grammars, unfortunately
-this has to be done manually. Some grammars don't have Makefiles, so you will have to use
-`gcc` and `ar` to compile statically linkable libraries. In such cases, I usually just copy
-and tweak a Makefile from another grammar.
-
-Grammars need to be in `./grammars/tree-sitter-[grammar-name]`. Directories  under `./grammars`
-which don't start with `tree-sitter-` are ignored.
+Similar to helix, kod will download and compile a bunch of tree-sitter language grammars the first
+time it is built. Unlike helix, it statically links the grammars and doesn't require runtime files.

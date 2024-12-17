@@ -1,6 +1,12 @@
 {
   "languages": [
     {
+      "file-types": [],
+      "injection-regex": "comment",
+      "name": "comment",
+      "scope": "scope.comment"
+    },
+    {
       "icon": "󱘗",
       "auto-format": true,
       "comment-tokens": [
@@ -636,7 +642,7 @@
     },
     {
       "file-types": [],
-      "grammar": "markdown_inline",
+      "grammar": "markdown-inline",
       "injection-regex": "markdown\\.inline",
       "name": "markdown.inline",
       "scope": "source.markdown.inline"
@@ -921,6 +927,324 @@
       "indent": {
         "tab-width": 2,
         "unit": "  "
+      }
+    },
+    {
+      "icon": "",
+      "auto-format": true,
+      "comment-tokens": [
+        "//",
+        "///",
+        "//!"
+      ],
+      "file-types": [
+        "*.zig",
+        "*.zon"
+      ],
+      "injection-regex": "zig",
+      "language-servers": [
+        "zls"
+      ],
+      "name": "zig",
+      "roots": [
+        "build.zig"
+      ],
+      "scope": "source.zig",
+      "indent": {
+        "tab-width": 4,
+        "unit": "    "
+      }
+    },
+    {
+      "icon": "",
+      "comment-token": "#",
+      "injection-regex": "yml|yaml",
+      "language-servers": [
+        "yaml-language-server",
+        "ansible-language-server"
+      ],
+      "name": "yaml",
+      "scope": "source.yaml",
+      "file-types": [
+        "*.yml",
+        "*.yaml",
+        "*/.prettierrc",
+        "*/.clangd",
+        "*/.clang-format"
+      ],
+      "indent": {
+        "tab-width": 2,
+        "unit": "  "
+      }
+    },
+    {
+      "icon": "",
+      "auto-format": true,
+      "comment-token": "//",
+      "file-types": [
+        "*.go"
+      ],
+      "injection-regex": "go",
+      "language-servers": [
+        "gopls",
+        "golangci-lint-lsp"
+      ],
+      "name": "go",
+      "roots": [
+        "go.work",
+        "go.mod"
+      ],
+      "scope": "source.go",
+      "block-comment-tokens": {
+        "end": "*/",
+        "start": "/*"
+      },
+      "indent": {
+        "tab-width": 4,
+        "unit": "\t"
+      }
+    }
+  ],
+  "grammars": [
+    {
+      "name": "rust",
+      "source": {
+        "git": "https://github.com/tree-sitter/tree-sitter-rust",
+        "rev": "9c84af007b0f144954adb26b3f336495cbb320a7"
+      }
+    },
+    {
+      "name": "toml",
+      "source": {
+        "git": "https://github.com/ikatyang/tree-sitter-toml",
+        "rev": "7cff70bbcbbc62001b465603ca1ea88edd668704"
+      }
+    },
+    {
+      "name": "fish",
+      "source": {
+        "git": "https://github.com/ram02z/tree-sitter-fish",
+        "rev": "84436cf24c2b3176bfbb220922a0fdbd0141e406"
+      }
+    },
+    {
+      "name": "json",
+      "source": {
+        "git": "https://github.com/tree-sitter/tree-sitter-json",
+        "rev": "73076754005a460947cafe8e03a8cf5fa4fa2938"
+      }
+    },
+    {
+      "name": "json5",
+      "source": {
+        "git": "https://github.com/Joakker/tree-sitter-json5",
+        "rev": "c23f7a9b1ee7d45f516496b1e0e4be067264fa0d"
+      }
+    },
+    {
+      "name": "c",
+      "source": {
+        "git": "https://github.com/tree-sitter/tree-sitter-c",
+        "rev": "7175a6dd5fc1cee660dce6fe23f6043d75af424a"
+      }
+    },
+    {
+      "name": "cpp",
+      "source": {
+        "git": "https://github.com/tree-sitter/tree-sitter-cpp",
+        "rev": "670404d7c689be1c868a46f919ba2a3912f2b7ef"
+      }
+    },
+    {
+      "name": "go",
+      "source": {
+        "git": "https://github.com/tree-sitter/tree-sitter-go",
+        "rev": "64457ea6b73ef5422ed1687178d4545c3e91334a"
+      }
+    },
+    {
+      "name": "javascript",
+      "source": {
+        "git": "https://github.com/tree-sitter/tree-sitter-javascript",
+        "rev": "f772967f7b7bc7c28f845be2420a38472b16a8ee"
+      }
+    },
+    {
+      "name": "typescript",
+      "source": {
+        "git": "https://github.com/tree-sitter/tree-sitter-typescript",
+        "rev": "b1bf4825d9eaa0f3bdeb1e52f099533328acfbdf",
+        "subpath": "typescript"
+      }
+    },
+    {
+      "name": "css",
+      "source": {
+        "git": "https://github.com/tree-sitter/tree-sitter-css",
+        "rev": "769203d0f9abe1a9a691ac2b9fe4bb4397a73c51"
+      }
+    },
+    {
+      "name": "html",
+      "source": {
+        "git": "https://github.com/tree-sitter/tree-sitter-html",
+        "rev": "29f53d8f4f2335e61bf6418ab8958dac3282077a"
+      }
+    },
+    {
+      "name": "python",
+      "source": {
+        "git": "https://github.com/tree-sitter/tree-sitter-python",
+        "rev": "4bfdd9033a2225cc95032ce77066b7aeca9e2efc"
+      }
+    },
+    {
+      "name": "ruby",
+      "source": {
+        "git": "https://github.com/tree-sitter/tree-sitter-ruby",
+        "rev": "206c7077164372c596ffa8eaadb9435c28941364"
+      }
+    },
+    {
+      "name": "bash",
+      "source": {
+        "git": "https://github.com/tree-sitter/tree-sitter-bash",
+        "rev": "f8fb3274f72a30896075585b32b0c54cad65c086"
+      }
+    },
+    {
+      "name": "lua",
+      "source": {
+        "git": "https://github.com/tree-sitter-grammars/tree-sitter-lua",
+        "rev": "88e446476a1e97a8724dff7a23e2d709855077f2"
+      }
+    },
+    {
+      "name": "yaml",
+      "source": {
+        "git": "https://github.com/ikatyang/tree-sitter-yaml",
+        "rev": "0e36bed171768908f331ff7dff9d956bae016efb"
+      }
+    },
+    {
+      "name": "zig",
+      "source": {
+        "git": "https://github.com/maxxnino/tree-sitter-zig",
+        "rev": "0d08703e4c3f426ec61695d7617415fff97029bd"
+      }
+    },
+    {
+      "name": "comment",
+      "source": {
+        "git": "https://github.com/stsewd/tree-sitter-comment",
+        "rev": "aefcc2813392eb6ffe509aa0fc8b4e9b57413ee1"
+      }
+    },
+    {
+      "name": "markdown",
+      "source": {
+        "git": "https://github.com/tree-sitter-grammars/tree-sitter-markdown",
+        "rev": "62516e8c78380e3b51d5b55727995d2c511436d8",
+        "subpath": "tree-sitter-markdown"
+      }
+    },
+    {
+      "name": "markdown-inline",
+      "source": {
+        "git": "https://github.com/tree-sitter-grammars/tree-sitter-markdown",
+        "rev": "62516e8c78380e3b51d5b55727995d2c511436d8",
+        "subpath": "tree-sitter-markdown-inline"
+      }
+    },
+    {
+      "name": "dockerfile",
+      "source": {
+        "git": "https://github.com/camdencheek/tree-sitter-dockerfile",
+        "rev": "8ee3a0f7587b2bd8c45c8cb7d28bd414604aec62"
+      }
+    },
+    {
+      "name": "git-commit",
+      "source": {
+        "git": "https://github.com/the-mikedavis/tree-sitter-git-commit",
+        "rev": "6f193a66e9aa872760823dff020960c6cedc37b3"
+      }
+    },
+    {
+      "name": "diff",
+      "source": {
+        "git": "https://github.com/the-mikedavis/tree-sitter-diff",
+        "rev": "fd74c78fa88a20085dbc7bbeaba066f4d1692b63"
+      }
+    },
+    {
+      "name": "git-rebase",
+      "source": {
+        "git": "https://github.com/the-mikedavis/tree-sitter-git-rebase",
+        "rev": "d8a4207ebbc47bd78bacdf48f883db58283f9fd8"
+      }
+    },
+    {
+      "name": "git-config",
+      "source": {
+        "git": "https://github.com/the-mikedavis/tree-sitter-git-config",
+        "rev": "9c2a1b7894e6d9eedfe99805b829b4ecd871375e"
+      }
+    },
+    {
+      "name": "gitattributes",
+      "source": {
+        "git": "https://github.com/mtoohey31/tree-sitter-gitattributes",
+        "rev": "3dd50808e3096f93dccd5e9dc7dc3dba2eb12dc4"
+      }
+    },
+    {
+      "name": "gitignore",
+      "source": {
+        "git": "https://github.com/shunsambongi/tree-sitter-gitignore",
+        "rev": "f4685bf11ac466dd278449bcfe5fd014e94aa504"
+      }
+    },
+    {
+      "name": "embedded-template",
+      "source": {
+        "git": "https://github.com/tree-sitter/tree-sitter-embedded-template",
+        "rev": "d21df11b0ecc6fd211dbe11278e92ef67bd17e97"
+      }
+    },
+    {
+      "name": "sql",
+      "source": {
+        "git": "https://github.com/DerekStride/tree-sitter-sql",
+        "rev": "da2d1eff425b146d3c8cab7be8dfa98b11d896dc"
+      }
+    },
+    {
+      "name": "sshclientconfig",
+      "source": {
+        "git": "https://github.com/metio/tree-sitter-ssh-client-config",
+        "rev": "e45c6d5c71657344d4ecaf87dafae7736f776c57"
+      }
+    },
+    {
+      "name": "scheme",
+      "source": {
+        "git": "https://github.com/6cdh/tree-sitter-scheme",
+        "rev": "af3af6c9356b936f8a515a1e449c32e804c2b1a8"
+      }
+    },
+    {
+      "name": "xml",
+      "source": {
+        "git": "https://github.com/RenjiSann/tree-sitter-xml",
+        "rev": "48a7c2b6fb9d515577e115e6788937e837815651"
+      }
+    },
+    {
+      "name": "hosts",
+      "source": {
+        "git": "https://github.com/ath3/tree-sitter-hosts",
+        "rev": "301b9379ce7dfc8bdbe2c2699a6887dcb73953f9"
       }
     }
   ]

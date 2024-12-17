@@ -126,8 +126,7 @@ impl LanguageConfiguration {
         if highlights_query.is_empty() {
             None
         } else {
-            let grammar = format!("tree-sitter-{}", self.grammar.as_deref().unwrap_or(&self.language_id));
-            let language = get_language(&grammar)?;
+            let language = get_language(self.grammar.as_deref().unwrap_or(&self.language_id))?;
             let mut config = HighlightConfiguration::new(
                 language,
                 &highlights_query,

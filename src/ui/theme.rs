@@ -120,7 +120,20 @@ impl Theme {
             "special",
             "keyword",
             "label",
-            "namespace"
+            "namespace",
+
+            "markup.heading",
+            "markup.list",
+            "markup.bold",
+            "markup.italic",
+            "markup.link.url",
+            "markup.link.text",
+            "markup.quote",
+            "markup.raw",
+
+            "diff.plus",
+            "diff.delta",
+            "diff.minus",
         ]
     }
 
