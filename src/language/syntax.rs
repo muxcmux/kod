@@ -877,8 +877,7 @@ fn generate_edits(
             mut column,
         } = point;
 
-        let mut graphemes = text.graphemes(true);
-        while let Some(g) = graphemes.next() {
+        for g in text.graphemes(true) {
             if grapheme_is_line_ending(g) {
                 row += 1;
                 column = 0;
@@ -961,7 +960,7 @@ pub enum Error {
     Cancelled,
     InvalidLanguage,
     InvalidRanges,
-    Unknown,
+    // Unknown,
 }
 
 /// Represents a single step in rendering a syntax-highlighted document.
