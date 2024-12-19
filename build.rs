@@ -17,6 +17,8 @@ fn out_dir() -> PathBuf {
 fn main() {
     let here = std::convert::Into::<PathBuf>::into(env::var("CARGO_MANIFEST_DIR").unwrap());
 
+    println!("cargo::rustc-link-search=native={}", out_dir().display());
+
     println!("cargo::rerun-if-changed={}", here.join("src/language/config.json").display());
 
     fetch_grammars().expect("Failed to fetch tree-sitter grammars");
@@ -357,6 +359,7 @@ fn build_tree_sitter_library(src_path: &Path, grammar: GrammarConfiguration) -> 
     build
         .include(src_path)
         .opt_level(3)
+        .cargo_warnings(false)
         .file(&parser_path);
 
     let scanner_path = if scanner_path.exists() {
