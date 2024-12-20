@@ -6,7 +6,6 @@ use crate::ui::buffer::Buffer;
 use crate::ui::theme::THEME;
 use crate::{compositor::{Component, Compositor, Context, EventResult}, ui::Rect};
 use crossterm::event::{KeyCode, KeyEvent};
-use unicode_segmentation::UnicodeSegmentation;
 
 fn doc<'c>(ctx: &'c mut Context, ignored: &[DocumentId]) -> Option<(&'c DocumentId, &'c Document)> {
     ctx.editor.documents
@@ -16,7 +15,7 @@ fn doc<'c>(ctx: &'c mut Context, ignored: &[DocumentId]) -> Option<(&'c Document
 
 fn render_dialog(choice: u8, doc: &Document, area: Rect, buffer: &mut Buffer) {
     let text = format!(" Save changes to {}? ", doc.filename_display());
-    let text_width = text.graphemes(true).map(|g| graphemes::width(g) as u16).sum();
+    let text_width = graphemes::width(&text) as u16;
 
     let width = TITLE_WIDTH
         .max(PROMPT_WIDTH)

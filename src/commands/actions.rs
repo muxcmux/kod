@@ -332,7 +332,7 @@ pub fn append_new_line(ctx: &mut Context) {
         pane.view.text_cursor_y
     );
     insert_or_replace_char_at_offset(NEW_LINE, offset, offset, pane, doc);
-    pane.view.cursor_down(&doc.rope, &ctx.editor.mode);
+    pane.view.move_cursor_to(&doc.rope, Some(0), Some(pane.view.text_cursor_y + 1), &ctx.editor.mode);
 }
 
 pub fn insert_line_below(ctx: &mut Context) {
