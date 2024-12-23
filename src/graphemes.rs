@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use crop::RopeSlice;
+use crop::{Rope, RopeSlice};
 
 pub const NEW_LINE: char = '\n';
 pub const NEW_LINE_STR: &str = "\n";
@@ -8,6 +8,61 @@ pub const NEW_LINE_STR_WIN: &str = "\r\n";
 
 pub fn width(s: &str) -> usize {
     unicode_display_width::width(s) as usize
+}
+
+pub fn line_width(rope: &Rope, line: usize) -> usize {
+    rope.line(line).graphemes().map(|g| width(&g)).sum()
+}
+
+pub fn words_of_line<'a>(rope: &'a Rope, y: usize, exclude_blank_words: bool) -> Vec<Word<'a>> {
+    let line = rope.line(y);
+    let mut offset = 0;
+    let mut word_start_byte = offset;
+    let mut words = vec![];
+    let mut col = 0;
+    let mut word = Word { start: col, end: col, slice: line.byte_slice(..) };
+    let mut iter = line.graphemes().peekable();
+
+    while let Some(g) = iter.next() {
+        let width = width(&g);
+        let size = g.len();
+        let this_cat = GraphemeCategory::from(&g);
+        match iter.peek() {
+            Some(next) => {
+                let next_cat = GraphemeCategory::from(next);
+                if this_cat != next_cat {
+                    // that's the end of the current word
+                    // and the index has to fall on the first
+                    // column of a grapheme
+                    word.end = col;
+                    word.slice = line.byte_slice(word_start_byte..offset + size);
+                    // push it to the list of words
+                    words.push(word.clone());
+                    // start the next word
+                    word.start = col + width;
+                    word_start_byte = offset + size;
+                }
+            }
+            None => {
+                // this is the end of the last word
+                // and the index has to fall on the first
+                // column of a grapheme
+                word.end = col;
+                word.slice = line.byte_slice(word_start_byte..offset + size);
+                words.push(word);
+                break;
+            }
+        }
+
+        col += width;
+        offset += size;
+    }
+
+    if exclude_blank_words {
+        words.into_iter().filter(|w| !w.is_blank()).collect()
+    } else {
+        words
+    }
 }
 
 #[derive(Clone, Debug)]

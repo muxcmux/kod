@@ -115,7 +115,7 @@ impl Component for Search {
         }
 
         (
-            Some(self.input.view.view_cursor_position),
+            Some(self.input.view.cursor),
             Some(SetCursorStyle::SteadyBar),
         )
     }
@@ -126,6 +126,7 @@ pub fn search(ctx: &mut Context, backwards: bool) -> bool {
     match regex_cursor::engines::meta::Regex::new(query) {
         Ok(re) => {
             let (pane, doc) = current!(ctx.editor);
+            let sel = doc.selection(pane.id);
 
             let haystack = regex_cursor::Input::new(RopeCursor::new(doc.rope.byte_slice(..)));
 
@@ -135,7 +136,7 @@ pub fn search(ctx: &mut Context, backwards: bool) -> bool {
             if matches.is_empty() {
                 ctx.editor.set_warning(format!("No matches found for {}", query));
             } else {
-                let offset = pane.view.byte_offset_at_cursor(&doc.rope, pane.view.text_cursor_x, pane.view.text_cursor_y);
+                let offset = sel.byte_offset_at_head(&doc.rope);
 
                 ctx.editor.search.total_matches = matches.len();
 
@@ -157,8 +158,8 @@ pub fn search(ctx: &mut Context, backwards: bool) -> bool {
                     }
                 }
 
-                let (x, y) = pane.view.cursor_at_byte(&doc.rope, matches[ctx.editor.search.current_match].start());
-                pane.view.move_cursor_to(&doc.rope, Some(x), Some(y), &ctx.editor.mode);
+                let (x, y) = sel.head_at_byte(&doc.rope, matches[ctx.editor.search.current_match].start());
+                doc.set_selection(pane.id, sel.move_to(&doc.rope, Some(x), Some(y), &ctx.editor.mode));
 
                 ctx.editor.search.focused = false;
 

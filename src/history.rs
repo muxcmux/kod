@@ -6,12 +6,11 @@ use std::{num::NonZeroUsize, time::Instant};
 use crop::Rope;
 use smartstring::{LazyCompact, SmartString};
 use std::cmp::Ordering;
+use crate::selection::Selection;
 
 pub struct State {
     pub rope: Rope,
-    pub cursor_x: usize,
-    pub cursor_y: usize,
-    // selection?
+    pub selection: Selection,
 }
 
 type Change = (usize, usize, Option<SmartString<LazyCompact>>);
@@ -97,17 +96,14 @@ struct Revision {
 #[derive(Default, Debug, PartialEq, Eq, Clone)]
 pub struct Transaction {
     pub operations: Vec<Operation>,
-    pub cursor_x: usize,
-    pub cursor_y: usize,
-    // selection?
+    pub selection: Selection,
 }
 
 impl Transaction {
     pub fn empty() -> Self {
         Self {
             operations: vec![],
-            cursor_x: 0,
-            cursor_y: 0,
+            selection: Selection::default(),
         }
     }
 
@@ -142,9 +138,8 @@ impl Transaction {
         Self { operations, ..Default::default() }
     }
 
-    pub fn set_cursor(mut self, cursor_x: usize, cursor_y: usize) -> Self {
-        self.cursor_x = cursor_x;
-        self.cursor_y = cursor_y;
+    pub fn set_selection(mut self, selection: Selection) -> Self {
+        self.selection = selection;
         self
     }
 
@@ -206,8 +201,7 @@ impl Transaction {
 
         let mut transaction = Self {
             operations: Vec::with_capacity(len),
-            cursor_x: other.cursor_x,
-            cursor_y: other.cursor_y,
+            selection: other.selection,
         };
 
         loop {
@@ -312,8 +306,7 @@ impl Transaction {
     pub fn invert(&self, original: &State) -> Self {
         let mut transaction = Self {
             operations: Vec::with_capacity(self.operations.len()),
-            cursor_x: original.cursor_x,
-            cursor_y: original.cursor_y,
+            selection: original.selection,
         };
 
         let mut offset = 0;
@@ -359,6 +352,7 @@ impl Transaction {
 mod test {
     use crop::Rope;
     use crate::history::State;
+    use crate::selection;
 
     use super::Transaction;
     use super::Operation::*;
@@ -384,8 +378,7 @@ mod test {
     #[test]
     fn transaction_composition() {
         let a = Transaction {
-            cursor_x: 1,
-            cursor_y: 0,
+            selection: selection::Selection { head: selection::Cursor { x: 1, y: 0 }, ..Default::default()},
             operations: vec![
                 Retain(5),
                 Insert(" test!".into()),
@@ -396,8 +389,7 @@ mod test {
         };
 
         let b = Transaction {
-            cursor_x: 5,
-            cursor_y: 0,
+            selection: selection::Selection { head: selection::Cursor { x: 5, y: 0 }, ..Default::default()},
             operations: vec![
                 Delete(10),
                 Insert("世orld".into()),
@@ -410,15 +402,14 @@ mod test {
         let composed = a.compose(b);
         composed.apply(&mut text);
         assert_eq!(text, "世orld! abc");
-        assert_eq!(composed.cursor_x, 5);
-        assert_eq!(composed.cursor_y, 0);
+        assert_eq!(composed.selection.head.x, 5);
+        assert_eq!(composed.selection.head.y, 0);
     }
 
     #[test]
     fn transaction_invert() {
         let transaction = Transaction {
-            cursor_x: 0,
-            cursor_y: 0,
+            selection: selection::Selection::default(),
             operations: vec![
                 Retain(3),
                 Insert("test".into()),
@@ -433,8 +424,7 @@ mod test {
 
         let state = State {
             rope: doc.clone(),
-            cursor_x: 0,
-            cursor_y: 0,
+            selection: selection::Selection::default(),
         };
 
         let revert = transaction.invert(&state);
@@ -447,8 +437,7 @@ mod test {
 
         let state2 = State {
             rope: doc2.clone(),
-            cursor_x: 0,
-            cursor_y: 0,
+            selection: selection::Selection::default(),
         };
 
         assert_eq!(transaction, revert.invert(&state2));

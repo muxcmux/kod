@@ -1,4 +1,4 @@
-use crate::{components::scroll_view::ScrollView, document::Document, editor::Mode, ui::{buffer::Buffer, theme::THEME, Rect}};
+use crate::{components::scroll_view::ScrollView, document::Document, editor::Mode, selection::Selection, ui::{buffer::Buffer, theme::THEME, Rect}};
 
 const GUTTER_LINE_NUM_PAD_LEFT: u16 = 2;
 const GUTTER_LINE_NUM_PAD_RIGHT: u16 = 1;
@@ -33,42 +33,15 @@ pub fn compute_offset(size: Rect) -> (usize, usize) {
 }
 
 
-pub fn render(view: &ScrollView, area: Rect, buffer: &mut Buffer, doc: &Document, mode: &Mode, active: bool) {
-    fn absolute(line_no: usize, y: u16, area: Rect, buffer: &mut Buffer, view: &ScrollView) {
-        let label = format!(
-            "{: >1$}",
-            line_no,
-            area.width.saturating_sub(GUTTER_LINE_NUM_PAD_RIGHT) as usize
-        );
-        let style = if line_no == view.text_cursor_y + 1 {
-            "ui.linenr.selected"
-        } else {
-            "ui.linenr"
-        };
-        buffer.put_str(&label, area.left(), y, THEME.get(style));
-    }
-
-    fn relative(y: u16, area: Rect, buffer: &mut Buffer, view: &ScrollView) {
-        let rel_line_no = view.view_cursor_position.y as isize - y as isize;
-        let (style, label) = if rel_line_no == 0 {
-            (
-                "ui.linenr.selected",
-                format!("  {}", view.text_cursor_y + 1),
-            )
-        } else {
-            (
-                "ui.linenr",
-                format!(
-                    "{: >1$}",
-                    rel_line_no.abs(),
-                    area.width.saturating_sub(GUTTER_LINE_NUM_PAD_RIGHT) as usize
-                ),
-            )
-        };
-        let style = THEME.get(style);
-        buffer.put_str(&label, area.left(), y, style);
-    }
-
+pub fn render(
+    view: &ScrollView,
+    sel: &Selection,
+    area: Rect,
+    buffer: &mut Buffer,
+    doc: &Document,
+    mode: &Mode,
+    active: bool
+) {
     let max = doc.rope.line_len();
 
     for y in 0..=area.height {
@@ -81,12 +54,47 @@ pub fn render(view: &ScrollView, area: Rect, buffer: &mut Buffer, doc: &Document
         if active {
             match mode {
                 Mode::Insert | Mode::Replace =>
-                    absolute(line_no, y + area.top(), area, buffer, view),
+                    absolute(line_no, y + area.top(), area, buffer, &sel),
                 Mode::Normal =>
-                    relative(y + area.top(), area, buffer, view)
+                    relative(y + area.top(), area, buffer, view, &sel)
             }
         } else {
-            absolute(line_no, y + area.top(), area, buffer, view);
+            absolute(line_no, y + area.top(), area, buffer, &sel);
         }
     }
+}
+
+fn absolute(line_no: usize, y: u16, area: Rect, buffer: &mut Buffer, sel: &Selection) {
+    let label = format!(
+        "{: >1$}",
+        line_no,
+        area.width.saturating_sub(GUTTER_LINE_NUM_PAD_RIGHT) as usize
+    );
+    let style = if line_no == sel.head.y + 1 {
+        "ui.linenr.selected"
+    } else {
+        "ui.linenr"
+    };
+    buffer.put_str(&label, area.left(), y, THEME.get(style));
+}
+
+fn relative(y: u16, area: Rect, buffer: &mut Buffer, view: &ScrollView, sel: &Selection) {
+    let rel_line_no = view.cursor.row as isize - y as isize;
+    let (style, label) = if rel_line_no == 0 {
+        (
+            "ui.linenr.selected",
+            format!("  {}", sel.head.y + 1),
+        )
+    } else {
+        (
+            "ui.linenr",
+            format!(
+                "{: >1$}",
+                rel_line_no.abs(),
+                area.width.saturating_sub(GUTTER_LINE_NUM_PAD_RIGHT) as usize
+            ),
+        )
+    };
+    let style = THEME.get(style);
+    buffer.put_str(&label, area.left(), y, style);
 }

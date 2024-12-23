@@ -148,7 +148,7 @@ impl Terminal {
 
     pub fn set_cursor(&self, position: Position, style: SetCursorStyle) -> Result<()> {
         let mut stdout = stdout();
-        stdout.queue(cursor::MoveTo(position.x, position.y))?;
+        stdout.queue(cursor::MoveTo(position.col, position.row))?;
         stdout.queue(style)?;
         Ok(())
     }

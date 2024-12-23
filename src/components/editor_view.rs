@@ -151,16 +151,17 @@ impl Component for EditorView {
     // This is a shit implementation just for lulz
     // and breaks everything because it doesn't use transactions
     // pls fix, kthxbye
-    fn handle_paste(&mut self, str: &str, ctx: &mut Context) -> EventResult {
-        let (pane, doc) = current!(ctx.editor);
-        pane.view.insert_str_at_cursor(&mut doc.rope, str, &ctx.editor.mode);
-        doc.modified = true;
+    // Ok, disabling for now
+    fn handle_paste(&mut self, _str: &str, _ctx: &mut Context) -> EventResult {
+        // let (pane, doc) = current!(ctx.editor);
+        // pane.view.insert_str_at_cursor(&mut doc.rope, str, &ctx.editor.mode);
+        // doc.modified = true;
         EventResult::Consumed(None)
     }
 
     fn cursor(&self, _area: Rect, ctx: &Context) -> (Option<Position>, Option<SetCursorStyle>) {
         (
-            Some(pane!(ctx.editor).view.view_cursor_position),
+            Some(pane!(ctx.editor).view.cursor),
             Some(match ctx.editor.mode {
                 Mode::Normal => SetCursorStyle::SteadyBlock,
                 Mode::Insert => SetCursorStyle::SteadyBar,

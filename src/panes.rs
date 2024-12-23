@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
 
-use crate::{components::scroll_view::ScrollView, document::{Document, DocumentId}, editor::Mode, gutter, ui::{borders::{Stroke, Symbol}, buffer::Buffer, theme::THEME, Rect}};
+use crate::{components::scroll_view::ScrollView, document::{Document, DocumentId}, editor::Mode, gutter, selection::Selection, ui::{borders::{Stroke, Symbol}, buffer::Buffer, theme::THEME, Rect}};
 
 make_inc_id_type!(PaneId);
 make_inc_id_type!(NodeId);
@@ -340,6 +340,7 @@ impl Panes {
 
         let doc_id = focused.doc_id;
         self.panes.insert(self.next_pane_id.advance(), Pane {
+            id: self.next_pane_id,
             doc_id,
             area: Rect::default(),
             view: ScrollView::default()
@@ -372,6 +373,7 @@ impl Panes {
                     self.focus = self.next_pane_id;
 
                     self.panes.insert(self.next_pane_id.advance(), Pane {
+                        id: self.next_pane_id,
                         doc_id: focused_pane.doc_id,
                         area: Rect::default(),
                         view: ScrollView::default()
@@ -395,7 +397,7 @@ impl Panes {
                 for (id, pane) in self.panes.iter() {
                     if pane.area.bottom() + 1 != focused.area.top() { continue }
 
-                    if (pane.area.left()..=pane.area.right()).contains(&focused.view.view_cursor_position.x) {
+                    if (pane.area.left()..=pane.area.right()).contains(&focused.view.cursor.col) {
                         self.focus = *id
                     }
                 }
@@ -404,7 +406,7 @@ impl Panes {
                 for (id, pane) in self.panes.iter() {
                     if focused.area.bottom() + 1 != pane.area.top() { continue }
 
-                    if (pane.area.left()..=pane.area.right()).contains(&focused.view.view_cursor_position.x) {
+                    if (pane.area.left()..=pane.area.right()).contains(&focused.view.cursor.col) {
                         self.focus = *id
                     }
                 }
@@ -413,7 +415,7 @@ impl Panes {
                 for (id, pane) in self.panes.iter() {
                     if focused.area.left() != pane.area.right() + 1 { continue }
 
-                    if (pane.area.top()..=pane.area.bottom()).contains(&focused.view.view_cursor_position.y) {
+                    if (pane.area.top()..=pane.area.bottom()).contains(&focused.view.cursor.row) {
                         self.focus = *id
                     }
                 }
@@ -422,7 +424,7 @@ impl Panes {
                 for (id, pane) in self.panes.iter() {
                     if focused.area.right() + 1 != pane.area.left() { continue }
 
-                    if (pane.area.top()..=pane.area.bottom()).contains(&focused.view.view_cursor_position.y) {
+                    if (pane.area.top()..=pane.area.bottom()).contains(&focused.view.cursor.row) {
                         self.focus = *id
                     }
                 }
@@ -433,6 +435,7 @@ impl Panes {
 
 #[derive(Debug)]
 pub struct Pane {
+    pub id: PaneId,
     pub doc_id: DocumentId,
     pub area: Rect,
     pub view: ScrollView,
@@ -443,6 +446,7 @@ impl Pane {
     // Use split to create subsequent panes
     fn new(area: Rect) -> Self {
         Self {
+            id: PaneId::default(),
             area,
             doc_id: DocumentId::default(),
             view: ScrollView::default(),
@@ -454,14 +458,15 @@ impl Pane {
 
         (self.view.offset_x, self.view.offset_y) = gutter::compute_offset(document_area);
 
-        self.render_document(document_area, buffer, doc);
-        gutter::render(&self.view, gutter_area, buffer, doc, mode, active);
+        let sel = doc.selection(self.id);
+        self.render_document(document_area, &sel, buffer, doc);
+        gutter::render(&self.view, &sel, gutter_area, buffer, doc, mode, active);
     }
 
-    fn render_document(&mut self, area: Rect, buffer: &mut Buffer, doc: &Document) {
+    fn render_document(&mut self, area: Rect, sel: &Selection, buffer: &mut Buffer, doc: &Document) {
         // ensure cursor is in view needs to happen before obtaining
         // the view's visible byte range
-        self.view.ensure_cursor_is_in_view(area);
+        self.view.ensure_cursor_is_in_view(sel, area);
         self.view.render(
             area,
             buffer,

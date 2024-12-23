@@ -1,13 +1,14 @@
 use crop::Rope;
 use crossterm::event::{KeyCode, KeyEvent};
 
-use crate::{components::scroll_view::ScrollView, editor::Mode, graphemes::{NEW_LINE, NEW_LINE_STR}};
+use crate::{components::scroll_view::ScrollView, editor::Mode, graphemes::{line_width, NEW_LINE, NEW_LINE_STR}, selection::Selection};
 
 use super::{buffer::Buffer, Rect};
 
 pub struct TextInput {
     pub rope: Rope,
     pub view: ScrollView,
+    pub selection: Selection,
     pub history: Vec<String>,
     history_idx: usize,
 }
@@ -17,6 +18,7 @@ impl TextInput {
         Self {
             rope: Rope::from(NEW_LINE_STR),
             view: ScrollView::default(),
+            selection: Selection::default(),
             history: vec![],
             history_idx: 1,
         }
@@ -27,6 +29,7 @@ impl TextInput {
         Self {
             rope: Rope::from(NEW_LINE_STR),
             view: ScrollView::default(),
+            selection: Selection::default(),
             history,
             history_idx,
         }
@@ -36,6 +39,7 @@ impl TextInput {
         Self {
             rope: Rope::from(val),
             view: ScrollView::default(),
+            selection: Selection::default(),
             history: vec![],
             history_idx: 1,
         }
@@ -52,7 +56,7 @@ impl TextInput {
     pub fn clear(&mut self) {
         self.rope = Rope::from(NEW_LINE_STR);
         self.history_idx = self.history.len();
-        self.view.move_cursor_to(&self.rope, Some(0), Some(0), &Mode::Insert);
+        self.move_cursor_to(Some(0), Some(0));
     }
 
     pub fn value(&self) -> String {
@@ -60,30 +64,42 @@ impl TextInput {
     }
 
     pub fn render(&mut self, area: Rect, buffer: &mut Buffer) {
-        self.view.ensure_cursor_is_in_view(area);
+        self.view.ensure_cursor_is_in_view(&self.selection, area);
         self.view.render(area, buffer, &self.rope, [].into_iter(), false);
     }
 
-    fn insert_char_at_cursor(&mut self, char: char, mode: &Mode) {
-        let offset = self.view.byte_offset_at_cursor(&self.rope, self.view.text_cursor_x, self.view.text_cursor_y);
+    fn insert_char_at_cursor(&mut self, char: char) {
+        let offset = self.selection.byte_offset_at_head(&self.rope);
         let mut buf = [0; 4];
         let text = char.encode_utf8(&mut buf);
 
         self.rope.insert(offset, text);
 
         if char == NEW_LINE {
-            self.view.move_cursor_to(&self.rope, Some(0), Some(self.view.text_cursor_y + 1), mode);
+            self.move_cursor_to(Some(0), Some(self.selection.head.y + 1));
         } else {
-            self.view.move_cursor_to(&self.rope, Some(self.view.text_cursor_x + 1), None, mode);
+            self.move_cursor_to(Some(self.selection.head.x + 1), None);
         }
     }
 
-    pub fn delete_to_the_left(&mut self, mode: &Mode) -> bool {
-        if self.view.text_cursor_x > 0 {
-            let mut start = self.rope.byte_of_line(self.view.text_cursor_y);
+    fn move_cursor_to(&mut self, x: Option<usize>, y: Option<usize>) {
+        self.selection = self.selection.move_to(&self.rope, x, y, &Mode::Insert);
+    }
+
+    fn cursor_left(&mut self) {
+        self.selection = self.selection.left(&self.rope, &Mode::Insert);
+    }
+
+    fn cursor_right(&mut self) {
+        self.selection = self.selection.right(&self.rope, &Mode::Insert);
+    }
+
+    pub fn delete_to_the_left(&mut self) -> bool {
+        if self.selection.head.x > 0 {
+            let mut start = self.rope.byte_of_line(self.selection.head.y);
             let mut end = start;
-            let idx = self.view.grapheme_at_cursor(&self.rope).0 - 1;
-            for (i, g) in self.rope.line(self.view.text_cursor_y).graphemes().enumerate() {
+            let idx = self.selection.grapheme_at_head(&self.rope).0 - 1;
+            for (i, g) in self.rope.line(self.selection.head.y).graphemes().enumerate() {
                 if i < idx { start += g.len() }
                 if i == idx {
                     end = start + g.len();
@@ -91,14 +107,14 @@ impl TextInput {
                 }
             }
 
-            self.view.cursor_left(&self.rope, &Mode::Insert);
+            self.cursor_left();
             self.rope.delete(start..end);
             return true;
-        } else if self.view.text_cursor_y > 0  {
-            let to = self.rope.byte_of_line(self.view.text_cursor_y);
+        } else if self.selection.head.y > 0  {
+            let to = self.rope.byte_of_line(self.selection.head.y);
             let from = to.saturating_sub(NEW_LINE.len_utf8());
             // need to move cursor before deleting
-            self.view.move_cursor_to(&self.rope, Some(self.view.line_width(&self.rope, self.view.text_cursor_y - 1)), Some(self.view.text_cursor_y - 1), mode);
+            self.move_cursor_to(Some(line_width(&self.rope, self.selection.head.y - 1)), Some(self.selection.head.y - 1));
             self.rope.delete(from..to);
             return true;
         }
@@ -109,15 +125,15 @@ impl TextInput {
     pub fn handle_key_event(&mut self, event: KeyEvent) {
         match event.code {
             KeyCode::Left => {
-                self.view.cursor_left(&self.rope, &Mode::Insert);
+                self.cursor_left();
             }
             KeyCode::Right => {
-                self.view.cursor_right(&self.rope, &Mode::Insert);
+                self.cursor_right();
             }
             KeyCode::Up => {
                 if let Some(value) = self.history.get(self.history_idx.saturating_sub(1)) {
                     self.rope = Rope::from(value.as_str());
-                    self.view.move_cursor_to(&self.rope, Some(usize::MAX), None, &Mode::Insert);
+                    self.move_cursor_to(Some(usize::MAX), None);
                     self.history_idx = self.history_idx.saturating_sub(1);
                 }
             }
@@ -125,7 +141,7 @@ impl TextInput {
                 match self.history.get(self.history_idx + 1) {
                     Some(value) => {
                         self.rope = Rope::from(value.as_str());
-                        self.view.move_cursor_to(&self.rope, Some(usize::MAX), None, &Mode::Insert);
+                        self.move_cursor_to(Some(usize::MAX), None);
                         self.history_idx += 1;
                     }
                     None => {
@@ -134,18 +150,18 @@ impl TextInput {
                 }
             }
             KeyCode::Home => {
-                self.view.move_cursor_to(&self.rope, Some(0), None, &Mode::Insert);
+                self.move_cursor_to(Some(0), None);
             }
             KeyCode::End => {
-                self.view.move_cursor_to(&self.rope, Some(usize::MAX), None, &Mode::Insert);
+                self.move_cursor_to(Some(usize::MAX), None);
             }
             KeyCode::Backspace => {
                 self.history_idx = self.history.len();
-                self.delete_to_the_left(&Mode::Insert);
+                self.delete_to_the_left();
             }
             KeyCode::Char(c) => {
                 self.history_idx = self.history.len();
-                self.insert_char_at_cursor(c, &Mode::Insert);
+                self.insert_char_at_cursor(c);
             }
             _ => {}
         }

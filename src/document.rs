@@ -1,7 +1,7 @@
-use std::{borrow::Cow, cell::Cell, path::PathBuf, sync::Arc};
+use std::{borrow::Cow, cell::Cell, collections::HashMap, path::PathBuf, sync::Arc};
 
 use crop::Rope;
-use crate::{history::{History, State, Transaction}, language::syntax::{Highlight, HighlightEvent, LanguageConfiguration, Syntax, LANG_CONFIG}, ui::{style::Style, theme::THEME}};
+use crate::{history::{History, State, Transaction}, language::syntax::{Highlight, HighlightEvent, LanguageConfiguration, Syntax, LANG_CONFIG}, panes::PaneId, selection::Selection, ui::{style::Style, theme::THEME}};
 
 make_inc_id_type!(DocumentId);
 
@@ -15,6 +15,7 @@ pub struct Document {
     pub readonly: bool,
     pub language: Option<Arc<LanguageConfiguration>>,
     pub syntax: Option<Syntax>,
+    selections: HashMap<PaneId, Selection>,
     history: Cell<History>,
     transaction: Cell<Transaction>,
     old_state: Option<State>
@@ -50,6 +51,7 @@ impl Document {
             old_state: None,
             path,
             readonly,
+            selections: HashMap::new(),
             modified: false,
         }
     }
@@ -71,6 +73,22 @@ impl Document {
         }
     }
 
+    pub fn selection(&self, pane_id: PaneId) -> Selection {
+        if let Some(s) = self.selections.get(&pane_id) {
+            return *s;
+        }
+
+        Selection::default()
+    }
+
+    // pub fn selections(&self) -> &HashMap<PaneId, Selection> {
+    //     &self.selections
+    // }
+
+    pub fn set_selection(&mut self, pane_id: PaneId, selection: Selection) {
+        self.selections.insert(pane_id, selection);
+    }
+
     pub fn apply(&mut self, transaction: &Transaction) {
         if transaction.is_empty() {
             return
@@ -83,8 +101,7 @@ impl Document {
         if t.is_empty() {
             self.old_state = Some(State {
                 rope: self.rope.clone(),
-                cursor_x: transaction.cursor_x,
-                cursor_y: transaction.cursor_y,
+                selection: transaction.selection,
             });
         }
 
@@ -120,14 +137,14 @@ impl Document {
         self.history.set(history);
     }
 
-    pub fn undo_redo(&mut self, undo: bool) -> Option<(usize, usize)> {
+    pub fn undo_redo(&mut self, undo: bool) -> Option<Selection> {
         let mut history = self.history.take();
 
         let mut ret = None;
 
         if let Some(t) = if undo { history.undo() } else { history.redo() } {
             self.apply(t);
-            ret = Some((t.cursor_x, t.cursor_y));
+            ret = Some(t.selection);
         }
 
         self.history.set(history);

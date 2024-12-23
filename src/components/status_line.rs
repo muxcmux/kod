@@ -55,7 +55,8 @@ impl Component for StatusLine {
             },
         }
 
-        let cursor_position = format!(" {}:{} ", pane.view.text_cursor_y + 1, pane.view.grapheme_at_cursor(&doc.rope).0 + 1);
+        let sel = doc.selection(pane.id);
+        let cursor_position = format!(" {}:{} ", sel.head.y + 1, sel.grapheme_at_head(&doc.rope).0 + 1);
         let w = area.width.saturating_sub(cursor_position.chars().count() as u16);
         buffer.put_str(&cursor_position, w, y, THEME.get("ui.statusline.cursor_pos"));
     }

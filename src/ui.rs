@@ -8,8 +8,8 @@ pub(crate) mod theme;
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Default)]
 pub struct Position {
-    pub x: u16,
-    pub y: u16
+    pub col: u16,
+    pub row: u16
 }
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Default)]
@@ -35,8 +35,8 @@ impl Rect {
         let height = height.min(self.height);
         Self {
             position: Position {
-                x: self.left(),
-                y: self.top().saturating_add(height)
+                col: self.left(),
+                row: self.top().saturating_add(height)
             },
             height: self.height.saturating_sub(height),
             ..self
@@ -47,7 +47,7 @@ impl Rect {
         let width = width.min(self.width);
         Self {
             position: Position {
-                x: self.left().saturating_add(width),
+                col: self.left().saturating_add(width),
                 ..self.position
             },
             width: self.width.saturating_sub(width),
@@ -67,26 +67,26 @@ impl Rect {
             width: self.width.min(width),
             height: self.height.min(height),
             position: Position {
-                x: self.left() + (self.width.saturating_sub(width).max(1) / 2),
-                y: self.top() + (self.height.saturating_sub(height).max(1) / 2),
+                col: self.left() + (self.width.saturating_sub(width).max(1) / 2),
+                row: self.top() + (self.height.saturating_sub(height).max(1) / 2),
             }
         }
     }
 
     pub fn left(&self) -> u16 {
-        self.position.x
+        self.position.col
     }
 
     pub fn top(&self) -> u16 {
-        self.position.y
+        self.position.row
     }
 
     pub fn right(&self) -> u16 {
-        self.position.x + self.width
+        self.position.col + self.width
     }
 
     pub fn bottom(&self) -> u16 {
-        self.position.y + self.height
+        self.position.row + self.height
     }
 
     /// Splits the rect vertically into N parts
@@ -108,8 +108,8 @@ impl Rect {
         heights.into_iter().map(|height| {
             let area = Rect {
                 position: Position {
-                    y,
-                    x: self.left(),
+                    row: y,
+                    col: self.left(),
                 },
                 height,
                 ..*self
@@ -138,8 +138,8 @@ impl Rect {
         widths.into_iter().map(|width| {
             let area = Rect {
                 position: Position {
-                    x,
-                    y: self.top(),
+                    col: x,
+                    row: self.top(),
                 },
                 width,
                 ..*self
@@ -230,17 +230,17 @@ mod test {
         let mut splits = rect.split_vertically(3);
         println!("{:#?}", splits);
         assert_eq!(splits.pop(), Some(Rect {
-            position: Position { x: 0, y: 8 },
+            position: Position { col: 0, row: 8 },
             width: 10,
             height: 2,
         }));
         assert_eq!(splits.pop(), Some(Rect {
-            position: Position { x: 0, y: 4 },
+            position: Position { col: 0, row: 4 },
             width: 10,
             height: 3,
         }));
         assert_eq!(splits.pop(), Some(Rect {
-            position: Position { x: 0, y: 0 },
+            position: Position { col: 0, row: 0 },
             width: 10,
             height: 3,
         }));
@@ -253,12 +253,12 @@ mod test {
         let mut splits = rect.split_horizontally(2);
         println!("{:#?}", splits);
         assert_eq!(splits.pop(), Some(Rect {
-            position: Position { x: 6, y: 0 },
+            position: Position { col: 6, row: 0 },
             width: 5,
             height: 10,
         }));
         assert_eq!(splits.pop(), Some(Rect {
-            position: Position { x: 0, y: 0 },
+            position: Position { col: 0, row: 0 },
             width: 5,
             height: 10,
         }));

@@ -2,7 +2,7 @@ use crop::Rope;
 use crossterm::event::KeyCode;
 use smartstring::SmartString;
 
-use crate::{document::Document, editor::Mode, graphemes::{self, NEW_LINE}, history::Transaction, panes::{Direction, Pane}, search::Search};
+use crate::{document::Document, editor::Mode, graphemes::{self, line_width, NEW_LINE, NEW_LINE_STR}, history::Transaction, panes::Direction, search::Search, selection::Selection};
 
 use super::{palette::Palette, Context};
 
@@ -97,10 +97,56 @@ fn enter_insert_mode(ctx: &mut Context) {
 
 fn enter_insert_mode_relative_to_cursor(x: usize, ctx: &mut Context) {
     enter_insert_mode(ctx);
-    let (pane, doc) = current!(ctx.editor);
     for _ in 0..x {
-        pane.view.cursor_right(&doc.rope, &ctx.editor.mode);
+        cursor_right(ctx);
     }
+}
+
+fn byte_range_until_eol(rope: &Rope, selection: &Selection) -> Option<(usize, usize)> {
+    let start = selection.byte_offset_at_head(rope);
+    let end = rope.byte_of_line(selection.head.y) + rope.line(selection.head.y).byte_len();
+
+    if end > 0 {
+        return Some((start, end));
+    }
+
+    None
+}
+
+fn move_cursor_to(x: Option<usize>, y: Option<usize>, ctx: &mut Context) {
+    let (pane, doc) = current!(ctx.editor);
+    let selection = doc.selection(pane.id);
+    doc.set_selection(pane.id, selection.move_to(&doc.rope, x, y, &ctx.editor.mode));
+}
+
+fn goto_character_forward_impl(c: char, offset: usize, ctx: &mut Context) -> Selection {
+    let (pane, doc) = current!(ctx.editor);
+    let sel = doc.selection(pane.id);
+    let mut col = 0;
+    for g in doc.rope.line(sel.head.y).graphemes() {
+        if col > sel.head.x && g.starts_with(c) {
+            return sel.move_to(&doc.rope, Some(col.saturating_sub(offset)), None, &ctx.editor.mode);
+        }
+        let width = graphemes::width(&g);
+        col += width;
+    }
+
+    sel
+}
+
+fn goto_character_backward_impl(c: char, offset: usize, ctx: &mut Context) -> Selection {
+    let (pane, doc) = current!(ctx.editor);
+    let sel = doc.selection(pane.id);
+    let mut col = line_width(&doc.rope, sel.head.y);
+    for g in doc.rope.line(sel.head.y).graphemes().rev() {
+        if col <= sel.head.x && g.starts_with(c) {
+            return sel.move_to(&doc.rope, Some(col.saturating_sub(offset)), None, &ctx.editor.mode);
+        }
+        let width = graphemes::width(&g);
+        col -= width;
+    }
+
+    sel
 }
 
 pub fn command_palette(ctx: &mut Context) {
@@ -110,8 +156,7 @@ pub fn command_palette(ctx: &mut Context) {
 
 pub fn enter_normal_mode(ctx: &mut Context) {
     ctx.editor.mode = Mode::Normal;
-    let (pane, doc) = current!(ctx.editor);
-    pane.view.cursor_left(&doc.rope, &ctx.editor.mode);
+    cursor_left(ctx);
 }
 
 pub fn enter_replace_mode(ctx: &mut Context) {
@@ -137,85 +182,87 @@ pub fn enter_insert_mode_at_eol(ctx: &mut Context) {
     goto_eol(ctx);
 }
 
-pub fn cursor_up(ctx: &mut Context) {
-    let (pane, doc) = current!(ctx.editor);
-    pane.view.cursor_up(&doc.rope, &ctx.editor.mode);
-}
-
-pub fn cursor_down(ctx: &mut Context) {
-    let (pane, doc) = current!(ctx.editor);
-    pane.view.cursor_down(&doc.rope, &ctx.editor.mode);
-}
-
 pub fn cursor_left(ctx: &mut Context) {
     let (pane, doc) = current!(ctx.editor);
-    pane.view.cursor_left(&doc.rope, &ctx.editor.mode);
+    doc.set_selection(pane.id, doc.selection(pane.id).left(&doc.rope, &ctx.editor.mode));
 }
 
 pub fn cursor_right(ctx: &mut Context) {
     let (pane, doc) = current!(ctx.editor);
-    pane.view.cursor_right(&doc.rope, &ctx.editor.mode);
+    doc.set_selection(pane.id, doc.selection(pane.id).right(&doc.rope, &ctx.editor.mode));
+}
+
+pub fn cursor_up(ctx: &mut Context) {
+    let (pane, doc) = current!(ctx.editor);
+    doc.set_selection(pane.id, doc.selection(pane.id).up(&doc.rope, &ctx.editor.mode));
+}
+
+pub fn cursor_down(ctx: &mut Context) {
+    let (pane, doc) = current!(ctx.editor);
+    doc.set_selection(pane.id, doc.selection(pane.id).down(&doc.rope, &ctx.editor.mode));
 }
 
 pub fn half_page_up(ctx: &mut Context) {
     let (pane, doc) = current!(ctx.editor);
     let half = (pane.area.height / 2) as usize;
-    let y = pane.view.text_cursor_y.saturating_sub(half);
-    pane.view.move_cursor_to(&doc.rope, None, Some(y), &ctx.editor.mode);
+    let y = doc.selection(pane.id).head.y.saturating_sub(half);
+    move_cursor_to(None, Some(y), ctx);
 }
 
 pub fn half_page_down(ctx: &mut Context) {
     let (pane, doc) = current!(ctx.editor);
     let half = (pane.area.height / 2) as usize;
-    let y = pane.view.text_cursor_y + half;
-    pane.view.move_cursor_to(&doc.rope, None, Some(y), &ctx.editor.mode);
+    let y = doc.selection(pane.id).head.y + half;
+    move_cursor_to(None, Some(y), ctx);
 }
 
 pub fn goto_first_line(ctx: &mut Context) {
-    let (pane, doc) = current!(ctx.editor);
-    pane.view.move_cursor_to(&doc.rope, None, Some(0), &ctx.editor.mode);
+    move_cursor_to(None, Some(0), ctx);
 }
 
 pub fn goto_last_line(ctx: &mut Context) {
-    let (pane, doc) = current!(ctx.editor);
-    pane.view.move_cursor_to(&doc.rope, None, Some(doc.rope.line_len() - 1), &ctx.editor.mode);
+    let (_, doc) = current!(ctx.editor);
+    move_cursor_to(None, Some(doc.rope.line_len().saturating_sub(1)), ctx);
 }
 
 pub fn goto_line_first_non_whitespace(ctx: &mut Context) {
     let (pane, doc) = current!(ctx.editor);
-    pane.view.goto_line_first_non_whitespace(&doc.rope, pane.view.text_cursor_y, &ctx.editor.mode);
+    let sel = doc.selection(pane.id);
+    doc.set_selection(pane.id, sel.goto_line_first_non_whitespace(&doc.rope, None, &ctx.editor.mode));
 }
 
 pub fn goto_eol(ctx: &mut Context) {
-    let (pane, doc) = current!(ctx.editor);
-    pane.view.move_cursor_to(&doc.rope, Some(usize::MAX), None, &ctx.editor.mode);
+    move_cursor_to(Some(usize::MAX), None, ctx);
 }
 
 pub fn goto_word_start_forward(ctx: &mut Context) {
     let (pane, doc) = current!(ctx.editor);
-    pane.view.goto_word_start_forward(&doc.rope, &ctx.editor.mode);
+    let sel = doc.selection(pane.id);
+    doc.set_selection(pane.id, sel.goto_word_start_forward(&doc.rope, &ctx.editor.mode));
 }
 
 pub fn goto_word_end_forward(ctx: &mut Context) {
     let (pane, doc) = current!(ctx.editor);
-    pane.view.goto_word_end_forward(&doc.rope, &ctx.editor.mode);
+    let sel = doc.selection(pane.id);
+    doc.set_selection(pane.id, sel.goto_word_end_forward(&doc.rope, &ctx.editor.mode));
 }
 
 pub fn goto_word_start_backward(ctx: &mut Context) {
     let (pane, doc) = current!(ctx.editor);
-    pane.view.goto_word_start_backward(&doc.rope, &ctx.editor.mode);
+    let sel = doc.selection(pane.id);
+    doc.set_selection(pane.id, sel.goto_word_start_backward(&doc.rope, &ctx.editor.mode));
 }
 
 pub fn goto_word_end_backward(ctx: &mut Context) {
     let (pane, doc) = current!(ctx.editor);
-    pane.view.goto_word_end_backward(&doc.rope, &ctx.editor.mode);
+    let sel = doc.selection(pane.id);
+    doc.set_selection(pane.id, sel.goto_word_end_backward(&doc.rope, &ctx.editor.mode));
 }
 
 pub fn goto_character_forward(ctx: &mut Context) {
     ctx.on_next_key(|ctx, event| {
         if let KeyCode::Char(c) = event.code {
-            let (pane, doc) = current!(ctx.editor);
-            pane.view.goto_character_forward(&doc.rope, c, &ctx.editor.mode, 0);
+            goto_character_forward_impl(c, 0, ctx);
         }
     })
 }
@@ -223,8 +270,7 @@ pub fn goto_character_forward(ctx: &mut Context) {
 pub fn goto_until_character_forward(ctx: &mut Context) {
     ctx.on_next_key(|ctx, event| {
         if let KeyCode::Char(c) = event.code {
-            let (pane, doc) = current!(ctx.editor);
-            pane.view.goto_character_forward(&doc.rope, c, &ctx.editor.mode, 1);
+            goto_character_forward_impl(c, 1, ctx);
         }
     })
 }
@@ -232,8 +278,7 @@ pub fn goto_until_character_forward(ctx: &mut Context) {
 pub fn goto_character_backward(ctx: &mut Context) {
     ctx.on_next_key(|ctx, event| {
         if let KeyCode::Char(c) = event.code {
-            let (pane, doc) = current!(ctx.editor);
-            pane.view.goto_character_backward(&doc.rope, c, &ctx.editor.mode, 1);
+            goto_character_backward_impl(c, 1, ctx);
         }
     })
 }
@@ -241,27 +286,27 @@ pub fn goto_character_backward(ctx: &mut Context) {
 pub fn goto_until_character_backward(ctx: &mut Context) {
     ctx.on_next_key(|ctx, event| {
         if let KeyCode::Char(c) = event.code {
-            let (pane, doc) = current!(ctx.editor);
-            pane.view.goto_character_backward(&doc.rope, c, &ctx.editor.mode, 0);
+            goto_character_backward_impl(c, 0, ctx);
         }
     })
 }
 
 pub fn undo(ctx: &mut Context) {
     let (pane, doc) = current!(ctx.editor);
-    if let Some((x, y)) = doc.undo_redo(true) {
-        pane.view.move_cursor_to(&doc.rope, Some(x), Some(y), &ctx.editor.mode);
+    if let Some(sel) = doc.undo_redo(true) {
+        doc.set_selection(pane.id, sel)
     }
 }
 
 pub fn redo(ctx: &mut Context) {
     let (pane, doc) = current!(ctx.editor);
-    if let Some((x, y)) = doc.undo_redo(false) {
-        pane.view.move_cursor_to(&doc.rope, Some(x), Some(y), &ctx.editor.mode);
+    if let Some(sel) = doc.undo_redo(false) {
+        doc.set_selection(pane.id, sel)
     }
 }
 
-fn insert_or_replace_char_at_offset(c: char, offset_start: usize, offset_end: usize, pane: &Pane, doc: &mut Document) {
+fn insert_or_replace_char_at_offset(c: char, offset_start: usize, offset_end: usize, selection: Option<Selection>, ctx: &mut Context) {
+    let (pane, doc) = current!(ctx.editor);
     let mut string = SmartString::new();
     string.push(c);
 
@@ -269,49 +314,57 @@ fn insert_or_replace_char_at_offset(c: char, offset_start: usize, offset_end: us
         &Transaction::change(
             &doc.rope,
             [(offset_start, offset_end, Some(string))].into_iter()
-        ).set_cursor(pane.view.text_cursor_x, pane.view.text_cursor_y)
+        ).set_selection(doc.selection(pane.id))
     );
 
     doc.modified = true;
+
+    move_cursor_after_appending_or_replacing_character(c, offset_start, selection, ctx);
 }
 
 pub fn append_character(c: char, ctx: &mut Context) {
     let (pane, doc) = current!(ctx.editor);
-    let offset = pane.view.byte_offset_at_cursor(
-        &doc.rope,
-        pane.view.text_cursor_x,
-        pane.view.text_cursor_y
-    );
-    insert_or_replace_char_at_offset(c, offset, offset, pane, doc);
+    let offset = doc.selection(pane.id).byte_offset_at_head(&doc.rope);
+    insert_or_replace_char_at_offset(c, offset, offset, None, ctx);
+}
 
-    // if the current or previous chars are zero-width
-    // joiners we don't move the cursor to the right
-    let zwj = '\u{200d}';
-    if c != zwj {
-        let zwj_bytes: [u8; 3] = [226, 128, 141];
-        let prev_bytes = [
-            doc.rope.byte(offset.saturating_sub(3)),
-            doc.rope.byte(offset.saturating_sub(2)),
-            doc.rope.byte(offset.saturating_sub(1))
-        ];
-        if prev_bytes != zwj_bytes {
-            pane.view.cursor_right(&doc.rope, &ctx.editor.mode);
+fn move_cursor_after_appending_or_replacing_character(c: char, offset: usize, move_to: Option<Selection>, ctx: &mut Context) {
+    let (pane, doc) = current!(ctx.editor);
+    let sel = doc.selection(pane.id);
+    match c {
+        NEW_LINE => {
+            doc.set_selection(pane.id, move_to.unwrap_or(sel.move_to(&doc.rope, Some(0), Some(sel.head.y + 1), &ctx.editor.mode)));
         }
+        '\u{200d}' => {
+            // if the current or previous chars are zero-width
+            // joiners we don't move the cursor to the right
+            let zwj_bytes: [u8; 3] = [226, 128, 141];
+            let prev_bytes = [
+                doc.rope.byte(offset.saturating_sub(3)),
+                doc.rope.byte(offset.saturating_sub(2)),
+                doc.rope.byte(offset.saturating_sub(1))
+            ];
+            if prev_bytes != zwj_bytes {
+                cursor_right(ctx);
+            }
+        }
+        _ => cursor_right(ctx),
     }
 }
 
 pub fn append_or_replace_character(c: char, ctx: &mut Context) {
     let (pane, doc) = current!(ctx.editor);
-    let mut start_byte = doc.rope.byte_of_line(pane.view.text_cursor_y);
+    let sel = doc.selection(pane.id);
+    let mut start_byte = doc.rope.byte_of_line(sel.head.y);
     let mut end_byte = start_byte;
 
     let mut col = 0;
 
-    for g in doc.rope.line(pane.view.text_cursor_y).graphemes() {
+    for g in doc.rope.line(sel.head.y).graphemes() {
         let width = graphemes::width(&g);
         let size = g.bytes().count();
 
-        if col >= pane.view.text_cursor_x {
+        if col >= sel.head.x {
             end_byte = start_byte + size;
             break;
         }
@@ -320,45 +373,36 @@ pub fn append_or_replace_character(c: char, ctx: &mut Context) {
         start_byte += size;
     }
 
-    insert_or_replace_char_at_offset(c, start_byte, end_byte.max(start_byte), pane, doc);
-    pane.view.cursor_right(&doc.rope, &ctx.editor.mode);
+    insert_or_replace_char_at_offset(c, start_byte, end_byte.max(start_byte), None, ctx);
 }
 
 pub fn append_new_line(ctx: &mut Context) {
-    let (pane, doc) = current!(ctx.editor);
-    let offset = pane.view.byte_offset_at_cursor(
-        &doc.rope,
-        pane.view.text_cursor_x,
-        pane.view.text_cursor_y
-    );
-    insert_or_replace_char_at_offset(NEW_LINE, offset, offset, pane, doc);
-    pane.view.move_cursor_to(&doc.rope, Some(0), Some(pane.view.text_cursor_y + 1), &ctx.editor.mode);
+    append_character(NEW_LINE, ctx);
 }
 
 pub fn insert_line_below(ctx: &mut Context) {
     enter_insert_mode(ctx);
     let (pane, doc) = current!(ctx.editor);
-    let offset = doc.rope.byte_of_line(pane.view.text_cursor_y) +
-        doc.rope.line(pane.view.text_cursor_y).byte_len();
-    insert_or_replace_char_at_offset(NEW_LINE, offset, offset, pane, doc);
-    pane.view.cursor_down(&doc.rope, &ctx.editor.mode);
+    let sel = doc.selection(pane.id);
+    let offset = doc.rope.byte_of_line(sel.head.y) + doc.rope.line(sel.head.y).byte_len();
+    insert_or_replace_char_at_offset(NEW_LINE, offset, offset, None, ctx);
 }
 
 pub fn insert_line_above(ctx: &mut Context) {
     enter_insert_mode(ctx);
     let (pane, doc) = current!(ctx.editor);
-    let offset = doc.rope.byte_of_line(pane.view.text_cursor_y);
-    insert_or_replace_char_at_offset(NEW_LINE, offset, offset, pane, doc);
-    pane.view.move_cursor_to(&doc.rope, Some(0), None, &ctx.editor.mode);
+    let sel = doc.selection(pane.id);
+    let offset = doc.rope.byte_of_line(sel.head.y);
+    insert_or_replace_char_at_offset(NEW_LINE, offset, offset, Some(sel.move_to(&doc.rope, Some(0), None, &ctx.editor.mode)), ctx);
 }
 
-fn delete_to_the_left(pane: &mut Pane, rope: &Rope , mode: &Mode) -> Option<(usize, usize)> {
-    if pane.view.text_cursor_x > 0 {
-        let mut start = rope.byte_of_line(pane.view.text_cursor_y);
+fn delete_to_the_left(rope: &Rope, sel: Selection, mode: &Mode) -> Option<(usize, usize, Selection)> {
+    if sel.head.x > 0 {
+        let mut start = rope.byte_of_line(sel.head.y);
         let mut end = start;
-        let idx = pane.view.grapheme_at_cursor(rope).0 - 1;
+        let idx = sel.grapheme_at_head(rope).0 - 1;
 
-        for (i, g) in rope.line(pane.view.text_cursor_y).graphemes().enumerate() {
+        for (i, g) in rope.line(sel.head.y).graphemes().enumerate() {
             if i < idx { start += g.len() }
             if i == idx {
                 end = start + g.len();
@@ -366,16 +410,13 @@ fn delete_to_the_left(pane: &mut Pane, rope: &Rope , mode: &Mode) -> Option<(usi
             }
         }
 
-        pane.view.cursor_left(rope, mode);
+        return Some((start, end, sel.left(rope, mode)));
 
-        return Some((start, end));
-    } else if pane.view.text_cursor_y > 0  {
-        let to = rope.byte_of_line(pane.view.text_cursor_y);
+    } else if sel.head.y > 0  {
+        let to = rope.byte_of_line(sel.head.y);
         let from = to.saturating_sub(NEW_LINE.len_utf8());
 
-        pane.view.move_cursor_to(rope, Some(pane.view.line_width(rope, pane.view.text_cursor_y - 1)), Some(pane.view.text_cursor_y - 1), mode);
-
-        return Some((from, to));
+        return Some((from, to, sel.move_to(rope, Some(line_width(rope, sel.head.y - 1)), Some(sel.head.y - 1), mode)));
     }
 
     None
@@ -383,21 +424,24 @@ fn delete_to_the_left(pane: &mut Pane, rope: &Rope , mode: &Mode) -> Option<(usi
 
 pub fn delete_symbol_to_the_left(ctx: &mut Context) {
     let (pane, doc) = current!(ctx.editor);
-    if let Some((from, to)) = delete_to_the_left(pane, &doc.rope, &ctx.editor.mode) {
+    let sel = doc.selection(pane.id);
+    if let Some((from, to, sel)) = delete_to_the_left(&doc.rope, sel, &ctx.editor.mode) {
+        doc.set_selection(pane.id, sel);
         doc.apply(
             &Transaction::change(
                 &doc.rope,
                 [(from, to, None)].into_iter()
-            ).set_cursor(pane.view.text_cursor_x, pane.view.text_cursor_y)
+            ).set_selection(sel)
         );
         doc.modified = true;
     }
 }
 
-fn delete_lines(from: usize, size: usize, pane: &Pane, doc: &mut Document) -> bool {
+fn delete_lines(sel: Selection, size: usize, doc: &mut Document) -> bool {
+    let from = sel.head.y;
     let rope = &mut doc.rope;
 
-    if pane.view.is_blank(rope) { return false }
+    if rope.is_empty() || rope == NEW_LINE_STR { return false }
 
     let to = (from + size).min(rope.line_len());
 
@@ -413,7 +457,7 @@ fn delete_lines(from: usize, size: usize, pane: &Pane, doc: &mut Document) -> bo
 
     let t = Transaction::change(rope,
         [(start, end, None)].into_iter()
-    ).set_cursor(pane.view.text_cursor_x, pane.view.text_cursor_y);
+    ).set_selection(sel);
 
     doc.apply(&t);
 
@@ -422,25 +466,27 @@ fn delete_lines(from: usize, size: usize, pane: &Pane, doc: &mut Document) -> bo
 
 pub fn delete_current_line(ctx: &mut Context) {
     let (pane, doc) = current!(ctx.editor);
-    if delete_lines(pane.view.text_cursor_y, 1, pane, doc) {
-        if pane.view.text_cursor_y > doc.rope.line_len().saturating_sub(1) {
-            pane.view.cursor_up(&doc.rope, &ctx.editor.mode);
-        } else {
-            pane.view.move_cursor_to(&doc.rope, None, None, &ctx.editor.mode);
-        }
+    let sel = doc.selection(pane.id);
+    if delete_lines(sel, 1, doc) {
         doc.modified = true;
+        if sel.head.y > doc.rope.line_len().saturating_sub(1) {
+            cursor_up(ctx);
+        } else {
+            move_cursor_to(None, None, ctx);
+        }
     }
 }
 
 pub fn delete_until_eol(ctx: &mut Context) {
     let (pane, doc) = current!(ctx.editor);
-    if let Some((start, end)) = pane.view.byte_range_until_eol(&doc.rope) {
+    let sel = doc.selection(pane.id);
+    if let Some((start, end)) = byte_range_until_eol(&doc.rope, &sel) {
         doc.apply(&Transaction::change(&doc.rope,
             [(start, end, None)].into_iter()
-            ).set_cursor(pane.view.text_cursor_x, pane.view.text_cursor_y)
+            ).set_selection(sel)
         );
-        pane.view.move_cursor_to(&doc.rope, None, None, &ctx.editor.mode);
         doc.modified = true;
+        move_cursor_to(None, None, ctx);
     }
 }
 

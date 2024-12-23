@@ -40,11 +40,11 @@ impl<'a> BorderBox<'a> {
     pub fn inner(&self) -> Rect {
         let mut inner = self.area;
         if self.borders.intersects(Borders::LEFT) {
-            inner.position.x = inner.position.x.saturating_add(1).min(inner.right());
+            inner.position.col = inner.position.col.saturating_add(1).min(inner.right());
             inner.width = inner.width.saturating_sub(1);
         }
         if self.borders.intersects(Borders::TOP) || self.title.is_some() {
-            inner.position.y = inner.position.y.saturating_add(1).min(inner.bottom());
+            inner.position.row = inner.position.row.saturating_add(1).min(inner.bottom());
             inner.height = inner.height.saturating_sub(1);
         }
         if self.borders.intersects(Borders::RIGHT) {

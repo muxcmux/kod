@@ -123,7 +123,7 @@ impl Component for Palette {
 
     fn cursor(&self, _area: Rect, _ctx: &Context) -> (Option<Position>, Option<SetCursorStyle>) {
         (
-            Some(self.input.view.view_cursor_position),
+            Some(self.input.view.cursor),
             Some(SetCursorStyle::SteadyBar),
         )
     }

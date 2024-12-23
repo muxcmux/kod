@@ -47,3 +47,4 @@ mod search;
 mod registers;
 mod rope;
 mod language;
+mod selection;
