@@ -1,5 +1,5 @@
 use crop::Rope;
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::{components::scroll_view::ScrollView, editor::Mode, graphemes::{line_width, NEW_LINE, NEW_LINE_STR}, selection::Selection};
 
@@ -161,7 +161,15 @@ impl TextInput {
             }
             KeyCode::Char(c) => {
                 self.history_idx = self.history.len();
-                self.insert_char_at_cursor(c);
+                if event.modifiers.contains(KeyModifiers::CONTROL) {
+                    match c {
+                        'h' => self.move_cursor_to(Some(0), None),
+                        'l' => self.move_cursor_to(Some(usize::MAX), None),
+                        _ => {},
+                    }
+                } else {
+                    self.insert_char_at_cursor(c);
+                }
             }
             _ => {}
         }

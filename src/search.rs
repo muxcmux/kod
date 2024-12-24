@@ -1,6 +1,6 @@
 use crossterm::{cursor::SetCursorStyle, event::{KeyCode, KeyEvent}};
 
-use crate::{compositor::{Component, Compositor, Context, EventResult}, current, editor::Mode, rope::RopeCursor, ui::{borders::{BOTTOM_LEFT, BOTTOM_RIGHT, HORIZONTAL, HORIZONTAL_UP, VERTICAL, VERTICAL_LEFT, VERTICAL_RIGHT}, buffer::Buffer, text_input::TextInput, theme::THEME, Position, Rect}};
+use crate::{compositor::{Component, Compositor, Context, EventResult}, current, editor::Mode, rope::RopeCursor, selection::Cursor, ui::{borders::{BOTTOM_LEFT, BOTTOM_RIGHT, HORIZONTAL, HORIZONTAL_UP, VERTICAL, VERTICAL_LEFT, VERTICAL_RIGHT}, buffer::Buffer, text_input::TextInput, theme::THEME, Position, Rect}};
 
 #[derive(Default)]
 pub struct SearchState {
@@ -158,7 +158,7 @@ pub fn search(ctx: &mut Context, backwards: bool) -> bool {
                     }
                 }
 
-                let (x, y) = sel.head_at_byte(&doc.rope, matches[ctx.editor.search.current_match].start());
+                let Cursor { x, y } = sel.head_at_byte(&doc.rope, matches[ctx.editor.search.current_match].start());
                 doc.set_selection(pane.id, sel.move_to(&doc.rope, Some(x), Some(y), &ctx.editor.mode));
 
                 ctx.editor.search.focused = false;

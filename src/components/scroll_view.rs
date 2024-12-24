@@ -69,12 +69,6 @@ impl ScrollView {
                 }
             }
 
-            if offset > highlight_until {
-                if let Some((s, h)) = styles.next() {
-                    (style, highlight_until) = (s, h);
-                }
-            }
-
             let line = rope.line(row);
             let mut graphemes = line.graphemes();
             // accounts for multi-width graphemes

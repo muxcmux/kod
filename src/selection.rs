@@ -1,4 +1,4 @@
-use std::{borrow::Cow, usize};
+use std::borrow::Cow;
 
 use crop::Rope;
 
@@ -25,7 +25,7 @@ pub struct Cursor {
 pub struct Selection {
     // kind: SelectionKind,
     // the point which doesn't move
-    // pub anchor: TextCursor,
+    // pub anchor: Cursor,
     // the point that moves when extending/shrinking a selection
     pub head: Cursor,
     // used to save the max x position for vertical movement
@@ -37,7 +37,7 @@ pub struct Selection {
 impl Selection {
     /// Moves the head to x and y,
     /// respecting bounds and grapheme boundaries
-    pub fn move_to(&self, rope: &Rope, x: Option<usize>, y: Option<usize>, mode: &Mode) -> Selection {
+    pub fn move_to(&self, rope: &Rope, x: Option<usize>, y: Option<usize>, mode: &Mode) -> Self {
         let stick = x.is_some();
         // ensure x and y are within bounds
         let y = rope.line_len().saturating_sub(1).min(y.unwrap_or(self.head.y));
@@ -50,7 +50,7 @@ impl Selection {
         Self {
             head: Cursor { x, y },
             sticky_x,
-            ..*self
+            // ..*self
         }
         .grapheme_aligned(rope, mode, cursor_move)
     }
@@ -71,7 +71,7 @@ impl Selection {
         self.move_to(rope, Some(self.head.x + 1), None, mode)
     }
 
-    pub fn goto_word_end_forward(&self, rope: &Rope, mode: &Mode) -> Selection {
+    pub fn goto_word_end_forward(&self, rope: &Rope, mode: &Mode) -> Self {
         let mut line = self.head.y;
 
         while line < rope.line_len() {
@@ -87,7 +87,7 @@ impl Selection {
         self.move_to(rope, Some(usize::MAX), Some(rope.line_len().saturating_sub(1)), mode)
     }
 
-    pub fn goto_word_start_forward(&self, rope: &Rope, mode: &Mode) -> Selection {
+    pub fn goto_word_start_forward(&self, rope: &Rope, mode: &Mode) -> Self {
         let mut line = self.head.y;
 
         while line < rope.line_len() {
@@ -103,7 +103,7 @@ impl Selection {
         self.move_to(rope, Some(usize::MAX), Some(rope.line_len().saturating_sub(1)), mode)
     }
 
-    pub fn goto_word_start_backward(&self, rope: &Rope, mode: &Mode) -> Selection {
+    pub fn goto_word_start_backward(&self, rope: &Rope, mode: &Mode) -> Self {
         let mut line = self.head.y as isize;
 
         while line >= 0 {
@@ -120,7 +120,7 @@ impl Selection {
         self.move_to(rope, Some(0), Some(0), mode)
     }
 
-    pub fn goto_word_end_backward(&self, rope: &Rope, mode: &Mode) -> Selection {
+    pub fn goto_word_end_backward(&self, rope: &Rope, mode: &Mode) -> Self {
         let mut line = self.head.y as isize;
 
         while line >= 0 {
@@ -137,7 +137,7 @@ impl Selection {
         self.move_to(rope, Some(0), Some(0), mode)
     }
 
-    pub fn goto_line_first_non_whitespace(&self, rope: &Rope, line: Option<usize>, mode: &Mode) -> Selection {
+    pub fn goto_line_first_non_whitespace(&self, rope: &Rope, line: Option<usize>, mode: &Mode) -> Self {
         let line = line.unwrap_or(self.head.y);
         for (i, g) in rope.line(line).graphemes().enumerate() {
             if GraphemeCategory::from(&g) != GraphemeCategory::Whitespace {
@@ -156,7 +156,7 @@ impl Selection {
 
         if !goto_next && !goto_prev { goto_prev = true }
 
-        let mut selection = self.clone();
+        let mut selection = *self;
 
         let mut graphemes = rope.line(selection.head.y).graphemes().peekable();
 
@@ -215,19 +215,19 @@ impl Selection {
         (idx, grapheme)
     }
 
-    pub fn head_at_byte(&self, rope: &Rope, byte: usize) -> (usize, usize) {
-        let (mut cursor_x, cursor_y) = (0, rope.line_of_byte(byte));
-        let line = rope.line(cursor_y);
-        let mut offset = rope.byte_of_line(cursor_y);
+    pub fn head_at_byte(&self, rope: &Rope, byte: usize) -> Cursor {
+        let (mut x, y) = (0, rope.line_of_byte(byte));
+        let line = rope.line(y);
+        let mut offset = rope.byte_of_line(y);
         for g in line.graphemes() {
             if offset >= byte { break }
 
-            cursor_x += graphemes::width(&g);
+            x += graphemes::width(&g);
 
             offset += g.bytes().len();
         }
 
-        (cursor_x, cursor_y)
+        Cursor { x, y }
     }
 }
 
@@ -263,4 +263,3 @@ fn max_cursor_x(rope: &Rope, line: usize, mode: &Mode) -> usize {
         Mode::Normal => line_width(rope, line).saturating_sub(1),
     }
 }
-
