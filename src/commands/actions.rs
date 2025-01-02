@@ -119,19 +119,20 @@ fn move_cursor_to(x: Option<usize>, y: Option<usize>, ctx: &mut Context) {
     doc.set_selection(pane.id, selection.move_to(&doc.rope, x, y, &ctx.editor.mode));
 }
 
-fn goto_character_forward_impl(c: char, offset: usize, ctx: &mut Context) -> Selection {
+fn goto_character_forward_impl(c: char, offset: usize, ctx: &mut Context) {
     let (pane, doc) = current!(ctx.editor);
-    let sel = doc.selection(pane.id);
+    let mut sel = doc.selection(pane.id);
     let mut col = 0;
     for g in doc.rope.line(sel.head.y).graphemes() {
         if col > sel.head.x && g.starts_with(c) {
-            return sel.move_to(&doc.rope, Some(col.saturating_sub(offset)), None, &ctx.editor.mode);
+            sel = sel.move_to(&doc.rope, Some(col.saturating_sub(offset)), None, &ctx.editor.mode);
+            break;
         }
         let width = graphemes::width(&g);
         col += width;
     }
 
-    sel
+    doc.set_selection(pane.id, sel);
 }
 
 fn goto_character_backward_impl(c: char, offset: usize, ctx: &mut Context) -> Selection {
