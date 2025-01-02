@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
 
-use crate::{components::scroll_view::ScrollView, document::{Document, DocumentId}, editor::Mode, gutter, selection::Selection, ui::{borders::{Stroke, Symbol}, buffer::Buffer, theme::THEME, Rect}};
+use crate::{document::DocumentId, ui::{borders::{Stroke, Symbol}, buffer::Buffer, theme::THEME, Rect}, view::View};
 
 make_inc_id_type!(PaneId);
 make_inc_id_type!(NodeId);
@@ -343,7 +343,7 @@ impl Panes {
             id: self.next_pane_id,
             doc_id,
             area: Rect::default(),
-            view: ScrollView::default()
+            view: View::default()
         });
 
         let area = node.area();
@@ -376,7 +376,7 @@ impl Panes {
                         id: self.next_pane_id,
                         doc_id: focused_pane.doc_id,
                         area: Rect::default(),
-                        view: ScrollView::default()
+                        view: View::default()
                     });
 
                     let parent_id = parent.id;
@@ -397,7 +397,7 @@ impl Panes {
                 for (id, pane) in self.panes.iter() {
                     if pane.area.bottom() + 1 != focused.area.top() { continue }
 
-                    if (pane.area.left()..=pane.area.right()).contains(&focused.view.cursor.col) {
+                    if (pane.area.left()..=pane.area.right()).contains(&focused.view.scroll.cursor.col) {
                         self.focus = *id
                     }
                 }
@@ -406,7 +406,7 @@ impl Panes {
                 for (id, pane) in self.panes.iter() {
                     if focused.area.bottom() + 1 != pane.area.top() { continue }
 
-                    if (pane.area.left()..=pane.area.right()).contains(&focused.view.cursor.col) {
+                    if (pane.area.left()..=pane.area.right()).contains(&focused.view.scroll.cursor.col) {
                         self.focus = *id
                     }
                 }
@@ -415,7 +415,7 @@ impl Panes {
                 for (id, pane) in self.panes.iter() {
                     if focused.area.left() != pane.area.right() + 1 { continue }
 
-                    if (pane.area.top()..=pane.area.bottom()).contains(&focused.view.cursor.row) {
+                    if (pane.area.top()..=pane.area.bottom()).contains(&focused.view.scroll.cursor.row) {
                         self.focus = *id
                     }
                 }
@@ -424,7 +424,7 @@ impl Panes {
                 for (id, pane) in self.panes.iter() {
                     if focused.area.right() + 1 != pane.area.left() { continue }
 
-                    if (pane.area.top()..=pane.area.bottom()).contains(&focused.view.cursor.row) {
+                    if (pane.area.top()..=pane.area.bottom()).contains(&focused.view.scroll.cursor.row) {
                         self.focus = *id
                     }
                 }
@@ -438,7 +438,7 @@ pub struct Pane {
     pub id: PaneId,
     pub doc_id: DocumentId,
     pub area: Rect,
-    pub view: ScrollView,
+    pub view: View,
 }
 
 impl Pane {
@@ -449,31 +449,8 @@ impl Pane {
             id: PaneId::default(),
             area,
             doc_id: DocumentId::default(),
-            view: ScrollView::default(),
+            view: View::default(),
         }
-    }
-
-    pub fn render(&mut self, buffer: &mut Buffer, doc: &Document, mode: &Mode, active: bool) {
-        let (gutter_area, document_area) = gutter::gutter_and_document_areas(self.area, doc);
-
-        (self.view.offset_x, self.view.offset_y) = gutter::compute_offset(document_area);
-
-        let sel = doc.selection(self.id);
-        self.render_document(document_area, &sel, buffer, doc);
-        gutter::render(&self.view, &sel, gutter_area, buffer, doc, mode, active);
-    }
-
-    fn render_document(&mut self, area: Rect, sel: &Selection, buffer: &mut Buffer, doc: &Document) {
-        // ensure cursor is in view needs to happen before obtaining
-        // the view's visible byte range
-        self.view.ensure_cursor_is_in_view(sel, area);
-        self.view.render(
-            area,
-            buffer,
-            &doc.rope,
-            doc.syntax_highlights(self.view.visible_byte_range(&doc.rope, area.height)),
-            true
-        );
     }
 
     fn border_symbols(&self, existing: &mut HashMap<(u16, u16), Symbol>, area: Rect) {

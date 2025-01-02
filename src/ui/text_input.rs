@@ -1,13 +1,13 @@
 use crop::Rope;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use crate::{components::scroll_view::ScrollView, editor::Mode, graphemes::{line_width, NEW_LINE, NEW_LINE_STR}, selection::Selection};
+use crate::{editor::Mode, graphemes::{self, line_width, NEW_LINE, NEW_LINE_STR}, selection::Selection};
 
-use super::{buffer::Buffer, Rect};
+use super::{buffer::Buffer, scroll::Scroll, theme::THEME, Rect};
 
 pub struct TextInput {
     pub rope: Rope,
-    pub view: ScrollView,
+    pub scroll: Scroll,
     pub selection: Selection,
     pub history: Vec<String>,
     history_idx: usize,
@@ -17,7 +17,7 @@ impl TextInput {
     pub fn empty() -> Self {
         Self {
             rope: Rope::from(NEW_LINE_STR),
-            view: ScrollView::default(),
+            scroll: Scroll::default(),
             selection: Selection::default(),
             history: vec![],
             history_idx: 1,
@@ -28,7 +28,7 @@ impl TextInput {
         let history_idx = 1.max(history.len());
         Self {
             rope: Rope::from(NEW_LINE_STR),
-            view: ScrollView::default(),
+            scroll: Scroll::default(),
             selection: Selection::default(),
             history,
             history_idx,
@@ -38,7 +38,7 @@ impl TextInput {
     pub fn with_value(val: &str) -> Self {
         Self {
             rope: Rope::from(val),
-            view: ScrollView::default(),
+            scroll: Scroll::default(),
             selection: Selection::default(),
             history: vec![],
             history_idx: 1,
@@ -64,8 +64,48 @@ impl TextInput {
     }
 
     pub fn render(&mut self, area: Rect, buffer: &mut Buffer) {
-        self.view.ensure_cursor_is_in_view(&self.selection, area);
-        self.view.render(area, buffer, &self.rope, [].into_iter(), false);
+        self.scroll.ensure_cursor_is_in_view(&self.selection, &area);
+
+        // loop through each visible line
+        for row in self.scroll.y..self.scroll.y + area.height as usize {
+            if row >= self.rope.line_len() { break }
+
+            let line = self.rope.line(row);
+            let mut graphemes = line.graphemes();
+            // accounts for multi-width graphemes
+            let mut skip_next_n_cols = 0;
+
+            // advance the iterator to account for scroll
+            let mut advance = 0;
+            while advance < self.scroll.x {
+                if let Some(g) = graphemes.next() {
+                    advance += graphemes::width(&g);
+                    skip_next_n_cols = advance.saturating_sub(self.scroll.x);
+                } else {
+                    break
+                }
+            }
+
+            let y = row.saturating_sub(self.scroll.y) as u16 + area.top();
+
+            for col in self.scroll.x..self.scroll.x + area.width as usize {
+                if skip_next_n_cols > 0 {
+                    skip_next_n_cols -= 1;
+                    continue;
+                }
+                match graphemes.next() {
+                    None => break,
+                    Some(g) => {
+                        let width = graphemes::width(&g);
+                        let x = col.saturating_sub(self.scroll.x) as u16 + area.left();
+
+                        skip_next_n_cols = width - 1;
+
+                        buffer.put_symbol(&g, x, y, THEME.get("ui.text_input"));
+                    }
+                }
+            }
+        }
     }
 
     fn insert_char_at_cursor(&mut self, char: char) {

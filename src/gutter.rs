@@ -1,4 +1,4 @@
-use crate::{components::scroll_view::ScrollView, document::Document, editor::Mode, selection::Selection, ui::{buffer::Buffer, theme::THEME, Rect}};
+use crate::{document::Document, editor::Mode, selection::Selection, ui::{buffer::Buffer, theme::THEME, Rect}, view::View};
 
 const GUTTER_LINE_NUM_PAD_LEFT: u16 = 2;
 const GUTTER_LINE_NUM_PAD_RIGHT: u16 = 1;
@@ -34,7 +34,7 @@ pub fn compute_offset(size: Rect) -> (usize, usize) {
 
 
 pub fn render(
-    view: &ScrollView,
+    view: &View,
     sel: &Selection,
     area: Rect,
     buffer: &mut Buffer,
@@ -45,7 +45,7 @@ pub fn render(
     let max = doc.rope.line_len();
 
     for y in 0..=area.height {
-        let line_no = y as usize + view.scroll_y + 1;
+        let line_no = y as usize + view.scroll.y + 1;
 
         if line_no > max {
             break;
@@ -54,12 +54,12 @@ pub fn render(
         if active {
             match mode {
                 Mode::Insert | Mode::Replace =>
-                    absolute(line_no, y + area.top(), area, buffer, &sel),
-                Mode::Normal =>
-                    relative(y + area.top(), area, buffer, view, &sel)
+                    absolute(line_no, y + area.top(), area, buffer, sel),
+                _ =>
+                    relative(y + area.top(), area, buffer, view, sel)
             }
         } else {
-            absolute(line_no, y + area.top(), area, buffer, &sel);
+            absolute(line_no, y + area.top(), area, buffer, sel);
         }
     }
 }
@@ -78,8 +78,8 @@ fn absolute(line_no: usize, y: u16, area: Rect, buffer: &mut Buffer, sel: &Selec
     buffer.put_str(&label, area.left(), y, THEME.get(style));
 }
 
-fn relative(y: u16, area: Rect, buffer: &mut Buffer, view: &ScrollView, sel: &Selection) {
-    let rel_line_no = view.cursor.row as isize - y as isize;
+fn relative(y: u16, area: Rect, buffer: &mut Buffer, view: &View, sel: &Selection) {
+    let rel_line_no = view.scroll.cursor.row as isize - y as isize;
     let (style, label) = if rel_line_no == 0 {
         (
             "ui.linenr.selected",

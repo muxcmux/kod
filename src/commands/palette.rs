@@ -114,8 +114,8 @@ impl Component for Palette {
                 compositor.pop();
             }))),
             _ => {
-                self.input.handle_key_event(event);
                 self.index = 0;
+                self.input.handle_key_event(event);
                 EventResult::Consumed(None)
             }
         }
@@ -123,7 +123,7 @@ impl Component for Palette {
 
     fn cursor(&self, _area: Rect, _ctx: &Context) -> (Option<Position>, Option<SetCursorStyle>) {
         (
-            Some(self.input.view.cursor),
+            Some(self.input.scroll.cursor),
             Some(SetCursorStyle::SteadyBar),
         )
     }

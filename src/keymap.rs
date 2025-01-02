@@ -47,6 +47,7 @@ impl Default for Keymaps {
         map.insert(Mode::Normal, normal_mode_keymap());
         map.insert(Mode::Insert, insert_mode_keymap());
         map.insert(Mode::Replace, replace_mode_keymap());
+        map.insert(Mode::Select, select_mode_keymap());
 
         Self { map, pending: vec![] }
     }
@@ -190,9 +191,10 @@ fn normal_mode_keymap() -> Keymap {
     map!({
         ":" => command_palette,
         "R" => enter_replace_mode,
+        "v" => enter_select_mode,
 
-        "h" => cursor_left,
-        "j" => cursor_down,
+        "h" | "backspace" => cursor_left,
+        "j" | "enter" => cursor_down,
         "k" => cursor_up,
         "l" => cursor_right,
         "C-u" | "pageup" => half_page_up,
@@ -282,5 +284,30 @@ fn replace_mode_keymap() -> Keymap {
         },
 
         "enter" => append_new_line,
+    })
+}
+
+fn select_mode_keymap() -> Keymap {
+    map!({
+        "esc" | "v" => enter_normal_mode,
+
+        "h" | "left" | "backspace" => cursor_left,
+        "j" | "down" | "enter" => cursor_down,
+        "k" | "up" => cursor_up,
+        "l" | "right" => cursor_right,
+        "C-u" | "pageup" => half_page_up,
+        "C-d" | "pagedown" => half_page_down,
+        "w" => goto_word_start_forward,
+        "b" => goto_word_start_backward,
+        "e" => goto_word_end_forward,
+        "t" => goto_until_character_forward,
+        "f" => goto_character_forward,
+        "T" => goto_until_character_backward,
+        "F" => goto_character_backward,
+
+        "o" => invert_selection,
+
+        "C-h" | "home" => goto_line_first_non_whitespace,
+        "C-l" | "end" => goto_eol,
     })
 }

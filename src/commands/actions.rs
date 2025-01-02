@@ -155,8 +155,18 @@ pub fn command_palette(ctx: &mut Context) {
 }
 
 pub fn enter_normal_mode(ctx: &mut Context) {
+    if ctx.editor.mode != Mode::Select {
+        cursor_left(ctx);
+    }
+
     ctx.editor.mode = Mode::Normal;
-    cursor_left(ctx);
+}
+
+pub fn enter_select_mode(ctx: &mut Context) {
+    let (pane, doc) = current!(ctx.editor);
+    let sel = doc.selection(pane.id);
+    doc.set_selection(pane.id, sel.anchor());
+    ctx.editor.mode = Mode::Select;
 }
 
 pub fn enter_replace_mode(ctx: &mut Context) {
@@ -552,3 +562,8 @@ pub fn prev_search_match(ctx: &mut Context) {
     }
 }
 
+pub fn invert_selection(ctx: &mut Context) {
+    let (pane, doc) = current!(ctx.editor);
+    let sel = doc.selection(pane.id);
+    doc.set_selection(pane.id, sel.invert());
+}

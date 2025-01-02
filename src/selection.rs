@@ -13,6 +13,33 @@ pub struct Cursor {
     pub y: usize,
 }
 
+impl PartialOrd for Cursor {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        use std::cmp::Ordering::*;
+        if self.y < other.y { return Some(Less) }
+        if self.y > other.y { return Some(Greater) }
+        if self.x < other.x { return Some(Less) }
+        if self.x > other.x { return Some(Greater) }
+        Some(Equal)
+    }
+}
+
+impl Cursor {
+    fn min(&self, other: &Self) -> Self {
+        match self.partial_cmp(other).unwrap() {
+            std::cmp::Ordering::Greater => *other,
+            _ => *self,
+        }
+    }
+
+    fn max(&self, other: &Self) -> Self {
+        match self.partial_cmp(other).unwrap() {
+            std::cmp::Ordering::Less => *other,
+            _ => *self,
+        }
+    }
+}
+
 // #[derive(Debug, Clone, Copy, Eq, PartialEq, Default)]
 // enum SelectionKind {
 //     #[default]
@@ -25,7 +52,7 @@ pub struct Cursor {
 pub struct Selection {
     // kind: SelectionKind,
     // the point which doesn't move
-    // pub anchor: Cursor,
+    pub anchor: Cursor,
     // the point that moves when extending/shrinking a selection
     pub head: Cursor,
     // used to save the max x position for vertical movement
@@ -35,6 +62,21 @@ pub struct Selection {
 // Pulibc methods on this that return new selections
 // need to be grapheme aligned
 impl Selection {
+    pub fn contains_cursor(&self, x: usize, y: usize) -> bool {
+        let cursor = Cursor {x, y};
+        let min = self.head.min(&self.anchor);
+        let max = self.head.max(&self.anchor);
+        cursor >= min && cursor <= max
+    }
+
+    pub fn invert(&self) -> Self {
+        Self {
+            head: self.anchor,
+            anchor: self.head,
+            ..*self
+        }
+    }
+
     /// Moves the head to x and y,
     /// respecting bounds and grapheme boundaries
     pub fn move_to(&self, rope: &Rope, x: Option<usize>, y: Option<usize>, mode: &Mode) -> Self {
@@ -50,7 +92,7 @@ impl Selection {
         Self {
             head: Cursor { x, y },
             sticky_x,
-            // ..*self
+            ..*self
         }
         .grapheme_aligned(rope, mode, cursor_move)
     }
@@ -69,6 +111,13 @@ impl Selection {
 
     pub fn right(&self, rope: &Rope, mode: &Mode) -> Self {
         self.move_to(rope, Some(self.head.x + 1), None, mode)
+    }
+
+    pub fn anchor(&self) -> Self {
+        Self {
+            anchor: self.head,
+            ..*self
+        }
     }
 
     pub fn goto_word_end_forward(&self, rope: &Rope, mode: &Mode) -> Self {
@@ -260,6 +309,6 @@ fn move_direction(from: (usize, usize), to: (&usize, &usize)) -> Direction {
 fn max_cursor_x(rope: &Rope, line: usize, mode: &Mode) -> usize {
     match mode {
         Mode::Insert | Mode::Replace => line_width(rope, line),
-        Mode::Normal => line_width(rope, line).saturating_sub(1),
+        _ => line_width(rope, line).saturating_sub(1),
     }
 }

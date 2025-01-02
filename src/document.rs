@@ -1,7 +1,7 @@
 use std::{borrow::Cow, cell::Cell, collections::HashMap, path::PathBuf, sync::Arc};
 
 use crop::Rope;
-use crate::{history::{History, State, Transaction}, language::syntax::{Highlight, HighlightEvent, LanguageConfiguration, Syntax, LANG_CONFIG}, panes::PaneId, selection::Selection, ui::{style::Style, theme::THEME}};
+use crate::{history::{History, State, Transaction}, language::syntax::{HighlightEvent, LanguageConfiguration, Syntax, LANG_CONFIG}, panes::PaneId, selection::Selection};
 
 make_inc_id_type!(DocumentId);
 
@@ -176,48 +176,3 @@ impl Document {
         }
     }
 }
-
-/// A wrapper around a HighlightIterator
-/// that merges the layered highlights to create the final text style
-/// and yields the active text style and the byte at which the active
-/// style will have to be recomputed.
-pub struct StyleIter<H: Iterator<Item = HighlightEvent>> {
-    active_highlights: Vec<Highlight>,
-    highlight_iter: H,
-}
-
-impl<H: Iterator<Item = HighlightEvent>> StyleIter<H> {
-    pub fn new(highlight_iter: H) -> Self {
-        Self {
-            active_highlights: Vec::with_capacity(64),
-            highlight_iter
-        }
-    }
-}
-
-impl<H: Iterator<Item = HighlightEvent>> Iterator for StyleIter<H> {
-    type Item = (Style, usize);
-    fn next(&mut self) -> Option<(Style, usize)> {
-        for event in self.highlight_iter.by_ref() {
-            match event {
-                HighlightEvent::HighlightStart(highlight) => {
-                    self.active_highlights.push(highlight)
-                }
-                HighlightEvent::HighlightEnd => {
-                    self.active_highlights.pop();
-                }
-                HighlightEvent::Source { end, .. } => {
-                    let style = self
-                        .active_highlights
-                        .iter()
-                        .fold(THEME.get("text"), |acc, span| {
-                            acc.patch(THEME.highlight_style(*span))
-                        });
-                    return Some((style, end));
-                }
-            }
-        }
-        None
-    }
-}
-

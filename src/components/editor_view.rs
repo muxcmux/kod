@@ -1,7 +1,10 @@
 use crate::commands;
 use crate::compositor;
 use crate::current;
+use crate::document::Document;
+use crate::gutter;
 use crate::pane;
+use crate::panes::Pane;
 use crate::ui::buffer::Buffer;
 use crate::ui::Position;
 use crate::ui::Rect;
@@ -50,7 +53,7 @@ impl EditorView {
         }
     }
 
-    fn handle_insert_or_replace_mode_key_event(
+    fn handle_insert_mode_key_event(
         &mut self,
         event: KeyEvent,
         ctx: &mut commands::Context,
@@ -89,16 +92,53 @@ impl EditorView {
     }
 }
 
+fn render_view(
+    pane: &mut Pane,
+    doc: &Document,
+    buffer: &mut Buffer,
+    mode: &Mode,
+    active: bool,
+) {
+    let (gutter_area, document_area) = gutter::gutter_and_document_areas(pane.area, doc);
+
+    (pane.view.scroll.offset_x, pane.view.scroll.offset_y) = gutter::compute_offset(document_area);
+
+    let sel = doc.selection(pane.id);
+
+    // ensure cursor is in view needs to happen before obtaining
+    // the view's visible byte range
+    pane.view.scroll.ensure_cursor_is_in_view(&sel, &document_area);
+    let highlights = doc.syntax_highlights(pane.view.visible_byte_range(&doc.rope, document_area.height));
+    // render the view after ajusting the scroll cursor
+    pane.view.render(
+        &document_area,
+        buffer,
+        &doc.rope,
+        &sel,
+        mode,
+        highlights,
+    );
+
+    gutter::render(&pane.view, &sel, gutter_area, buffer, doc, mode, active);
+}
+
 impl Component for EditorView {
     fn render(&mut self, area: Rect, buffer: &mut Buffer, ctx: &mut Context) {
         // clip 1 row from the bottom for status line
         ctx.editor.panes.resize(area.clip_bottom(1));
 
-        let mode = &ctx.editor.mode;
         for (id, pane) in ctx.editor.panes.panes.iter_mut() {
             let doc = ctx.editor.documents.get(&pane.doc_id).expect("Can't get doc from pane id");
-            pane.render(buffer, doc, mode, *id == ctx.editor.panes.focus);
+
+            render_view(
+                pane,
+                doc,
+                buffer,
+                &ctx.editor.mode,
+                *id == ctx.editor.panes.focus
+            );
         }
+
         ctx.editor.panes.draw_borders(buffer);
     }
 
@@ -116,9 +156,9 @@ impl Component for EditorView {
             EventResult::Consumed(None)
         } else {
             match action_ctx.editor.mode {
-                Mode::Normal => self.handle_normal_mode_key_event(event, &mut action_ctx),
-                Mode::Insert => self.handle_insert_or_replace_mode_key_event(event, &mut action_ctx, actions::append_character),
-                Mode::Replace => self.handle_insert_or_replace_mode_key_event(event, &mut action_ctx, actions::append_or_replace_character),
+                Mode::Insert => self.handle_insert_mode_key_event(event, &mut action_ctx, actions::append_character),
+                Mode::Replace => self.handle_insert_mode_key_event(event, &mut action_ctx, actions::append_or_replace_character),
+                _ => self.handle_normal_mode_key_event(event, &mut action_ctx),
             }
         };
 
@@ -136,7 +176,7 @@ impl Component for EditorView {
             Some(cb)
         };
 
-        // Escaping back to normal mode from insert and replace mode
+        // Escaping back to normal mode
         // merges the transactions and commits to history
         if ctx.editor.mode == Mode::Normal {
            current!(ctx.editor).1.commit_transaction_to_history();
@@ -161,9 +201,9 @@ impl Component for EditorView {
 
     fn cursor(&self, _area: Rect, ctx: &Context) -> (Option<Position>, Option<SetCursorStyle>) {
         (
-            Some(pane!(ctx.editor).view.cursor),
+            Some(pane!(ctx.editor).view.scroll.cursor),
             Some(match ctx.editor.mode {
-                Mode::Normal => SetCursorStyle::SteadyBlock,
+                Mode::Normal | Mode::Select => SetCursorStyle::SteadyBlock,
                 Mode::Insert => SetCursorStyle::SteadyBar,
                 Mode::Replace => SetCursorStyle::SteadyUnderScore,
             }),

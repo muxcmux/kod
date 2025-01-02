@@ -5,6 +5,7 @@ pub(crate) mod border_box;
 pub(crate) mod text_input;
 pub(crate) mod style;
 pub(crate) mod theme;
+pub(crate) mod scroll;
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Default)]
 pub struct Position {

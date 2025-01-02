@@ -2,61 +2,73 @@ use std::ops::Range;
 
 use crop::Rope;
 
-use crate::{document::StyleIter, graphemes::{self, GraphemeCategory}, language::syntax::HighlightEvent, selection::Selection, ui::{buffer::Buffer, theme::THEME, Position, Rect}};
+use crate::{editor::Mode, graphemes::{self, GraphemeCategory}, language::syntax::{Highlight, HighlightEvent}, selection::Selection, ui::{buffer::Buffer, scroll::Scroll, style::Style, theme::THEME, Rect}};
 
-fn adjust_scroll(dimension: usize, doc_cursor: usize, offset: usize, scroll: usize) -> Option<usize> {
-    if doc_cursor > dimension.saturating_sub(offset + 1) + scroll {
-        return Some(doc_cursor.saturating_sub(dimension.saturating_sub(offset + 1)));
+/// A wrapper around a HighlightIterator
+/// that merges the layered highlights to create the final text style
+/// and yields the active text style and the byte at which the active
+/// style will have to be recomputed.
+pub struct StyleIter<H: Iterator<Item = HighlightEvent>> {
+    active_highlights: Vec<Highlight>,
+    highlight_iter: H,
+}
+
+impl<H: Iterator<Item = HighlightEvent>> StyleIter<H> {
+    pub fn new(highlight_iter: H) -> Self {
+        Self {
+            active_highlights: Vec::with_capacity(64),
+            highlight_iter
+        }
     }
+}
 
-    if doc_cursor < scroll + offset {
-        return Some(doc_cursor.saturating_sub(offset));
+impl<H: Iterator<Item = HighlightEvent>> Iterator for StyleIter<H> {
+    type Item = (Style, usize);
+    fn next(&mut self) -> Option<(Style, usize)> {
+        for event in self.highlight_iter.by_ref() {
+            match event {
+                HighlightEvent::HighlightStart(highlight) => {
+                    self.active_highlights.push(highlight)
+                }
+                HighlightEvent::HighlightEnd => {
+                    self.active_highlights.pop();
+                }
+                HighlightEvent::Source { end, .. } => {
+                    let style = self
+                        .active_highlights
+                        .iter()
+                        .fold(THEME.get("text"), |acc, span| {
+                            acc.patch(THEME.highlight_style(*span))
+                        });
+                    return Some((style, end));
+                }
+            }
+        }
+        None
     }
-
-    None
 }
 
 #[derive(Default, Debug)]
-pub struct ScrollView {
-    // The visual position of a cursor on the screen
-    // relative to the origin 0,0 at the top left of
-    // the editor (not the current view)
-    pub cursor: Position,
-    pub offset_x: usize,
-    pub offset_y: usize,
-    pub scroll_x: usize,
-    pub scroll_y: usize,
+pub struct View {
+    pub scroll: Scroll,
 }
 
-impl ScrollView {
-    pub fn ensure_cursor_is_in_view(&mut self, selection: &Selection, area: Rect) {
-        if let Some(s) = adjust_scroll(area.height as usize, selection.head.y, self.offset_y, self.scroll_y) {
-            self.scroll_y = s;
-        }
-
-        if let Some(s) = adjust_scroll(area.width as usize, selection.head.x, self.offset_x, self.scroll_x) {
-            self.scroll_x = s;
-        }
-
-        // adjust cursor
-        self.cursor.row = area.top() + selection.head.y.saturating_sub(self.scroll_y) as u16;
-        self.cursor.col = area.left() + selection.head.x.saturating_sub(self.scroll_x) as u16;
-    }
-
+impl View {
     pub fn render(
-        &mut self,
-        area: Rect,
+        &self,
+        area: &Rect,
         buffer: &mut Buffer,
         rope: &Rope,
+        sel: &Selection,
+        mode: &Mode,
         highlight_iter: impl Iterator<Item = HighlightEvent>,
-        render_trailing_whitespace: bool,
     ) {
         let mut styles = StyleIter::new(highlight_iter);
         let (mut style, mut highlight_until) = styles.next()
             .unwrap_or((THEME.get("text"), usize::MAX));
 
         // loop through each visible line
-        for row in self.scroll_y..self.scroll_y + area.height as usize {
+        for row in self.scroll.y..self.scroll.y + area.height as usize {
             if row >= rope.line_len() { break }
 
             let mut offset = rope.byte_of_line(row);
@@ -76,20 +88,20 @@ impl ScrollView {
 
             // advance the iterator to account for scroll
             let mut advance = 0;
-            while advance < self.scroll_x {
+            while advance < self.scroll.x {
                 if let Some(g) = graphemes.next() {
                     offset += g.len();
                     advance += graphemes::width(&g);
-                    skip_next_n_cols = advance.saturating_sub(self.scroll_x);
+                    skip_next_n_cols = advance.saturating_sub(self.scroll.x);
                 } else {
                     break
                 }
             }
 
-            let y = row.saturating_sub(self.scroll_y) as u16 + area.top();
+            let y = row.saturating_sub(self.scroll.y) as u16 + area.top();
             let mut trailing_whitespace = vec![];
 
-            for col in self.scroll_x..self.scroll_x + area.width as usize {
+            for col in self.scroll.x..self.scroll.x + area.width as usize {
                 if skip_next_n_cols > 0 {
                     skip_next_n_cols -= 1;
                     continue;
@@ -98,7 +110,7 @@ impl ScrollView {
                     None => break,
                     Some(g) => {
                         let width = graphemes::width(&g);
-                        let x = col.saturating_sub(self.scroll_x) as u16 + area.left();
+                        let x = col.saturating_sub(self.scroll.x) as u16 + area.left();
 
                         skip_next_n_cols = width - 1;
 
@@ -111,7 +123,7 @@ impl ScrollView {
                             }
                         }
 
-                        buffer.put_symbol(&g, x, y, style);
+                        buffer.put_symbol(&g, x, y, visual_selection_style(style, sel, col, row, mode));
 
                         if GraphemeCategory::from(&g) == GraphemeCategory::Whitespace {
                             trailing_whitespace.push(x);
@@ -122,17 +134,15 @@ impl ScrollView {
                 }
             }
 
-            if render_trailing_whitespace {
-                for x in trailing_whitespace {
-                    // render trailing whitespace
-                    buffer.put_symbol("~", x, y, THEME.get("text.whitespace"));
-                }
+            for x in trailing_whitespace {
+                // render trailing whitespace
+                buffer.put_symbol("~", x, y, THEME.get("text.whitespace"));
             }
         }
     }
 
     pub fn visible_byte_range(&self, rope: &Rope, height: u16) -> Range<usize> {
-        let from = self.scroll_y;
+        let from = self.scroll.y;
         let to = (from + height.saturating_sub(1) as usize).min(rope.line_len().saturating_sub(1));
         let start = rope.byte_of_line(from);
         let end = rope.byte_of_line(to + 1);
@@ -146,4 +156,22 @@ impl ScrollView {
     //     rope.insert(offset, str);
     //     // TODO: Move the cursor
     // }
+}
+
+fn visual_selection_style(
+    style: Style,
+    sel: &Selection,
+    x: usize,
+    y: usize,
+    mode: &Mode,
+) -> Style {
+    if mode != &Mode::Select {
+        return style
+    }
+
+    if sel.contains_cursor(x, y) {
+        return style.patch(THEME.get("selection"))
+    }
+
+    style
 }

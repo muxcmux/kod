@@ -115,7 +115,7 @@ impl Component for Search {
         }
 
         (
-            Some(self.input.view.cursor),
+            Some(self.input.scroll.cursor),
             Some(SetCursorStyle::SteadyBar),
         )
     }

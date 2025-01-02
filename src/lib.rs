@@ -48,3 +48,4 @@ mod registers;
 mod rope;
 mod language;
 mod selection;
+mod view;

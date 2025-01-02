@@ -10,6 +10,7 @@ pub enum Mode {
     Normal,
     Insert,
     Replace,
+    Select,
 }
 
 pub enum Severity {

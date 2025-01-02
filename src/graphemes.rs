@@ -14,7 +14,7 @@ pub fn line_width(rope: &Rope, line: usize) -> usize {
     rope.line(line).graphemes().map(|g| width(&g)).sum()
 }
 
-pub fn words_of_line<'a>(rope: &'a Rope, y: usize, exclude_blank_words: bool) -> Vec<Word<'a>> {
+pub fn words_of_line(rope: &Rope, y: usize, exclude_blank_words: bool) -> Vec<Word<'_>> {
     let line = rope.line(y);
     let mut offset = 0;
     let mut word_start_byte = offset;
