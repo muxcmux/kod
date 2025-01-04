@@ -2,7 +2,7 @@ use crop::Rope;
 use crossterm::event::KeyCode;
 use smartstring::SmartString;
 
-use crate::{document::Document, editor::Mode, graphemes::{self, line_width, NEW_LINE, NEW_LINE_STR}, history::Transaction, panes::Direction, search::Search, selection::Selection};
+use crate::{document::Document, editor::Mode, graphemes::{self, line_width, NEW_LINE, NEW_LINE_STR}, history::Transaction, panes::Direction, search::Search, selection::Selection, textobject::{TextObject, Word}};
 
 use super::{palette::Palette, Context};
 
@@ -489,6 +489,30 @@ pub fn delete_current_line(ctx: &mut Context) {
     }
 }
 
+fn delete_text_object_inside_impl(ctx: &mut Context, enter_insert_mode: bool) {
+    ctx.on_next_key(move |ctx, event| {
+        if let Ok(text_object) = TextObject::try_from(event.code) {
+            let (pane, doc) = current!(ctx.editor);
+            let sel = doc.selection(pane.id);
+            let Word { start, start_byte, end_byte, .. } = text_object.word(&doc.rope, &sel);
+            let offset = doc.rope.byte_of_line(sel.head.y);
+            doc.apply(&Transaction::change(&doc.rope,
+                [(offset + start_byte, offset + end_byte, None)].into_iter()
+                ).set_selection(sel)
+            );
+            doc.modified = true;
+            move_cursor_to(Some(start), None, ctx);
+            if enter_insert_mode {
+                ctx.editor.mode = Mode::Insert;
+            }
+        }
+    })
+}
+
+pub fn delete_text_object_inside(ctx: &mut Context) {
+    delete_text_object_inside_impl(ctx, false);
+}
+
 pub fn delete_until_eol(ctx: &mut Context) {
     let (pane, doc) = current!(ctx.editor);
     let sel = doc.selection(pane.id);
@@ -505,6 +529,20 @@ pub fn delete_until_eol(ctx: &mut Context) {
 pub fn change_until_eol(ctx: &mut Context) {
     ctx.editor.mode = Mode::Insert;
     delete_until_eol(ctx);
+}
+
+pub fn change_text_object_inside(ctx: &mut Context) {
+    delete_text_object_inside_impl(ctx, true);
+}
+
+pub fn change_current_line(ctx: &mut Context) {
+    move_cursor_to(Some(0), None, ctx);
+    change_until_eol(ctx);
+}
+
+pub fn change_symbol_to_the_left(ctx: &mut Context) {
+    delete_symbol_to_the_left(ctx);
+    ctx.editor.mode = Mode::Insert;
 }
 
 pub fn switch_pane_top(ctx: &mut Context) {

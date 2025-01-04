@@ -49,3 +49,4 @@ mod rope;
 mod language;
 mod selection;
 mod view;
+mod textobject;

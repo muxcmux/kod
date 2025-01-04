@@ -2,7 +2,7 @@ use std::borrow::Cow;
 
 use crop::Rope;
 
-use crate::{editor::Mode, graphemes::{self, line_width, words_of_line, GraphemeCategory}};
+use crate::{editor::Mode, graphemes::{self, line_width, GraphemeCategory}, textobject::words_of_line};
 
 // Represents a virtual cursor position in a text rope with
 // absolute positions 0, 0 from the first line/ first col
