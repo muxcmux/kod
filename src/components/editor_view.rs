@@ -24,6 +24,7 @@ use crate::{
 pub struct EditorView {
     keymaps: Keymaps,
     on_next_key: Option<KeyCallback>,
+    waiting_for_input: bool,
 }
 
 impl EditorView {
@@ -33,6 +34,8 @@ impl EditorView {
         ctx: &mut commands::Context,
     ) -> Option<KeymapResult> {
         let result = self.keymaps.get(&ctx.editor.mode, event);
+
+        self.waiting_for_input = matches!(result, KeymapResult::Pending);
 
         if let KeymapResult::Found(f) = result {
             f(ctx);
@@ -203,7 +206,13 @@ impl Component for EditorView {
         (
             Some(pane!(ctx.editor).view.scroll.cursor),
             Some(match ctx.editor.mode {
-                Mode::Normal | Mode::Select => SetCursorStyle::SteadyBlock,
+                Mode::Normal | Mode::Select => {
+                    if self.waiting_for_input || self.on_next_key.is_some() {
+                        SetCursorStyle::SteadyUnderScore
+                    } else {
+                        SetCursorStyle::SteadyBlock
+                    }
+                },
                 Mode::Insert => SetCursorStyle::SteadyBar,
                 Mode::Replace => SetCursorStyle::SteadyUnderScore,
             }),
