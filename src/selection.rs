@@ -194,7 +194,7 @@ impl Selection {
             }
         }
 
-        unreachable!();
+        *self
     }
 
     // Currently only accounts for the head
