@@ -501,10 +501,10 @@ fn delete_text_object_inside_impl(ctx: &mut Context, enter_insert_mode: bool) {
                 ).set_selection(sel)
             );
             doc.modified = true;
-            move_cursor_to(Some(start), None, ctx);
             if enter_insert_mode {
                 ctx.editor.mode = Mode::Insert;
             }
+            move_cursor_to(Some(start), None, ctx);
         }
     })
 }
