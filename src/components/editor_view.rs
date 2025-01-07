@@ -205,16 +205,14 @@ impl Component for EditorView {
     fn cursor(&self, _area: Rect, ctx: &Context) -> (Option<Position>, Option<SetCursorStyle>) {
         (
             Some(pane!(ctx.editor).view.scroll.cursor),
-            Some(match ctx.editor.mode {
-                Mode::Normal | Mode::Select => {
-                    if self.waiting_for_input || self.on_next_key.is_some() {
-                        SetCursorStyle::SteadyUnderScore
-                    } else {
-                        SetCursorStyle::SteadyBlock
-                    }
-                },
-                Mode::Insert => SetCursorStyle::SteadyBar,
-                Mode::Replace => SetCursorStyle::SteadyUnderScore,
+            Some(if self.waiting_for_input || self.on_next_key.is_some() {
+                SetCursorStyle::BlinkingUnderScore
+            } else {
+                match ctx.editor.mode {
+                    Mode::Normal | Mode::Select => SetCursorStyle::SteadyBlock,
+                    Mode::Insert => SetCursorStyle::SteadyBar,
+                    Mode::Replace => SetCursorStyle::SteadyUnderScore,
+                }
             }),
         )
     }
