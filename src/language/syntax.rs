@@ -1464,7 +1464,7 @@ impl HighlightConfiguration {
 
                 let mut best_index = None;
                 let mut best_match_len = 0;
-                for (i, recognized_name) in THEME.scopes().iter().enumerate() {
+                for (i, recognized_name) in THEME.scopes.iter().enumerate() {
                     let mut len = 0;
                     let mut matches = true;
                     for (i, part) in recognized_name.split('.').enumerate() {

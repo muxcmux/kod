@@ -37,11 +37,13 @@ macro_rules! theme {
     ) => {
         {
             let mut styles = std::collections::HashMap::new();
+            let mut scopes = vec![];
             $(
                 let duplicate = styles.insert($key, style!($value));
                 debug_assert!(duplicate.is_none(), "Duplicate theme key {}", stringify!($key));
+                scopes.push($key);
             )+
-            $crate::ui::theme::Theme { styles }
+            $crate::ui::theme::Theme { styles, scopes }
         }
     };
 }
@@ -88,7 +90,8 @@ fn color(str: &str) -> Color {
 }
 
 pub struct Theme {
-    styles: HashMap<&'static str, Style>
+    styles: HashMap<&'static str, Style>,
+    pub scopes: Vec<&'static str>,
 }
 
 impl Theme {
@@ -104,44 +107,8 @@ impl Theme {
             .find_map(|s| self.styles.get(s).copied())
     }
 
-    pub fn scopes(&self) -> &[&str] {
-        &[
-            "comment",
-            "operator",
-            "punctuation",
-            "variable",
-            "variable.builtin",
-            "constant.numeric",
-            "constant",
-            "attributes",
-            "type",
-            "string",
-            "variable.other.member",
-            "constant.character.escape",
-            "function",
-            "constructor",
-            "special",
-            "keyword",
-            "label",
-            "namespace",
-
-            "markup.heading",
-            "markup.list",
-            "markup.bold",
-            "markup.italic",
-            "markup.link.url",
-            "markup.link.text",
-            "markup.quote",
-            "markup.raw",
-
-            "diff.plus",
-            "diff.delta",
-            "diff.minus",
-        ]
-    }
-
     pub fn highlight_style(&self, highlight: Highlight) -> Style {
-        self.get(self.scopes()[highlight.0])
+        self.get(self.scopes[highlight.0])
     }
 }
 
