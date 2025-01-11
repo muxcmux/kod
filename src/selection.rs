@@ -124,7 +124,9 @@ impl Selection {
         let mut line = self.head.y;
 
         while line < rope.line_len() {
-            for word in words_of_line(rope, line, true) {
+            for word in words_of_line(rope, line) {
+                if word.is_blank() { continue; }
+
                 if line > self.head.y || self.head.x < word.end {
                     return self.move_to(rope, Some(word.end), Some(line), mode);
                 }
@@ -140,7 +142,9 @@ impl Selection {
         let mut line = self.head.y;
 
         while line < rope.line_len() {
-            for word in words_of_line(rope, line, true) {
+            for word in words_of_line(rope, line) {
+                if word.is_blank() { continue; }
+
                 if line > self.head.y || self.head.x < word.start {
                     return self.move_to(rope, Some(word.start), Some(line), mode);
                 }
@@ -157,7 +161,9 @@ impl Selection {
 
         while line >= 0 {
             let l = line as usize;
-            for word in words_of_line(rope, l, true).iter().rev() {
+            for word in words_of_line(rope, l).backwards() {
+                if word.is_blank() { continue; }
+
                 if l < self.head.y || self.head.x > word.start {
                     return self.move_to(rope, Some(word.start), Some(l), mode);
                 }
@@ -174,7 +180,9 @@ impl Selection {
 
         while line >= 0 {
             let l = line as usize;
-            for word in words_of_line(rope, l, true).iter().rev() {
+            for word in words_of_line(rope, l).backwards() {
+                if word.is_blank() { continue; }
+
                 if l < self.head.y || self.head.x > word.end {
                     return self.move_to(rope, Some(word.end), Some(l), mode);
                 }

@@ -212,13 +212,14 @@ fn normal_mode_keymap() -> Keymap {
         "up" => switch_pane_top,
         "down" => switch_pane_bottom,
 
-        "^" | "home" | "C-h" => goto_line_first_non_whitespace,
+        "^" | "home" | "C-h" | "_" => goto_line_first_non_whitespace,
         "$" | "end" | "C-l" => goto_eol,
         "G" => goto_last_line,
 
         "g" => {
             "g" => goto_first_line,
             "e" => goto_word_end_backward,
+            "_" => goto_eol,
         },
 
         "u" => undo,
@@ -251,6 +252,11 @@ fn normal_mode_keymap() -> Keymap {
             // "f" => delete_character_forward,
             // "T" => delete_until_character_backward,
             // "F" => delete_character_backward,
+            // "_" => delete_until_first_non_whitespace,
+            // "G" => delete_until_last_line,
+            // "g" => {
+            //      "g" => delete_until_first_line,
+            // }
             "i" => delete_text_object_inside,
             // "a" => delete_text_object_around,
         },
@@ -270,6 +276,11 @@ fn normal_mode_keymap() -> Keymap {
             // "f" => change_character_forward,
             // "T" => change_until_character_backward,
             // "F" => change_character_backward,
+            // "_" => change_until_first_non_whitespace,
+            // "G" => change_until_last_line,
+            // "g" => {
+            //      "g" => change_until_first_line,
+            // }
             "i" => change_text_object_inside,
             // "a" => change_text_object_around,
         },
@@ -335,10 +346,17 @@ fn select_mode_keymap() -> Keymap {
         "f" => goto_character_forward,
         "T" => goto_until_character_backward,
         "F" => goto_character_backward,
+        "G" => goto_last_line,
+
+        "g" => {
+            "g" => goto_first_line,
+            "e" => goto_word_end_backward,
+            "_" => goto_eol,
+        },
 
         "o" => invert_selection,
 
-        "C-h" | "home" => goto_line_first_non_whitespace,
+        "C-h" | "home" | "_" => goto_line_first_non_whitespace,
         "C-l" | "end" => goto_eol,
     })
 }
