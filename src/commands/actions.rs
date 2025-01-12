@@ -1,8 +1,10 @@
-use crop::Rope;
+use crop::{Rope, RopeSlice};
 use crossterm::event::KeyCode;
 use smartstring::SmartString;
 
-use crate::{document::Document, editor::Mode, graphemes::{self, line_width, NEW_LINE, NEW_LINE_STR}, history::Transaction, panes::Direction, search::Search, selection::Selection, textobject::{TextObject, Word}};
+use crate::graphemes::GraphemeCategory;
+use crate::textobject::{self, LongWords, LongWordsBackwards, TextObjectKind, Words, WordsBackwards};
+use crate::{document::Document, editor::Mode, graphemes::{self, line_width, NEW_LINE, NEW_LINE_STR}, history::Transaction, panes::Direction, search::Search, selection::Selection};
 
 use super::{palette::Palette, Context};
 
@@ -240,35 +242,233 @@ pub fn goto_last_line(ctx: &mut Context) {
 pub fn goto_line_first_non_whitespace(ctx: &mut Context) {
     let (pane, doc) = current!(ctx.editor);
     let sel = doc.selection(pane.id);
-    doc.set_selection(pane.id, sel.goto_line_first_non_whitespace(&doc.rope, None, &ctx.editor.mode));
+    for (i, g) in doc.rope.line(sel.head.y).graphemes().enumerate() {
+        if GraphemeCategory::from(&g) != GraphemeCategory::Whitespace {
+            doc.set_selection(
+                pane.id,
+                sel.move_to(&doc.rope, Some(i), Some(sel.head.y), &ctx.editor.mode),
+            );
+            break;
+        }
+    }
 }
 
 pub fn goto_eol(ctx: &mut Context) {
     move_cursor_to(Some(usize::MAX), None, ctx);
 }
 
-pub fn goto_word_start_forward(ctx: &mut Context) {
+fn set_selection_or(
+    sel: Option<Selection>,
+    ctx: &mut Context,
+    f: impl FnOnce(Selection, &Rope, &Mode) -> Selection,
+) {
+    let (pane, doc) = current!(ctx.editor);
+
+    doc.set_selection(
+        pane.id,
+        sel.unwrap_or(
+            f(doc.selection(pane.id), &doc.rope, &ctx.editor.mode)
+        )
+    );
+}
+
+fn goto_word_start_forward_impl(
+    words: impl Iterator<Item = textobject::Range>,
+    sel: &Selection,
+    line: usize,
+    rope: &Rope,
+    slice: RopeSlice<'_>,
+    mode: &Mode,
+) -> Option<Selection> {
+    for word in words {
+        if word.is_blank(slice) { continue; }
+
+        if line > sel.head.y || sel.head.x < word.start {
+            return Some(sel.move_to(rope, Some(word.start), Some(line), mode))
+        }
+    }
+
+    None
+}
+
+fn goto_word_end_forward_impl(
+    words: impl Iterator<Item = textobject::Range>,
+    sel: &Selection,
+    line: usize,
+    rope: &Rope,
+    slice: RopeSlice<'_>,
+    mode: &Mode,
+) -> Option<Selection> {
+    for word in words {
+        if word.is_blank(slice) { continue; }
+
+        if line > sel.head.y || sel.head.x < word.end {
+            return Some(sel.move_to(rope, Some(word.end), Some(line), mode))
+        }
+    }
+
+    None
+}
+
+fn goto_word_start_backward_impl(
+    words: impl Iterator<Item = textobject::Range>,
+    sel: &Selection,
+    line: usize,
+    rope: &Rope,
+    slice: RopeSlice<'_>,
+    mode: &Mode,
+) -> Option<Selection> {
+    for word in words {
+        if word.is_blank(slice) { continue; }
+
+        if line < sel.head.y || sel.head.x > word.start {
+            return Some(sel.move_to(rope, Some(word.start), Some(line), mode));
+        }
+    }
+
+    None
+}
+
+fn goto_word_end_backward_impl(
+    words: impl Iterator<Item = textobject::Range>,
+    sel: &Selection,
+    line: usize,
+    rope: &Rope,
+    slice: RopeSlice<'_>,
+    mode: &Mode,
+) -> Option<Selection> {
+    for word in words {
+        if word.is_blank(slice) { continue; }
+
+        if line < sel.head.y || sel.head.x > word.end {
+            return Some(sel.move_to(rope, Some(word.end), Some(line), mode));
+        }
+    }
+
+    None
+}
+
+fn selection_from_looping_lines_forward(
+    ctx: &mut Context,
+    f: impl Fn(&Selection, usize, &Rope, RopeSlice<'_>, &Mode) -> Option<Selection>
+) -> Option<Selection> {
     let (pane, doc) = current!(ctx.editor);
     let sel = doc.selection(pane.id);
-    doc.set_selection(pane.id, sel.goto_word_start_forward(&doc.rope, &ctx.editor.mode));
+    let mut line = sel.head.y;
+
+    while line < doc.rope.line_len() {
+        let slice = doc.rope.line(line);
+
+        if let Some(s) = f(&sel, line, &doc.rope, slice, &ctx.editor.mode) {
+            return Some(s);
+        }
+
+        line += 1;
+    }
+
+    None
+}
+
+fn selection_from_looping_lines_backward(
+    ctx: &mut Context,
+    f: impl Fn(&Selection, usize, &Rope, RopeSlice<'_>, &Mode) -> Option<Selection>
+) -> Option<Selection> {
+    let (pane, doc) = current!(ctx.editor);
+    let sel = doc.selection(pane.id);
+    let mut line = sel.head.y as isize;
+
+    while line >= 0 {
+        let l = line as usize;
+        let slice = doc.rope.line(l);
+
+        if let Some(s) = f(&sel, l, &doc.rope, slice, &ctx.editor.mode) {
+            return Some(s);
+        }
+
+        line -= 1;
+    }
+
+    None
+}
+
+pub fn goto_word_start_forward(ctx: &mut Context) {
+    let sel = selection_from_looping_lines_forward(ctx, |sel, line, rope, slice, mode| {
+        goto_word_start_forward_impl(Words::new(slice), sel, line, rope, slice, mode)
+    });
+
+    set_selection_or(sel, ctx, |sel, rope, mode| {
+        sel.move_to(rope, Some(usize::MAX), Some(rope.line_len().saturating_sub(1)), mode)
+    });
+}
+
+pub fn goto_long_word_start_forward(ctx: &mut Context) {
+    let sel = selection_from_looping_lines_forward(ctx, |sel, line, rope, slice, mode| {
+        goto_word_start_forward_impl(LongWords::new(slice), sel, line, rope, slice, mode)
+    });
+
+    set_selection_or(sel, ctx, |sel, rope, mode| {
+        sel.move_to(rope, Some(usize::MAX), Some(rope.line_len().saturating_sub(1)), mode)
+    });
 }
 
 pub fn goto_word_end_forward(ctx: &mut Context) {
-    let (pane, doc) = current!(ctx.editor);
-    let sel = doc.selection(pane.id);
-    doc.set_selection(pane.id, sel.goto_word_end_forward(&doc.rope, &ctx.editor.mode));
+    let sel = selection_from_looping_lines_forward(ctx, |sel, line, rope, slice, mode| {
+        goto_word_end_forward_impl(Words::new(slice), sel, line, rope, slice, mode)
+    });
+
+    set_selection_or(sel, ctx, |sel, rope, mode| {
+        sel.move_to(rope, Some(usize::MAX), Some(rope.line_len().saturating_sub(1)), mode)
+    });
+}
+
+pub fn goto_long_word_end_forward(ctx: &mut Context) {
+    let sel = selection_from_looping_lines_forward(ctx, |sel, line, rope, slice, mode| {
+        goto_word_end_forward_impl(LongWords::new(slice), sel, line, rope, slice, mode)
+    });
+
+    set_selection_or(sel, ctx, |sel, rope, mode| {
+        sel.move_to(rope, Some(usize::MAX), Some(rope.line_len().saturating_sub(1)), mode)
+    });
 }
 
 pub fn goto_word_start_backward(ctx: &mut Context) {
-    let (pane, doc) = current!(ctx.editor);
-    let sel = doc.selection(pane.id);
-    doc.set_selection(pane.id, sel.goto_word_start_backward(&doc.rope, &ctx.editor.mode));
+    let sel = selection_from_looping_lines_backward(ctx, |sel, line, rope, slice, mode| {
+        goto_word_start_backward_impl(WordsBackwards::new(slice), sel, line, rope, slice, mode)
+    });
+
+    set_selection_or(sel, ctx, |sel, rope, mode| {
+        sel.move_to(rope, Some(0), Some(0), mode)
+    });
+}
+
+pub fn goto_long_word_start_backward(ctx: &mut Context) {
+    let sel = selection_from_looping_lines_backward(ctx, |sel, line, rope, slice, mode| {
+        goto_word_start_backward_impl(LongWordsBackwards::new(slice), sel, line, rope, slice, mode)
+    });
+
+    set_selection_or(sel, ctx, |sel, rope, mode| {
+        sel.move_to(rope, Some(0), Some(0), mode)
+    });
 }
 
 pub fn goto_word_end_backward(ctx: &mut Context) {
-    let (pane, doc) = current!(ctx.editor);
-    let sel = doc.selection(pane.id);
-    doc.set_selection(pane.id, sel.goto_word_end_backward(&doc.rope, &ctx.editor.mode));
+    let sel = selection_from_looping_lines_backward(ctx, |sel, line, rope, slice, mode| {
+        goto_word_end_backward_impl(WordsBackwards::new(slice), sel, line, rope, slice, mode)
+    });
+
+    set_selection_or(sel, ctx, |sel, rope, mode| {
+        sel.move_to(rope, Some(0), Some(0), mode)
+    });
+}
+
+pub fn goto_long_word_end_backward(ctx: &mut Context) {
+    let sel = selection_from_looping_lines_backward(ctx, |sel, line, rope, slice, mode| {
+        goto_word_end_backward_impl(LongWordsBackwards::new(slice), sel, line, rope, slice, mode)
+    });
+
+    set_selection_or(sel, ctx, |sel, rope, mode| {
+        sel.move_to(rope, Some(0), Some(0), mode)
+    });
 }
 
 pub fn goto_character_forward(ctx: &mut Context) {
@@ -491,10 +691,10 @@ pub fn delete_current_line(ctx: &mut Context) {
 
 fn delete_text_object_inside_impl(ctx: &mut Context, enter_insert_mode: bool) {
     ctx.on_next_key(move |ctx, event| {
-        if let Ok(text_object) = TextObject::try_from(event.code) {
+        if let Ok(kind) = TextObjectKind::try_from(event.code) {
             let (pane, doc) = current!(ctx.editor);
             let sel = doc.selection(pane.id);
-            let Word { start, start_byte, end_byte, .. } = text_object.word(&doc.rope, &sel);
+            let textobject::Range { start, start_byte, end_byte, .. } = kind.inside(&doc.rope, &sel);
             let offset = doc.rope.byte_of_line(sel.head.y);
             doc.apply(&Transaction::change(&doc.rope,
                 [(offset + start_byte, offset + end_byte, None)].into_iter()

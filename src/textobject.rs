@@ -5,44 +5,135 @@ use crossterm::event::KeyCode;
 
 use crate::{graphemes::{width, GraphemeCategory}, selection::Selection};
 
+// Need to expand this to account for starting and ending row as well
+pub struct Range {
+    pub start: usize,
+    pub end: usize,
+    pub start_byte: usize,
+    pub end_byte: usize,
+}
+
+impl Range {
+    pub fn slice<'a>(&self, slice: RopeSlice<'a>) -> RopeSlice<'a> {
+        slice.byte_slice(self.start_byte..self.end_byte)
+    }
+
+    pub fn is_blank(&self, slice: RopeSlice<'_>) -> bool {
+        self.slice(slice).chars().all(|c| c.is_whitespace())
+    }
+
+    pub fn contains(&self, col: &usize) -> bool {
+        (self.start..=self.end).contains(col)
+    }
+}
+
+pub enum TextObjectKind {
+    Word,
+    LongWord,
+}
+
+impl TryFrom<KeyCode> for TextObjectKind {
+    type Error = String;
+
+    fn try_from(value: KeyCode) -> Result<Self, Self::Error> {
+        match value {
+            KeyCode::Char(c) => match c {
+                'w' => Ok(Self::Word),
+                'W' => Ok(Self::LongWord),
+                _ => Err(format!("'{c}' does not map to a valid TextObjectKind"))
+            },
+            _ => Err(format!("{value} does not map to a valid TextObjectKind")),
+        }
+    }
+}
+
+impl TextObjectKind {
+    pub fn inside(&self, rope: &Rope, selection: &Selection) -> Range {
+        match self {
+            Self::Word => {
+                let mut words = Words::new(rope.line(selection.head.y));
+                words.find(|w| w.contains(&selection.head.x)).unwrap()
+            },
+            Self::LongWord => {
+                let mut words = LongWords::new(rope.line(selection.head.y));
+                words.find(|w| w.contains(&selection.head.x)).unwrap()
+            }
+        }
+    }
+}
+
+// ---- Iterators ----
+
 pub struct Words<'a> {
-    slice: RopeSlice<'a>,
     offset: usize,
     col: usize,
     graphemes: Peekable<Graphemes<'a>>,
 }
 
 pub struct WordsBackwards<'a> {
-    slice: RopeSlice<'a>,
+    offset: usize,
+    col: usize,
+    graphemes: Peekable<Rev<Graphemes<'a>>>,
+}
+
+pub struct LongWords<'a> {
+    offset: usize,
+    col: usize,
+    graphemes: Peekable<Graphemes<'a>>,
+}
+
+pub struct LongWordsBackwards<'a> {
     offset: usize,
     col: usize,
     graphemes: Peekable<Rev<Graphemes<'a>>>,
 }
 
 impl<'a> Words<'a> {
-    fn new(slice: RopeSlice<'a>) -> Self {
+    pub fn new(slice: RopeSlice<'a>) -> Self {
         Self {
-            slice,
             col: 0,
             offset: 0,
             graphemes: slice.graphemes().peekable(),
         }
     }
+}
 
-    pub fn backwards(self) -> WordsBackwards<'a> {
-        let col = self.slice.graphemes().map(|g| width(&g)).sum::<usize>().saturating_sub(1);
+impl<'a> WordsBackwards<'a> {
+    pub fn new(slice: RopeSlice<'a>) -> Self {
+        let col = slice.graphemes().map(|g| width(&g)).sum::<usize>().saturating_sub(1);
 
-        WordsBackwards {
-            slice: self.slice,
+        Self {
             col,
-            offset: self.slice.byte_len(),
-            graphemes: self.slice.graphemes().rev().peekable(),
+            offset: slice.byte_len(),
+            graphemes: slice.graphemes().rev().peekable(),
         }
     }
 }
 
-impl<'a> Iterator for Words<'a> {
-    type Item = Word<'a>;
+impl<'a> LongWords<'a> {
+    pub fn new(slice: RopeSlice<'a>) -> Self {
+        Self {
+            col: 0,
+            offset: 0,
+            graphemes: slice.graphemes().peekable(),
+        }
+    }
+}
+
+impl<'a> LongWordsBackwards<'a> {
+    pub fn new(slice: RopeSlice<'a>) -> Self {
+        let col = slice.graphemes().map(|g| width(&g)).sum::<usize>().saturating_sub(1);
+
+        Self {
+            col,
+            offset: slice.byte_len(),
+            graphemes: slice.graphemes().rev().peekable(),
+        }
+    }
+}
+
+impl Iterator for Words<'_> {
+    type Item = Range;
 
     fn next(&mut self) -> Option<Self::Item> {
         let mut col = self.col;
@@ -61,8 +152,7 @@ impl<'a> Iterator for Words<'a> {
                         // column of a grapheme
                         let end_byte = offset + size;
 
-                        let word = Word {
-                            slice: self.slice.byte_slice(self.offset..end_byte),
+                        let word = Range {
                             start_byte: self.offset,
                             end_byte,
                             start: self.col,
@@ -80,8 +170,7 @@ impl<'a> Iterator for Words<'a> {
                     // and the index has to fall on the first
                     // column of a grapheme
                     let end_byte = offset + size;
-                    return Some(Word {
-                        slice: self.slice.byte_slice(self.offset..end_byte),
+                    return Some(Range {
                         start_byte: self.offset,
                         end_byte,
                         start: self.col,
@@ -98,8 +187,8 @@ impl<'a> Iterator for Words<'a> {
     }
 }
 
-impl<'a> Iterator for WordsBackwards<'a> {
-    type Item = Word<'a>;
+impl Iterator for WordsBackwards<'_> {
+    type Item = Range;
 
     fn next(&mut self) -> Option<Self::Item> {
         let mut col = self.col;
@@ -119,8 +208,7 @@ impl<'a> Iterator for WordsBackwards<'a> {
                         let start_byte = offset.saturating_sub(size);
 
                         // start and end are reversed
-                        let word = Word {
-                            slice: self.slice.byte_slice(start_byte..self.offset),
+                        let word = Range {
                             end_byte: self.offset,
                             start_byte,
                             end: self.col.saturating_sub(width - 1),
@@ -138,8 +226,7 @@ impl<'a> Iterator for WordsBackwards<'a> {
                     // and the index has to fall on the first
                     // column of a grapheme
                     let start_byte = offset.saturating_sub(size);
-                    return Some(Word {
-                        slice: self.slice.byte_slice(start_byte..self.offset),
+                    return Some(Range {
                         end_byte: self.offset,
                         start_byte,
                         end: self.col,
@@ -156,59 +243,116 @@ impl<'a> Iterator for WordsBackwards<'a> {
     }
 }
 
-pub fn words_of_line(rope: &Rope, y: usize) -> Words {
-    Words::new(rope.line(y))
-}
+impl Iterator for LongWords<'_> {
+    type Item = Range;
 
-#[derive(Clone, Debug)]
-pub struct Word<'a> {
-    pub slice: RopeSlice<'a>,
-    pub start: usize,
-    pub end: usize,
-    pub start_byte: usize,
-    pub end_byte: usize,
-}
+    fn next(&mut self) -> Option<Self::Item> {
+        let mut col = self.col;
+        let mut offset = self.offset;
 
-impl Word<'_> {
-    pub fn is_blank(&self) -> bool {
-        self.slice.chars().all(|c| c.is_whitespace())
-    }
+        while let Some(g) = self.graphemes.next() {
+            let width = width(&g);
+            let size = g.len();
+            let this_cat = GraphemeCategory::from(&g);
+            match self.graphemes.peek() {
+                Some(next) => {
+                    let next_cat = GraphemeCategory::from(next);
+                    if (this_cat != GraphemeCategory::Whitespace && next_cat == GraphemeCategory::Whitespace) ||
+                        (this_cat == GraphemeCategory::Whitespace && next_cat != GraphemeCategory::Whitespace) {
+                        // that's the end of the current word
+                        // and the index has to fall on the first
+                        // column of a grapheme
+                        let end_byte = offset + size;
 
-    fn contains(&self, col: &usize) -> bool {
-        (self.start..=self.end).contains(col)
-    }
-}
+                        let word = Range {
+                            start_byte: self.offset,
+                            end_byte,
+                            start: self.col,
+                            end: col,
+                        };
 
-pub enum Motion {
-    Around,
-    Inside,
-}
+                        self.col = col + width;
+                        self.offset = end_byte;
 
-#[derive(Debug)]
-pub enum TextObject {
-    Word,
-    LongWord,
-}
+                        return Some(word)
+                    }
+                }
+                None => {
+                    // this is the end of the last word
+                    // and the index has to fall on the first
+                    // column of a grapheme
+                    let end_byte = offset + size;
+                    return Some(Range {
+                        start_byte: self.offset,
+                        end_byte,
+                        start: self.col,
+                        end: col,
+                    })
+                }
+            }
 
-impl TryFrom<KeyCode> for TextObject {
-    type Error = String;
-
-    fn try_from(value: KeyCode) -> Result<Self, Self::Error> {
-        match value {
-            KeyCode::Char(c) => match c {
-                'w' => Ok(Self::Word),
-                'W' => Ok(Self::LongWord),
-                _ => Err(format!("'{c}' does not map to a valid TextObject"))
-            },
-            _ => Err(format!("{value} does not map to a valid TextObject")),
+            col += width;
+            offset += size;
         }
+
+        None
     }
 }
 
-impl TextObject {
-    pub fn word<'a>(&self, rope: &'a Rope, selection: &Selection) -> Word<'a> {
-        let words = words_of_line(rope, selection.head.y);
-        words.into_iter().find(|w| w.contains(&selection.head.x)).unwrap()
+impl Iterator for LongWordsBackwards<'_> {
+    type Item = Range;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let mut col = self.col;
+        let mut offset = self.offset;
+
+        while let Some(g) = self.graphemes.next() {
+            let width = width(&g);
+            let size = g.len();
+            let this_cat = GraphemeCategory::from(&g);
+            match self.graphemes.peek() {
+                Some(next) => {
+                    let next_cat = GraphemeCategory::from(next);
+                    if (this_cat != GraphemeCategory::Whitespace && next_cat == GraphemeCategory::Whitespace) ||
+                        (this_cat == GraphemeCategory::Whitespace && next_cat != GraphemeCategory::Whitespace) {
+                        // that's the start of the current word
+                        // and the index has to fall on the first
+                        // column of a grapheme
+                        let start_byte = offset.saturating_sub(size);
+
+                        // start and end are reversed
+                        let word = Range {
+                            end_byte: self.offset,
+                            start_byte,
+                            end: self.col.saturating_sub(width - 1),
+                            start: col.saturating_sub(width - 1),
+                        };
+
+                        self.col = col.saturating_sub(width);
+                        self.offset = start_byte;
+
+                        return Some(word)
+                    }
+                }
+                None => {
+                    // this is the start of the first word
+                    // and the index has to fall on the first
+                    // column of a grapheme
+                    let start_byte = offset.saturating_sub(size);
+                    return Some(Range {
+                        end_byte: self.offset,
+                        start_byte,
+                        end: self.col,
+                        start: col,
+                    })
+                }
+            }
+
+            col = col.saturating_sub(width);
+            offset = offset.saturating_sub(size);
+        }
+
+        None
     }
 }
 
@@ -220,7 +364,8 @@ mod test {
     #[test]
     fn test_words() {
         let rope = Rope::from("Hello world, this is a test\nsecond line with (words) 😭😭😭😭 hi");
-        let words = Words::new(rope.line(1));
+        let line = rope.line(1);
+        let words = Words::new(line);
         // start, end, slice
         let expected = [
             (0, 5, "second"),
@@ -239,16 +384,17 @@ mod test {
             (34, 35, "hi"),
         ];
         for (word, expected) in words.zip(expected.into_iter()) {
-            assert_eq!(word.start, expected.0, "\"{}\" starts on {} but shoud be {}", word.slice, word.start, expected.0);
-            assert_eq!(word.end, expected.1, "\"{}\" ends on {} but shoud be {}", word.slice, word.end, expected.1);
-            assert_eq!(word.slice, expected.2);
+            assert_eq!(word.start, expected.0, "\"{}\" starts on {} but shoud be {}", word.slice(line), word.start, expected.0);
+            assert_eq!(word.end, expected.1, "\"{}\" ends on {} but shoud be {}", word.slice(line), word.end, expected.1);
+            assert_eq!(word.slice(line), expected.2);
         }
     }
 
     #[test]
     fn test_words_backwards() {
         let rope = Rope::from("Hello world, this is a test\nsecond line with (words) 😭😭😭😭 hi");
-        let words = Words::new(rope.line(1)).backwards();
+        let line = rope.line(1);
+        let words = WordsBackwards::new(line);
         let expected = [
             (34, 35, "hi"),
             (33, 33, " "),
@@ -266,9 +412,9 @@ mod test {
             (0, 5, "second"),
         ];
         for (word, expected) in words.zip(expected.into_iter()) {
-            assert_eq!(word.start, expected.0, "\"{}\" starts on {} but shoud be {}", word.slice, word.start, expected.0);
-            assert_eq!(word.end, expected.1, "\"{}\" ends on {} but shoud be {}", word.slice, word.end, expected.1);
-            assert_eq!(word.slice, expected.2);
+            assert_eq!(word.start, expected.0, "\"{}\" starts on {} but shoud be {}", word.slice(line), word.start, expected.0);
+            assert_eq!(word.end, expected.1, "\"{}\" ends on {} but shoud be {}", word.slice(line), word.end, expected.1);
+            assert_eq!(word.slice(line), expected.2);
         }
     }
 }

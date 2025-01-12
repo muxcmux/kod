@@ -2,7 +2,7 @@ use std::borrow::Cow;
 
 use crop::Rope;
 
-use crate::{editor::Mode, graphemes::{self, line_width, GraphemeCategory}, textobject::words_of_line};
+use crate::{editor::Mode, graphemes::{self, line_width}};
 
 // Represents a virtual cursor position in a text rope with
 // absolute positions 0, 0 from the first line/ first col
@@ -118,91 +118,6 @@ impl Selection {
             anchor: self.head,
             ..*self
         }
-    }
-
-    pub fn goto_word_end_forward(&self, rope: &Rope, mode: &Mode) -> Self {
-        let mut line = self.head.y;
-
-        while line < rope.line_len() {
-            for word in words_of_line(rope, line) {
-                if word.is_blank() { continue; }
-
-                if line > self.head.y || self.head.x < word.end {
-                    return self.move_to(rope, Some(word.end), Some(line), mode);
-                }
-            }
-
-            line += 1;
-        }
-
-        self.move_to(rope, Some(usize::MAX), Some(rope.line_len().saturating_sub(1)), mode)
-    }
-
-    pub fn goto_word_start_forward(&self, rope: &Rope, mode: &Mode) -> Self {
-        let mut line = self.head.y;
-
-        while line < rope.line_len() {
-            for word in words_of_line(rope, line) {
-                if word.is_blank() { continue; }
-
-                if line > self.head.y || self.head.x < word.start {
-                    return self.move_to(rope, Some(word.start), Some(line), mode);
-                }
-            }
-
-            line += 1;
-        }
-
-        self.move_to(rope, Some(usize::MAX), Some(rope.line_len().saturating_sub(1)), mode)
-    }
-
-    pub fn goto_word_start_backward(&self, rope: &Rope, mode: &Mode) -> Self {
-        let mut line = self.head.y as isize;
-
-        while line >= 0 {
-            let l = line as usize;
-            for word in words_of_line(rope, l).backwards() {
-                if word.is_blank() { continue; }
-
-                if l < self.head.y || self.head.x > word.start {
-                    return self.move_to(rope, Some(word.start), Some(l), mode);
-                }
-            }
-
-            line -= 1;
-        }
-
-        self.move_to(rope, Some(0), Some(0), mode)
-    }
-
-    pub fn goto_word_end_backward(&self, rope: &Rope, mode: &Mode) -> Self {
-        let mut line = self.head.y as isize;
-
-        while line >= 0 {
-            let l = line as usize;
-            for word in words_of_line(rope, l).backwards() {
-                if word.is_blank() { continue; }
-
-                if l < self.head.y || self.head.x > word.end {
-                    return self.move_to(rope, Some(word.end), Some(l), mode);
-                }
-            }
-
-            line -= 1;
-        }
-
-        self.move_to(rope, Some(0), Some(0), mode)
-    }
-
-    pub fn goto_line_first_non_whitespace(&self, rope: &Rope, line: Option<usize>, mode: &Mode) -> Self {
-        let line = line.unwrap_or(self.head.y);
-        for (i, g) in rope.line(line).graphemes().enumerate() {
-            if GraphemeCategory::from(&g) != GraphemeCategory::Whitespace {
-                return self.move_to(rope, Some(i), Some(line), mode);
-            }
-        }
-
-        *self
     }
 
     // Currently only accounts for the head
