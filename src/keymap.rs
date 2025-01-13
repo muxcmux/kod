@@ -211,10 +211,11 @@ fn normal_mode_keymap() -> Keymap {
         "F" => goto_character_backward,
 
         "C-w" => {
-            "h" | "left" => switch_pane_left,
-            "l" | "right" => switch_pane_right,
-            "k" | "up" => switch_pane_top,
-            "j" | "down" => switch_pane_bottom,
+            "h" | "left" | "C-h" => switch_pane_left,
+            "l" | "right" | "C-l" => switch_pane_right,
+            "k" | "up" | "C-k" => switch_pane_top,
+            "j" | "down" | "C-j" => switch_pane_bottom,
+            "w" | "C-w" => switch_to_last_pane,
         },
 
         "^" | "home" | "C-h" | "_" => goto_line_first_non_whitespace,

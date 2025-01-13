@@ -30,6 +30,7 @@ pub enum Layout {
 #[derive(Debug)]
 pub struct Panes {
     pub focus: PaneId,
+    pub last_focus: PaneId,
     pub panes: BTreeMap<PaneId, Pane>,
     area: Rect,
     root: Node,
@@ -180,7 +181,15 @@ impl Panes {
         let root = Node {id: root_id, parent_id: None, content: Content::Pane(focus) };
         panes.insert(focus, pane);
 
-        Self { area, panes, focus, root, next_pane_id: focus.next(), next_node_id: root_id.next() }
+        Self {
+            area,
+            panes,
+            focus,
+            root,
+            next_pane_id: focus.next(),
+            next_node_id: root_id.next(),
+            last_focus: focus,
+        }
     }
 
     pub fn resize(&mut self, new_size: Rect) {
@@ -227,7 +236,10 @@ impl Panes {
                     let mut focus = vec![&only_child];
                     while let Some(n) = focus.pop() {
                         match &n.content {
-                            Content::Pane(pid) => self.focus = *pid,
+                            Content::Pane(pid) => {
+                                self.last_focus = self.focus;
+                                self.focus = *pid;
+                            }
                             Content::Container(cn) => {
                                 for c in cn.children.iter().rev() {
                                     focus.push(c);
@@ -293,7 +305,10 @@ impl Panes {
 
                     while let Some(node) = focus.pop() {
                         match &node.content {
-                            Content::Pane(pid) => self.focus = *pid,
+                            Content::Pane(pid) => {
+                                self.last_focus = self.focus;
+                                self.focus = *pid;
+                            }
                             Content::Container(cn) => {
                                 for c in cn.children.iter() {
                                     focus.push(c);
@@ -336,6 +351,7 @@ impl Panes {
         node.convert_to_container(self.next_node_id.advance(), layout, focused.area);
         node.insert_pane_child_at(self.next_node_id.advance(), self.next_pane_id, 1);
 
+        self.last_focus = self.focus;
         self.focus = self.next_pane_id;
 
         let doc_id = focused.doc_id;
@@ -370,6 +386,7 @@ impl Panes {
                         parent.child_position_by_pane_id(self.focus) + 1
                     );
 
+                    self.last_focus = self.focus;
                     self.focus = self.next_pane_id;
 
                     self.panes.insert(self.next_pane_id.advance(), Pane {
@@ -390,6 +407,12 @@ impl Panes {
         }
     }
 
+    pub fn switch_to_last(&mut self) {
+        if self.panes.contains_key(&self.last_focus) {
+            std::mem::swap(&mut self.focus, &mut self.last_focus);
+        }
+    }
+
     pub fn switch(&mut self, direction: Direction) {
         let focused = &self.panes[&self.focus];
         match direction {
@@ -398,6 +421,7 @@ impl Panes {
                     if pane.area.bottom() + 1 != focused.area.top() { continue }
 
                     if (pane.area.left()..=pane.area.right()).contains(&focused.view.scroll.cursor.col) {
+                        self.last_focus = self.focus;
                         self.focus = *id
                     }
                 }
@@ -407,6 +431,7 @@ impl Panes {
                     if focused.area.bottom() + 1 != pane.area.top() { continue }
 
                     if (pane.area.left()..=pane.area.right()).contains(&focused.view.scroll.cursor.col) {
+                        self.last_focus = self.focus;
                         self.focus = *id
                     }
                 }
@@ -416,6 +441,7 @@ impl Panes {
                     if focused.area.left() != pane.area.right() + 1 { continue }
 
                     if (pane.area.top()..=pane.area.bottom()).contains(&focused.view.scroll.cursor.row) {
+                        self.last_focus = self.focus;
                         self.focus = *id
                     }
                 }
@@ -425,6 +451,7 @@ impl Panes {
                     if focused.area.right() + 1 != pane.area.left() { continue }
 
                     if (pane.area.top()..=pane.area.bottom()).contains(&focused.view.scroll.cursor.row) {
+                        self.last_focus = self.focus;
                         self.focus = *id
                     }
                 }

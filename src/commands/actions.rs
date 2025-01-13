@@ -765,6 +765,11 @@ pub fn switch_pane_right(ctx: &mut Context) {
     hide_search(ctx);
 }
 
+pub fn switch_to_last_pane(ctx: &mut Context) {
+    ctx.editor.panes.switch_to_last();
+    hide_search(ctx);
+}
+
 pub fn search(ctx: &mut Context) {
     ctx.compositor_callbacks.push(Box::new(|comp, cx| {
         cx.editor.search.focused = true;
