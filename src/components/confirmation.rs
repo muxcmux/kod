@@ -10,7 +10,7 @@ use crossterm::event::{KeyCode, KeyEvent};
 fn doc<'c>(ctx: &'c mut Context, ignored: &[DocumentId]) -> Option<(&'c DocumentId, &'c Document)> {
     ctx.editor.documents
         .iter()
-        .find(|(id, doc)| doc.modified && !ignored.contains(id))
+        .find(|(id, doc)| doc.is_modified() && !ignored.contains(id))
 }
 
 fn render_dialog(choice: u8, doc: &Document, area: Rect, buffer: &mut Buffer) {

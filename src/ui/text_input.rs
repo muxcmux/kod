@@ -109,7 +109,7 @@ impl TextInput {
     }
 
     fn insert_char_at_cursor(&mut self, char: char) {
-        let offset = self.selection.byte_offset_at_head(&self.rope);
+        let offset = self.selection.collapse_to_head().byte_range(&self.rope, true, false).start;
         let mut buf = [0; 4];
         let text = char.encode_utf8(&mut buf);
 
@@ -123,7 +123,7 @@ impl TextInput {
     }
 
     fn move_cursor_to(&mut self, x: Option<usize>, y: Option<usize>) {
-        self.selection = self.selection.move_to(&self.rope, x, y, &Mode::Insert);
+        self.selection = self.selection.head_to(&self.rope, x, y, &Mode::Insert);
     }
 
     fn cursor_left(&mut self) {

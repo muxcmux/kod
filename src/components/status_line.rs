@@ -44,7 +44,7 @@ impl Component for StatusLine {
                 buffer.put_str(&filename, x, y, THEME.get("ui.statusline.filename"));
                 x += (filename_len + 1) as u16;
 
-                if doc.modified {
+                if doc.is_modified() {
                     buffer.put_str("[+]", x, y, THEME.get("ui.statusline.modified"));
                     x += 4;
                 }

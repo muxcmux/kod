@@ -218,7 +218,7 @@ fn normal_mode_keymap() -> Keymap {
             "w" | "C-w" => switch_to_last_pane,
         },
 
-        "^" | "home" | "C-h" | "_" => goto_line_first_non_whitespace,
+        "^" | "home" | "C-h" => goto_line_first_non_whitespace,
         "$" | "end" | "C-l" => goto_eol,
         "G" => goto_last_line,
 
@@ -226,7 +226,6 @@ fn normal_mode_keymap() -> Keymap {
             "g" => goto_first_line,
             "e" => goto_word_end_backward,
             "E" => goto_long_word_end_backward,
-            "_" => goto_eol,
         },
 
         "u" => undo,
@@ -259,7 +258,8 @@ fn normal_mode_keymap() -> Keymap {
             // "f" => delete_character_forward,
             // "T" => delete_until_character_backward,
             // "F" => delete_character_backward,
-            // "_" => delete_until_first_non_whitespace,
+            "C-l" => delete_until_eol,
+            // "C-h" => delete_until_first_non_whitespace,
             // "G" => delete_until_last_line,
             // "g" => {
             //      "g" => delete_until_first_line,
@@ -283,7 +283,8 @@ fn normal_mode_keymap() -> Keymap {
             // "f" => change_character_forward,
             // "T" => change_until_character_backward,
             // "F" => change_character_backward,
-            // "_" => change_until_first_non_whitespace,
+            "C-l" => change_until_eol,
+            // "C-h" => change_until_first_non_whitespace,
             // "G" => change_until_last_line,
             // "g" => {
             //      "g" => change_until_first_line,
@@ -302,6 +303,9 @@ fn insert_mode_keymap() -> Keymap {
         "down" => cursor_down,
         "up" => cursor_up,
         "right" => cursor_right,
+
+        "S-right" => goto_word_start_forward,
+        "S-left" => goto_word_start_backward,
 
         "C-h" | "home" => goto_line_first_non_whitespace,
         "C-l" | "end" => goto_eol,
@@ -338,7 +342,8 @@ fn replace_mode_keymap() -> Keymap {
 
 fn select_mode_keymap() -> Keymap {
     map!({
-        "esc" | "v" => enter_normal_mode,
+        "esc" => enter_normal_mode,
+        "v" => expand_selection_to_whole_lines,
 
         "h" | "left" | "backspace" => cursor_left,
         "j" | "down" | "enter" => cursor_down,
@@ -356,18 +361,20 @@ fn select_mode_keymap() -> Keymap {
         "f" => goto_character_forward,
         "T" => goto_until_character_backward,
         "F" => goto_character_backward,
+
+        "^" | "home" | "C-h" => goto_line_first_non_whitespace,
+        "$" | "end" | "C-l" => goto_eol,
         "G" => goto_last_line,
 
         "g" => {
             "g" => goto_first_line,
             "e" => goto_word_end_backward,
             "E" => goto_long_word_end_backward,
-            "_" => goto_eol,
         },
 
-        "o" => invert_selection,
+        "d" | "x" => delete_selection,
+        "c" => change_selection,
 
-        "C-h" | "home" | "_" => goto_line_first_non_whitespace,
-        "C-l" | "end" => goto_eol,
+        "o" => invert_selection,
     })
 }

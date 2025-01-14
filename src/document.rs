@@ -11,10 +11,10 @@ pub struct Document {
     pub id: DocumentId,
     pub rope: Rope,
     pub path: Option<PathBuf>,
-    pub modified: bool,
     pub readonly: bool,
     pub language: Option<Arc<LanguageConfiguration>>,
     pub syntax: Option<Syntax>,
+    last_saved_revision: usize,
     selections: HashMap<PaneId, Selection>,
     history: Cell<History>,
     transaction: Cell<Transaction>,
@@ -52,8 +52,29 @@ impl Document {
             path,
             readonly,
             selections: HashMap::new(),
-            modified: false,
+            last_saved_revision: 0,
         }
+    }
+
+    pub fn is_modified(&self) -> bool {
+        let history = self.history.take();
+        let transaction = self.transaction.take();
+        let current_revision = history.current;
+        let transaction_is_empty = transaction.is_empty();
+        self.history.set(history);
+        self.transaction.set(transaction);
+        current_revision != self.last_saved_revision || !transaction_is_empty
+    }
+
+    fn get_current_revision(&mut self) -> usize {
+        let history = self.history.take();
+        let current_revision = history.current;
+        self.history.set(history);
+        current_revision
+    }
+
+    pub fn save(&mut self) {
+        self.last_saved_revision = self.get_current_revision();
     }
 
     pub fn filename_display(&self) -> Cow<'_, str> {

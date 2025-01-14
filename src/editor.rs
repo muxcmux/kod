@@ -102,7 +102,7 @@ impl Editor {
                 Ok(_) => {
                     let size = format_size_units(doc.rope.byte_len());
                     let lines = doc.rope.line_len();
-                    doc.modified = false;
+                    doc.save();
                     self.set_status(format!("{} lines written ({})", lines, size));
                 },
                 Err(err) => {
@@ -115,7 +115,7 @@ impl Editor {
     }
 
     pub fn has_unsaved_docs(&self) -> bool {
-        self.documents.iter().any(|(_, doc)| doc.modified)
+        self.documents.iter().any(|(_, doc)| doc.is_modified())
     }
 
     pub fn set_error(&mut self, message: impl Into<Cow<'static, str>>) {

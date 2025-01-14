@@ -1,7 +1,7 @@
 /// Mostly copied from helix with the difference that
 /// this doesn't have a change set but operates with
 /// transactions straight away
-use std::{num::NonZeroUsize, time::Instant};
+use std::{num::NonZeroUsize, ops::Range, time::Instant};
 
 use crop::Rope;
 use smartstring::{LazyCompact, SmartString};
@@ -13,7 +13,8 @@ pub struct State {
     pub selection: Selection,
 }
 
-type Change = (usize, usize, Option<SmartString<LazyCompact>>);
+/// Range of start_byte..end_byte and the replacement string (None to delete)
+type Change = (Range<usize>, Option<SmartString<LazyCompact>>);
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Operation {
@@ -29,7 +30,7 @@ use Operation::*;
 
 pub struct History {
     revisions: Vec<Revision>,
-    current: usize,
+    pub current: usize,
 }
 
 impl Default for History {
@@ -118,19 +119,19 @@ impl Transaction {
         let mut operations = Vec::with_capacity(changes.size_hint().1.unwrap_or(1));
         let mut last = 0;
 
-        for (byte_start, byte_end, text) in changes {
-            debug_assert!(last <= byte_start);
-            debug_assert!(byte_start <= byte_end);
+        for (Range {start, end, ..}, text) in changes {
+            debug_assert!(last <= start);
+            debug_assert!(start <= end);
 
-            operations.push(Retain(byte_start - last));
+            operations.push(Retain(start - last));
 
             if let Some(t) = text {
                 operations.push(Insert(t));
             }
 
-            operations.push(Delete(byte_end - byte_start));
+            operations.push(Delete(end - start));
 
-            last = byte_end
+            last = end
         }
 
         operations.push(Retain(rope.byte_len() - last));
@@ -364,10 +365,10 @@ mod test {
         let transaction = Transaction::change(
             &rope,
             [
-                (6, 11, Some("foo".into())),
-                (12, 17, None),
-                (18, 23, Some("foo".into())),
-                (27, 27, Some("!".into())),
+                (6..11, Some("foo".into())),
+                (12..17, None),
+                (18..23, Some("foo".into())),
+                (27..27, Some("!".into())),
             ].into_iter(),
         );
         transaction.apply(&mut rope);

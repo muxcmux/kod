@@ -126,7 +126,7 @@ pub fn search(ctx: &mut Context, backwards: bool) -> bool {
     match regex_cursor::engines::meta::Regex::new(query) {
         Ok(re) => {
             let (pane, doc) = current!(ctx.editor);
-            let sel = doc.selection(pane.id);
+            let sel = doc.selection(pane.id).collapse_to_head();
 
             let haystack = regex_cursor::Input::new(RopeCursor::new(doc.rope.byte_slice(..)));
 
@@ -136,7 +136,7 @@ pub fn search(ctx: &mut Context, backwards: bool) -> bool {
             if matches.is_empty() {
                 ctx.editor.set_warning(format!("No matches found for {}", query));
             } else {
-                let offset = sel.byte_offset_at_head(&doc.rope);
+                let offset = sel.byte_range(&doc.rope, false, false).start;
 
                 ctx.editor.search.total_matches = matches.len();
 
@@ -159,7 +159,7 @@ pub fn search(ctx: &mut Context, backwards: bool) -> bool {
                 }
 
                 let Cursor { x, y } = sel.head_at_byte(&doc.rope, matches[ctx.editor.search.current_match].start());
-                doc.set_selection(pane.id, sel.move_to(&doc.rope, Some(x), Some(y), &ctx.editor.mode));
+                doc.set_selection(pane.id, sel.head_to(&doc.rope, Some(x), Some(y), &ctx.editor.mode));
 
                 ctx.editor.search.focused = false;
 
