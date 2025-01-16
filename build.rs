@@ -360,6 +360,8 @@ fn build_tree_sitter_library(src_path: &Path, grammar: GrammarConfiguration) -> 
         .include(src_path)
         .opt_level(3)
         .cargo_warnings(false)
+        .static_flag(true)
+        .warnings(false)
         .file(&parser_path);
 
     let scanner_path = if scanner_path.exists() {

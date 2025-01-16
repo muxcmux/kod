@@ -209,6 +209,8 @@ fn normal_mode_keymap() -> Keymap {
         "f" => goto_character_forward,
         "T" => goto_until_character_backward,
         "F" => goto_character_backward,
+        // ";" => repeat_goto_character_forward,
+        // "," => repeat_goto_character_backward,
 
         "C-w" => {
             "h" | "left" | "C-h" => switch_pane_left,
@@ -226,6 +228,8 @@ fn normal_mode_keymap() -> Keymap {
             "g" => goto_first_line,
             "e" => goto_word_end_backward,
             "E" => goto_long_word_end_backward,
+            // ";" => goto_prev_edit,
+            // "," => goto_next_edit,
         },
 
         "u" => undo,
@@ -361,6 +365,8 @@ fn select_mode_keymap() -> Keymap {
         "f" => goto_character_forward,
         "T" => goto_until_character_backward,
         "F" => goto_character_backward,
+        // ";" => repeat_goto_character_forward,
+        // "," => repeat_goto_character_backward,
 
         "^" | "home" | "C-h" => goto_line_first_non_whitespace,
         "$" | "end" | "C-l" => goto_eol,

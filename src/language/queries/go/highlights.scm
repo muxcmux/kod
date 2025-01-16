@@ -107,7 +107,7 @@
 ] @keyword
 
 [
-  "if"  
+  "if"
   "else"
   "switch"
   "select"

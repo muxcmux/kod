@@ -47,7 +47,7 @@
 ; Constants
 
 (this) @variable.builtin
-(nullptr) @constant.builtin
+(null "nullptr") @constant.builtin
 
 ; Parameters
 
@@ -104,7 +104,7 @@
 ] @keyword.operator
 
 [
-  "class"  
+  "class"
   "namespace"
   "typename"
   "template"
