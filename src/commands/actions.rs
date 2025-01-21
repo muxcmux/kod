@@ -89,6 +89,12 @@ macro_rules! doc {
     }};
 }
 
+#[derive(Copy, Clone)]
+pub enum GotoCharacterMove {
+    Forward((char, usize)),
+    Backward((char, usize)),
+}
+
 fn hide_search(ctx: &mut Context) {
     ctx.compositor_callbacks.push(Box::new(|comp, _| {
         comp.remove::<Search>();
@@ -118,7 +124,7 @@ fn goto_character_forward_impl(c: char, offset: usize, ctx: &mut Context) {
     let mut sel = doc.selection(pane.id);
     let mut col = 0;
     for g in doc.rope.line(sel.head.y).graphemes() {
-        if col > sel.head.x && g.starts_with(c) {
+        if col > sel.head.x + offset && g.starts_with(c) {
             sel = sel.head_to(&doc.rope, Some(col.saturating_sub(offset)), None, &ctx.editor.mode);
             break;
         }
@@ -133,7 +139,7 @@ fn goto_character_backward_impl(c: char, offset: usize, ctx: &mut Context) {
     let mut sel = doc.selection(pane.id);
     let mut col = line_width(&doc.rope, sel.head.y);
     for g in doc.rope.line(sel.head.y).graphemes().rev() {
-        if col <= sel.head.x && g.starts_with(c) {
+        if col < sel.head.x.saturating_sub(offset) && g.starts_with(c) {
             sel = sel.head_to(&doc.rope, Some(col.saturating_sub(offset)), None, &ctx.editor.mode);
             break;
         }
@@ -486,6 +492,7 @@ pub fn goto_long_word_end_backward(ctx: &mut Context) {
 pub fn goto_character_forward(ctx: &mut Context) {
     ctx.on_next_key(|ctx, event| {
         if let KeyCode::Char(c) = event.code {
+            ctx.editor.last_goto_character_move = Some(GotoCharacterMove::Forward((c, 0)));
             goto_character_forward_impl(c, 0, ctx);
         }
     })
@@ -494,6 +501,7 @@ pub fn goto_character_forward(ctx: &mut Context) {
 pub fn goto_until_character_forward(ctx: &mut Context) {
     ctx.on_next_key(|ctx, event| {
         if let KeyCode::Char(c) = event.code {
+            ctx.editor.last_goto_character_move = Some(GotoCharacterMove::Forward((c, 1)));
             goto_character_forward_impl(c, 1, ctx);
         }
     })
@@ -502,6 +510,7 @@ pub fn goto_until_character_forward(ctx: &mut Context) {
 pub fn goto_character_backward(ctx: &mut Context) {
     ctx.on_next_key(|ctx, event| {
         if let KeyCode::Char(c) = event.code {
+            ctx.editor.last_goto_character_move = Some(GotoCharacterMove::Backward((c, 1)));
             goto_character_backward_impl(c, 1, ctx);
         }
     })
@@ -510,9 +519,28 @@ pub fn goto_character_backward(ctx: &mut Context) {
 pub fn goto_until_character_backward(ctx: &mut Context) {
     ctx.on_next_key(|ctx, event| {
         if let KeyCode::Char(c) = event.code {
+            ctx.editor.last_goto_character_move = Some(GotoCharacterMove::Backward((c, 0)));
             goto_character_backward_impl(c, 0, ctx);
         }
     })
+}
+
+pub fn repeat_goto_character_next(ctx: &mut Context) {
+    if let Some(char_move) = ctx.editor.last_goto_character_move {
+        match char_move {
+            GotoCharacterMove::Forward((c, offset)) => goto_character_forward_impl(c, offset, ctx),
+            GotoCharacterMove::Backward((c, offset)) => goto_character_backward_impl(c, offset, ctx),
+        }
+    }
+}
+
+pub fn repeat_goto_character_prev(ctx: &mut Context) {
+    if let Some(char_move) = ctx.editor.last_goto_character_move {
+        match char_move {
+            GotoCharacterMove::Backward((c, offset)) => goto_character_forward_impl(c, 1 - offset, ctx),
+            GotoCharacterMove::Forward((c, offset)) => goto_character_backward_impl(c, 1 - offset, ctx),
+        }
+    }
 }
 
 pub fn undo(ctx: &mut Context) {

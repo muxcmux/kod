@@ -1,4 +1,4 @@
-use crate::{application::Event, document::DocumentId, graphemes::NEW_LINE, panes::Panes, registers::Registers, search::SearchState, ui::Rect};
+use crate::{application::Event, commands::actions::GotoCharacterMove, document::DocumentId, graphemes::NEW_LINE, panes::Panes, registers::Registers, search::SearchState, ui::Rect};
 use std::{borrow::Cow, collections::BTreeMap, env, fs, path::PathBuf, sync::mpsc::{self, Receiver, Sender}};
 
 use crop::Rope;
@@ -33,6 +33,7 @@ pub struct Editor {
     pub documents: BTreeMap<DocumentId, Document>,
     //next_doc_id: DocumentId,
     pub status: Option<EditorStatus>,
+    pub last_goto_character_move: Option<GotoCharacterMove>,
     pub tx: Sender<Event>,
     pub rx: Receiver<Event>,
 }
@@ -90,6 +91,7 @@ impl Editor {
             panes,
             rx,
             tx,
+            last_goto_character_move: None,
             registers: Registers::default(),
             search: SearchState::default(),
         }
