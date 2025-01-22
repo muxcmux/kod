@@ -135,38 +135,42 @@ impl Selection {
 
     // Currently only accounts for the head
     fn grapheme_aligned(self, rope: &Rope, mode: &Mode, cursor_move: Direction) -> Self {
-        let mut acc = 0;
+        let mut col = 0;
         let mut goto_prev = cursor_move.vertical.is_some() || cursor_move.horizontal == Some(Horizontal::Left);
         let goto_next = cursor_move.horizontal == Some(Horizontal::Right);
 
         if !goto_next && !goto_prev { goto_prev = true }
 
-        let mut selection = self;
+        let mut sel = self;
 
-        let mut graphemes = rope.line(selection.head.y).graphemes().peekable();
+        let mut graphemes = rope.line(sel.head.y).graphemes().peekable();
 
         while let Some(g) = graphemes.next() {
             let width = graphemes::width(&g);
 
-            let next_grapheme_start = acc + width;
+            let next_grapheme_start = col + width;
 
-            if (selection.head.x < next_grapheme_start) && (selection.head.x > acc) {
+            if sel.head.x + width == next_grapheme_start {
+                return sel;
+            }
+
+            if (sel.head.x < next_grapheme_start) && (sel.head.x > col) {
                 if goto_prev {
-                    selection.head.x = acc;
+                    sel.head.x = col;
                 } else if goto_next {
                     if graphemes.peek().is_none() && mode != &Mode::Insert {
-                        selection.head.x = acc;
+                        sel.head.x = col;
                     } else {
-                        selection.head.x = next_grapheme_start;
+                        sel.head.x = next_grapheme_start;
                     }
                 }
                 break;
             }
 
-            acc += width;
+            col += width;
         }
 
-        selection
+        sel
     }
 
     pub fn grapheme_at_head<'a>(&'a self, rope: &'a Rope) -> (usize, Option<Cow<'a, str>>)  {
