@@ -1,10 +1,10 @@
-use crate::{document::Document, editor::Mode, selection::Selection, ui::{buffer::Buffer, theme::THEME, Rect}, view::View};
+use crate::{compositor::Context, document::Document, editor::Mode, panes::Pane, selection::Selection, ui::{buffer::Buffer, theme::THEME, Rect}, view::View};
 
 const GUTTER_LINE_NUM_PAD_LEFT: u16 = 2;
 const GUTTER_LINE_NUM_PAD_RIGHT: u16 = 1;
 const MIN_GUTTER_WIDTH: u16 = 6;
 
-pub fn gutter_and_document_areas(size: Rect, doc: &Document) -> (Rect, Rect) {
+pub fn area(size: Rect, doc: &Document) -> Rect {
     let gutter_width = doc
         .rope
         .line_len()
@@ -16,55 +16,42 @@ pub fn gutter_and_document_areas(size: Rect, doc: &Document) -> (Rect, Rect) {
     let gutter_width = gutter_width.max(MIN_GUTTER_WIDTH);
 
     // why do we clip bottom here?
-    let gutter_area = size
-        .clip_bottom(1)
-        .clip_right(size.width.saturating_sub(gutter_width));
-
-    let area = size.clip_left(gutter_area.width);
-
-    (gutter_area, area)
+    size.clip_bottom(1)
+        .clip_right(size.width.saturating_sub(gutter_width))
 }
-
-pub fn compute_offset(size: Rect) -> (usize, usize) {
-    (
-        ((size.width as usize).saturating_sub(1).max(1) / 2).min(6),
-        ((size.height as usize).saturating_sub(1).max(1) / 2).min(4),
-    )
-}
-
 
 pub fn render(
-    view: &View,
-    sel: &Selection,
-    area: Rect,
+    pane: &Pane,
+    area: &Rect,
     buffer: &mut Buffer,
-    doc: &Document,
-    mode: &Mode,
-    active: bool
+    ctx: &Context,
 ) {
+    let doc = ctx.editor.documents.get(&pane.doc_id).expect("Can't get doc from pane id");
+    let sel = doc.selection(pane.id);
     let max = doc.rope.line_len();
+    let active = ctx.editor.panes.focus == pane.id;
 
     for y in 0..=area.height {
-        let line_no = y as usize + view.scroll.y + 1;
+        let line_no = y as usize + pane.view.scroll.y + 1;
 
         if line_no > max {
             break;
         }
 
         if active {
-            match mode {
+            match ctx.editor.mode {
                 Mode::Insert | Mode::Replace =>
-                    absolute(line_no, y + area.top(), area, buffer, sel),
+                    absolute(line_no, y + area.top(), area, buffer, &sel),
                 _ =>
-                    relative(y + area.top(), area, buffer, view, sel)
+                    relative(y + area.top(), area, buffer, &pane.view, &sel)
             }
         } else {
-            absolute(line_no, y + area.top(), area, buffer, sel);
+            absolute(line_no, y + area.top(), area, buffer, &sel);
         }
     }
 }
 
-fn absolute(line_no: usize, y: u16, area: Rect, buffer: &mut Buffer, sel: &Selection) {
+fn absolute(line_no: usize, y: u16, area: &Rect, buffer: &mut Buffer, sel: &Selection) {
     let label = format!(
         "{: >1$}",
         line_no,
@@ -78,7 +65,7 @@ fn absolute(line_no: usize, y: u16, area: Rect, buffer: &mut Buffer, sel: &Selec
     buffer.put_str(&label, area.left(), y, THEME.get(style));
 }
 
-fn relative(y: u16, area: Rect, buffer: &mut Buffer, view: &View, sel: &Selection) {
+fn relative(y: u16, area: &Rect, buffer: &mut Buffer, view: &View, sel: &Selection) {
     let rel_line_no = view.scroll.cursor.row as isize - y as isize;
     let (style, label) = if rel_line_no == 0 {
         (

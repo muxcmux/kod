@@ -1,10 +1,11 @@
+use std::collections::HashMap;
+
 use crate::commands;
 use crate::compositor;
 use crate::current;
-use crate::document::Document;
 use crate::gutter;
 use crate::pane;
-use crate::panes::Pane;
+use crate::panes::PaneId;
 use crate::ui::buffer::Buffer;
 use crate::ui::Position;
 use crate::ui::Rect;
@@ -95,34 +96,35 @@ impl EditorView {
     }
 }
 
-fn render_view(
-    pane: &mut Pane,
-    doc: &Document,
-    buffer: &mut Buffer,
-    mode: &Mode,
-    active: bool,
-) {
-    let (gutter_area, document_area) = gutter::gutter_and_document_areas(pane.area, doc);
+const MAX_OFFSET_X: usize = 6;
+const MAX_OFFSET_Y: usize = 3;
+fn compute_offset(size: Rect) -> (usize, usize) {
+    (
+        ((size.width as usize).saturating_sub(1).max(1) / 2).min(MAX_OFFSET_X),
+        ((size.height as usize).saturating_sub(1).max(1) / 2).min(MAX_OFFSET_Y),
+    )
+}
 
-    (pane.view.scroll.offset_x, pane.view.scroll.offset_y) = gutter::compute_offset(document_area);
 
-    let sel = doc.selection(pane.id);
+fn ensure_cursor_is_in_view(ctx: &mut Context) -> HashMap<PaneId, (Rect, Rect)> {
+    let mut areas = HashMap::new();
 
-    // ensure cursor is in view needs to happen before obtaining
-    // the view's visible byte range
-    pane.view.scroll.ensure_cursor_is_in_view(&sel, &document_area);
-    let highlights = doc.syntax_highlights(pane.view.visible_byte_range(&doc.rope, document_area.height));
-    // render the view after ajusting the scroll cursor
-    pane.view.render(
-        &document_area,
-        buffer,
-        &doc.rope,
-        &sel,
-        mode,
-        highlights,
-    );
+    for (_, pane) in ctx.editor.panes.panes.iter_mut() {
+        let doc = ctx.editor.documents.get(&pane.doc_id).expect("Can't get doc from pane id");
+        let sel = doc.selection(pane.id);
 
-    gutter::render(&pane.view, &sel, gutter_area, buffer, doc, mode, active);
+        let gutter_area = gutter::area(pane.area, doc);
+
+        let document_area = pane.area.clip_left(gutter_area.width);
+
+        (pane.view.scroll.offset_x, pane.view.scroll.offset_y) = compute_offset(document_area);
+
+        pane.view.scroll.ensure_cursor_is_in_view(&sel, &document_area);
+
+        areas.insert(pane.id, (gutter_area, document_area));
+    }
+
+    areas
 }
 
 impl Component for EditorView {
@@ -130,16 +132,21 @@ impl Component for EditorView {
         // clip 1 row from the bottom for status line
         ctx.editor.panes.resize(area.clip_bottom(1));
 
-        for (id, pane) in ctx.editor.panes.panes.iter_mut() {
-            let doc = ctx.editor.documents.get(&pane.doc_id).expect("Can't get doc from pane id");
+        // ensuring the cursor is in view needs to happen before obtaining
+        // the view's visible byte range. This function also returns the
+        // calculated areas for the gutter and document for each pane for
+        // convenience
+        let areas = ensure_cursor_is_in_view(ctx);
 
-            render_view(
-                pane,
-                doc,
-                buffer,
-                &ctx.editor.mode,
-                *id == ctx.editor.panes.focus
-            );
+        // re-borrow as immutable
+        let ctx = &*ctx;
+
+        for (_, pane) in ctx.editor.panes.panes.iter() {
+            let (gutter_area, document_area) = areas.get(&pane.id).unwrap();
+            // render the view after ajusting the scroll cursor
+            pane.view.render(pane, document_area, buffer, ctx);
+            // and then the gutter
+            gutter::render(pane, gutter_area, buffer, ctx);
         }
 
         ctx.editor.panes.draw_borders(buffer);

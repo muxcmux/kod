@@ -201,7 +201,7 @@ impl Panes {
         }
     }
 
-    pub fn draw_borders(&mut self, buffer: &mut Buffer) {
+    pub fn draw_borders(&self, buffer: &mut Buffer) {
         let mut symbols: HashMap<(u16, u16), Symbol> = HashMap::new();
 
         for (_, pane) in self.panes.iter() {

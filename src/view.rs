@@ -2,7 +2,7 @@ use std::ops::Range;
 
 use crop::Rope;
 
-use crate::{editor::Mode, graphemes::{self, GraphemeCategory}, language::syntax::{Highlight, HighlightEvent}, selection::Selection, ui::{buffer::Buffer, scroll::Scroll, style::Style, theme::THEME, Rect}};
+use crate::{compositor::Context, editor::Mode, graphemes::{self, GraphemeCategory}, language::syntax::{Highlight, HighlightEvent}, panes::Pane, selection::Selection, ui::{buffer::Buffer, scroll::Scroll, style::Style, theme::THEME, Rect}};
 
 /// A wrapper around a HighlightIterator
 /// that merges the layered highlights to create the final text style
@@ -56,22 +56,24 @@ pub struct View {
 impl View {
     pub fn render(
         &self,
+        pane: &Pane,
         area: &Rect,
         buffer: &mut Buffer,
-        rope: &Rope,
-        sel: &Selection,
-        mode: &Mode,
-        highlight_iter: impl Iterator<Item = HighlightEvent>,
+        ctx: &Context,
     ) {
-        let mut styles = StyleIter::new(highlight_iter);
+        let doc = ctx.editor.documents.get(&pane.doc_id).expect("Can't get doc from pane id");
+        let sel = doc.selection(pane.id);
+        let highlights = doc.syntax_highlights(pane.view.visible_byte_range(&doc.rope, area.height));
+        let mut styles = StyleIter::new(highlights);
+
         let (mut style, mut highlight_until) = styles.next()
             .unwrap_or((THEME.get("text"), usize::MAX));
 
         // loop through each visible line
         for row in self.scroll.y..self.scroll.y + area.height as usize {
-            if row >= rope.line_len() { break }
+            if row >= doc.rope.line_len() { break }
 
-            let mut offset = rope.byte_of_line(row);
+            let mut offset = doc.rope.byte_of_line(row);
             // at the start of each line we have to check if the byte offset
             // is more than the current highlight_until (accounting for new lines)
             while offset > highlight_until {
@@ -81,7 +83,7 @@ impl View {
                 }
             }
 
-            let line = rope.line(row);
+            let line = doc.rope.line(row);
             let mut graphemes = line.graphemes();
             // accounts for multi-width graphemes
             let mut skip_next_n_cols = 0;
@@ -123,7 +125,7 @@ impl View {
                             }
                         }
 
-                        buffer.put_symbol(&g, x, y, visual_selection_style(style, sel, col, row, mode));
+                        buffer.put_symbol(&g, x, y, visual_selection_style(style, &sel, col, row, &ctx.editor.mode));
 
                         if GraphemeCategory::from(&g) == GraphemeCategory::Whitespace {
                             trailing_whitespace.push(x);
