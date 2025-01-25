@@ -7,6 +7,8 @@ pub fn normal_mode_keymap() -> Keymap {
         "R" => enter_replace_mode,
         "v" => enter_select_mode,
 
+        "minus" => open_files,
+
         "h" | "left" | "backspace" => cursor_left,
         "j" | "down" | "enter" => cursor_down,
         "k" | "up" => cursor_up,

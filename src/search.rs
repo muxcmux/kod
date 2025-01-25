@@ -46,13 +46,13 @@ impl Component for Search {
             match buffer.get_symbol(i, y) {
                 Some(ref s) => {
                     if [VERTICAL, BOTTOM_RIGHT, BOTTOM_LEFT, VERTICAL_LEFT, VERTICAL_RIGHT, HORIZONTAL_UP].contains(s) {
-                        buffer.put_str(HORIZONTAL_UP, i, y, THEME.get("ui.pane.border"));
+                        buffer.put_str(HORIZONTAL_UP, i, y, THEME.get("ui.border.pane"));
                     } else {
-                        buffer.put_str(HORIZONTAL, i, y, THEME.get("ui.pane.border"));
+                        buffer.put_str(HORIZONTAL, i, y, THEME.get("ui.border.pane"));
                     }
                 },
                 None => {
-                    buffer.put_str(HORIZONTAL, i, y, THEME.get("ui.pane.border"));
+                    buffer.put_str(HORIZONTAL, i, y, THEME.get("ui.border.pane"));
                 },
             }
         }
@@ -62,7 +62,7 @@ impl Component for Search {
         if ctx.editor.search.focused {
             self.input.render(input_size, buffer);
         } else {
-            buffer.put_str(&self.input.value(), area.left() + 4, area.bottom().saturating_sub(1), THEME.get("ui.text_input.blur"));
+            buffer.put_str(self.input.value(), area.left() + 4, area.bottom().saturating_sub(1), THEME.get("ui.text_input.blur"));
         }
 
         if ctx.editor.search.total_matches > 0 {

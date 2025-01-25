@@ -1,7 +1,7 @@
-use std::thread;
+use std::{env, path::PathBuf, thread};
 
 use crossterm::{cursor::SetCursorStyle, event::{read, KeyEvent, KeyEventKind}};
-use crate::{components::{editor_view::EditorView, status_line::StatusLine}, compositor::{Compositor, Context}, editor::Editor, ui::{terminal::{self, Terminal}, Rect}};
+use crate::{components::{editor_view::EditorView, files::Files, status_line::StatusLine}, compositor::{Compositor, Context}, editor::Editor, ui::{terminal::{self, Terminal}, Rect}};
 use anyhow::Result;
 
 pub enum Event {
@@ -18,15 +18,45 @@ pub struct Application {
 
 impl Default for Application {
     fn default() -> Self {
+        // Setup
         let size = crossterm::terminal::size().expect("Can't get terminal size");
         let size = Rect::from(size);
 
-        let editor = Editor::new(size);
+        let mut editor = Editor::new(size);
         let terminal = Terminal::new(size);
         let mut compositor = Compositor::new(size);
 
         compositor.push(Box::<EditorView>::default());
         compositor.push(Box::new(StatusLine {}));
+
+        // Open files from arguments
+        let mut args: Vec<String> = env::args().collect();
+        while args.len() > 1 {
+            let path = PathBuf::from(args.pop().unwrap());
+            if let Ok(path) = path.canonicalize() {
+                if path.is_file() {
+                    match editor.open(&path) {
+                        Ok(id) => editor.panes.load_doc_in_focus(id),
+                        Err(e) => editor.set_error(e.to_string()),
+                    }
+                } else if path.is_dir() {
+                    // opening the files for multiple folders doesn't make sense
+                    if compositor.find::<Files>().is_some() {
+                        continue;
+                    }
+                    match Files::new(Some(&path)) {
+                        Ok(f) => compositor.push(Box::new(f)),
+                        Err(e) => editor.set_error(e.to_string()),
+                    }
+                }
+            }
+        }
+
+        // Open a scratch buffer if no files are loaded
+        if editor.documents.is_empty() {
+            let id = editor.open_scratch();
+            editor.panes.load_doc_in_focus(id);
+        }
 
         Self { editor, compositor, terminal }
     }

@@ -1,6 +1,39 @@
 {
   "languages": [
     {
+      "comment-token": "#",
+      "file-types": [
+        "*.awk",
+        "*.gawk",
+        "*.nawk",
+        "*.mawk"
+      ],
+      "injection-regex": "awk",
+      "language-servers": [
+        "awk-language-server"
+      ],
+      "name": "awk",
+      "scope": "source.awk",
+      "indent": {
+        "tab-width": 2,
+        "unit": "  "
+      }
+    },
+    {
+      "name": "regex",
+      "scope": "source.regex",
+      "injection-regex": "regex",
+      "file-types": ["*.regex", "*/.Rbuildignore"]
+    },
+    {
+      "file-types": ["*.txt"],
+      "injection-regex": "text",
+      "name": "text",
+      "scope": "scope.text",
+      "icon": "",
+      "color": "#89e051"
+    },
+    {
       "file-types": [],
       "injection-regex": "comment",
       "name": "comment",
@@ -8,6 +41,7 @@
     },
     {
       "icon": "󱘗",
+      "color": "#dea584",
       "auto-format": true,
       "comment-tokens": [
         "//",
@@ -63,6 +97,7 @@
     },
     {
       "icon": "",
+      "color": "#9c4221",
       "comment-token": "#",
       "injection-regex": "toml",
       "language-servers": [
@@ -82,6 +117,7 @@
     },
     {
       "icon": "",
+      "color": "#4d5a5e",
       "auto-format": true,
       "comment-token": "#",
       "file-types": [
@@ -103,6 +139,7 @@
     },
     {
       "icon": "",
+      "color": "#cbcb41",
       "auto-format": true,
       "injection-regex": "json",
       "language-servers": [
@@ -139,6 +176,7 @@
     },
     {
       "icon": "",
+      "color": "#cbcb41",
       "auto-format": true,
       "file-types": [
         "*.jsonc"
@@ -157,6 +195,7 @@
     },
     {
       "icon": "",
+      "color": "#cbcb41",
       "comment-token": "//",
       "file-types": [
         "*.json5"
@@ -172,6 +211,7 @@
     },
     {
       "icon": "",
+      "color": "#599eff",
       "comment-token": "//",
       "file-types": [
         "*.c"
@@ -193,6 +233,7 @@
     },
     {
       "icon": "",
+      "color": "#519aba",
       "comment-token": "//",
       "injection-regex": "cpp",
       "language-servers": [
@@ -235,7 +276,8 @@
       }
     },
     {
-      "icon": "󰌞",
+      "icon": "",
+      "color": "#cbcb41",
       "comment-token": "//",
       "injection-regex": "(js|javascript)",
       "language-id": "javascript",
@@ -268,7 +310,18 @@
       }
     },
     {
+      "name": "jsdoc",
+      "scope": "source.jsdoc",
+      "injection-regex": "jsdoc",
+      "file-types": ["jsdoc"],
+      "indent": {
+        "tab-width": 2,
+        "unit": "  "
+      }
+    },
+    {
       "icon": "",
+      "color": "#20c2e3",
       "comment-token": "//",
       "file-types": [
         "*.jsx"
@@ -291,7 +344,8 @@
       }
     },
     {
-      "icon": "󰛦",
+      "icon": "",
+      "color": "#519aba",
       "comment-token": "//",
       "file-types": [
         "*.ts",
@@ -321,6 +375,7 @@
     },
     {
       "icon": "",
+      "color": "#20c2e3",
       "comment-token": "//",
       "file-types": [
         "*.tsx"
@@ -343,6 +398,7 @@
     },
     {
       "icon": "",
+      "color": "#42a5f5",
       "auto-format": true,
       "file-types": [
         "*.css"
@@ -364,6 +420,7 @@
     },
     {
       "icon": "",
+      "color": "#e44d26",
       "auto-format": true,
       "file-types": [
         "*.html",
@@ -395,6 +452,7 @@
     },
     {
       "icon": "󰌠",
+      "color": "#ffbc03",
       "comment-token": "#",
       "injection-regex": "py(thon)?",
       "language-servers": [
@@ -434,6 +492,7 @@
     },
     {
       "icon": "",
+      "color": "#701516",
       "comment-token": "#",
       "injection-regex": "ruby",
       "language-servers": [
@@ -487,6 +546,7 @@
     },
     {
       "icon": "",
+      "color": "#4d5a5e",
       "comment-token": "#",
       "injection-regex": "(shell|bash|zsh|sh)",
       "language-servers": [
@@ -552,6 +612,7 @@
     },
     {
       "icon": "󰢱",
+      "color": "#51a0cf",
       "comment-token": "--",
       "file-types": [
         "*.lua"
@@ -584,6 +645,7 @@
     },
     {
       "icon": "",
+      "color": "#6d8086",
       "comment-token": "#",
       "injection-regex": "(make|makefile|Makefile|mk)",
       "name": "make",
@@ -608,6 +670,7 @@
     },
     {
       "icon": "",
+      "color": "#dddddd",
       "injection-regex": "md|markdown",
       "language-servers": [
         "marksman",
@@ -649,6 +712,7 @@
     },
     {
       "icon": "󰡨",
+      "color": "#458ee6",
       "comment-token": "#",
       "injection-regex": "docker|dockerfile",
       "language-servers": [
@@ -681,6 +745,7 @@
     },
     {
       "icon": "",
+      "color": "#f54d27",
       "comment-token": "#",
       "name": "git-commit",
       "scope": "git.commitmsg",
@@ -711,6 +776,7 @@
     },
     {
       "icon": "",
+      "color": "#f54d27",
       "comment-token": "#",
       "injection-regex": "git-rebase",
       "name": "git-rebase",
@@ -725,6 +791,7 @@
     },
     {
       "icon": "",
+      "color": "#f54d27",
       "comment-token": "#",
       "injection-regex": "git-config",
       "name": "git-config",
@@ -742,6 +809,7 @@
     },
     {
       "icon": "",
+      "color": "#f54d27",
       "comment-token": "#",
       "grammar": "gitattributes",
       "injection-regex": "git-attributes",
@@ -753,6 +821,7 @@
     },
     {
       "icon": "",
+      "color": "#f54d27",
       "comment-token": "#",
       "grammar": "gitignore",
       "injection-regex": "git-ignore",
@@ -766,6 +835,7 @@
     },
     {
       "icon": "󰫏",
+      "color": "#701516",
       "file-types": [
         "*.erb"
       ],
@@ -784,6 +854,7 @@
     },
     {
       "icon": "",
+      "color": "#dad8d8",
       "comment-token": "--",
       "file-types": [
         "*.sql",
@@ -813,6 +884,7 @@
     },
     {
       "icon": "",
+      "color": "#eeeeee",
       "comment-token": ";",
       "file-types": [
         "*.ss",
@@ -848,6 +920,7 @@
     },
     {
       "icon": "󰗀",
+      "color": "#e37933",
       "file-types": [
         "*.xml",
         "*.mobileconfig",
@@ -931,6 +1004,7 @@
     },
     {
       "icon": "",
+      "color": "#f69a1b",
       "auto-format": true,
       "comment-tokens": [
         "//",
@@ -956,7 +1030,8 @@
       }
     },
     {
-      "icon": "",
+      "icon": "",
+      "color": "#6d8086",
       "comment-token": "#",
       "injection-regex": "yml|yaml",
       "language-servers": [
@@ -979,6 +1054,7 @@
     },
     {
       "icon": "",
+      "color": "#519aba",
       "auto-format": true,
       "comment-token": "//",
       "file-types": [
@@ -1067,6 +1143,13 @@
       "source": {
         "git": "https://github.com/tree-sitter/tree-sitter-javascript",
         "rev": "f772967f7b7bc7c28f845be2420a38472b16a8ee"
+      }
+    },
+    {
+      "name": "jsdoc",
+      "source": {
+        "git": "https://github.com/tree-sitter/tree-sitter-jsdoc",
+        "rev": "a417db5dbdd869fccb6a8b75ec04459e1d4ccd2c"
       }
     },
     {
@@ -1227,6 +1310,13 @@
       }
     },
     {
+      "name": "make",
+      "source": {
+        "git": "https://github.com/tree-sitter-grammars/tree-sitter-make",
+        "rev": "5e9e8f8ff3387b0edcaa90f46ddf3629f4cfeb1d"
+      }
+    },
+    {
       "name": "scheme",
       "source": {
         "git": "https://github.com/6cdh/tree-sitter-scheme",
@@ -1245,6 +1335,20 @@
       "source": {
         "git": "https://github.com/ath3/tree-sitter-hosts",
         "rev": "301b9379ce7dfc8bdbe2c2699a6887dcb73953f9"
+      }
+    },
+    {
+      "name": "regex",
+      "source": {
+        "git": "https://github.com/tree-sitter/tree-sitter-regex",
+        "rev": "b638d29335ef41215b86732dd51be34c701ef683"
+      }
+    },
+    {
+      "name": "awk",
+      "source": {
+        "git": "https://github.com/Beaglefoot/tree-sitter-awk",
+        "rev": "34bbdc7cce8e803096f47b625979e34c1be38127"
       }
     }
   ]

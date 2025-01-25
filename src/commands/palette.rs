@@ -71,7 +71,7 @@ impl Component for Palette {
         let bbox = BorderBox::new(size)
             .title("Command")
             .borders(Borders::ALL)
-            .style(THEME.get("ui.dialog.border"))
+            .style(THEME.get("ui.border.dialog"))
             .stroke(Stroke::Rounded);
 
         bbox.render(buffer).split_horizontally(2, buffer);

@@ -209,7 +209,7 @@ impl Panes {
         }
 
         for ((x, y), symbol) in symbols {
-            buffer.put_symbol(symbol.as_str(Stroke::Plain), x, y, THEME.get("ui.pane.border"));
+            buffer.put_symbol(symbol.as_str(Stroke::Plain), x, y, THEME.get("ui.border.pane"));
         }
     }
 
@@ -457,6 +457,11 @@ impl Panes {
                 }
             },
         }
+    }
+
+    pub fn load_doc_in_focus(&mut self, id: DocumentId) {
+        let focused = self.panes.get_mut(&self.focus).unwrap();
+        focused.doc_id = id;
     }
 }
 

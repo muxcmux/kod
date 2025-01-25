@@ -127,6 +127,7 @@ bitflags! {
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[allow(unused)]
 pub enum Stroke {
     #[default]
     Plain,

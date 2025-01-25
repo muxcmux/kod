@@ -72,14 +72,14 @@ impl Cell {
         self
     }
 
-    pub fn style(&self) -> Style {
-        Style::default()
-            .fg(self.fg)
-            .bg(self.bg)
-            .underline_color(self.underline_color)
-            .underline_style(self.underline_style)
-            .add_modifier(self.modifier)
-    }
+    // pub fn style(&self) -> Style {
+    //     Style::default()
+    //         .fg(self.fg)
+    //         .bg(self.bg)
+    //         .underline_color(self.underline_color)
+    //         .underline_style(self.underline_style)
+    //         .add_modifier(self.modifier)
+    // }
 }
 
 
@@ -159,31 +159,43 @@ impl Buffer {
         }
     }
 
-    // This currently does not take into account the grapheme widths
-    pub fn put_str(&mut self, str: &str, x: u16, y: u16, style: Style) {
-        let start = self.index(x, y);
+    pub fn put_str(&mut self, str: impl AsRef<str>, x: u16, y: u16, style: Style) {
+        self.put_truncated_str(str.as_ref(), x, y , self.size.right(), style);
+    }
 
-        for (offset, g) in str.graphemes(true).enumerate() {
-            if start + offset > self.cells.len() {
-                break;
+    pub fn put_truncated_str(&mut self, str: &str, mut x: u16, y: u16, right_edge: u16, style: Style) {
+        let right_edge = right_edge.min(self.size.right());
+
+        let mut graphemes = str.graphemes(true).peekable();
+
+        while let Some(g) = graphemes.next() {
+            if x >= right_edge { break }
+
+            let index = self.index(x, y);
+            let symbol = if x < right_edge.saturating_sub(1) || graphemes.peek().is_none() {
+                g
+            } else {
+                "…"
+            };
+
+            if let Some(cell) = self.cells.get_mut(index) {
+                cell.set_symbol(symbol).set_style(style);
             }
-            if let Some(cell) = self.cells.get_mut(start + offset) {
-                cell.set_symbol(g)
-                    .set_style(style);
-            }
+
+            x += graphemes::width(g) as u16;
         }
     }
 
-    pub fn set_style(&mut self, area: Rect, style: Style) {
-        for y in area.top()..area.bottom() {
-            for x in area.left()..area.right() {
-                let index = self.index(x, y);
-                if let Some(cell) = self.cells.get_mut(index) {
-                    cell.set_style(style);
-                }
-            }
-        }
-    }
+    // pub fn set_style(&mut self, area: Rect, style: Style) {
+    //     for y in area.top()..area.bottom() {
+    //         for x in area.left()..area.right() {
+    //             let index = self.index(x, y);
+    //             if let Some(cell) = self.cells.get_mut(index) {
+    //                 cell.set_style(style);
+    //             }
+    //         }
+    //     }
+    // }
 
     pub fn clear(&mut self, area: Rect) {
         for x in area.left()..area.right() {

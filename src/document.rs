@@ -1,7 +1,9 @@
-use std::{borrow::Cow, cell::Cell, collections::HashMap, path::PathBuf, sync::Arc};
+use std::{borrow::Cow, cell::Cell, collections::HashMap, path::{Path, PathBuf}, sync::Arc};
 
 use crop::Rope;
-use crate::{history::{History, State, Transaction}, language::syntax::{HighlightEvent, LanguageConfiguration, Syntax, LANG_CONFIG}, panes::PaneId, selection::Selection};
+use crate::{graphemes::NEW_LINE, history::{History, State, Transaction}, language::{syntax::{HighlightEvent, Syntax}, LanguageConfiguration, LANG_CONFIG}, panes::PaneId, selection::Selection};
+
+use anyhow::{bail, Result};
 
 make_inc_id_type!(DocumentId);
 
@@ -54,6 +56,22 @@ impl Document {
             selections: HashMap::new(),
             last_saved_revision: 0,
         }
+    }
+
+    pub fn open(id: DocumentId, path: &Path) -> Result<Self> {
+        if !path.metadata()?.is_file() {
+            bail!("Cannot open path: {:?}", path)
+        }
+
+        let mut contents = std::fs::read_to_string(path)?;
+
+        if contents.is_empty() {
+            contents = NEW_LINE.to_string();
+        }
+
+        let rope = Rope::from(contents);
+
+        Ok(Self::new(id, rope, Some(path.to_path_buf())))
     }
 
     pub fn is_modified(&self) -> bool {
@@ -189,7 +207,7 @@ impl Document {
             }
             None => Box::new(
                 [HighlightEvent::Source {
-                    start: range.start,
+                    // start: range.start,
                     end: range.end,
                 }]
                 .into_iter(),

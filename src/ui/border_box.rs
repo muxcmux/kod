@@ -5,6 +5,7 @@ pub struct BorderBox<'a> {
     area: Rect,
     title: Option<&'a str>,
     style: Style,
+    title_style: Style,
     borders: Borders,
     stroke: Stroke,
 }
@@ -34,6 +35,11 @@ impl<'a> BorderBox<'a> {
 
     pub fn style(mut self, style: Style) -> Self {
         self.style = style;
+        self
+    }
+
+    pub fn title_style(mut self, style: Style) -> Self {
+        self.title_style = style;
         self
     }
 
@@ -102,8 +108,8 @@ impl<'a> BorderBox<'a> {
         }
 
         if let Some(title) = self.title {
-            let x = self.area.left() + u16::from(self.borders.intersects(Borders::LEFT));
-            buffer.put_str(title, x, self.area.top(), self.style);
+            let inner = self.inner();
+            buffer.put_truncated_str(title, inner.left(), self.area.top(), inner.right(), self.title_style);
         }
 
         self

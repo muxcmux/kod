@@ -99,16 +99,16 @@ impl Default for Style {
 }
 
 impl Style {
-    pub const fn reset() -> Self {
-        Self {
-            fg: Some(Color::Reset),
-            bg: Some(Color::Reset),
-            underline_color: None,
-            underline_style: None,
-            add_modifier: Modifier::empty(),
-            sub_modifier: Modifier::all(),
-        }
-    }
+    // pub const fn reset() -> Self {
+    //     Self {
+    //         fg: Some(Color::Reset),
+    //         bg: Some(Color::Reset),
+    //         underline_color: None,
+    //         underline_style: None,
+    //         add_modifier: Modifier::empty(),
+    //         sub_modifier: Modifier::all(),
+    //     }
+    // }
 
     pub const fn fg(mut self, color: Color) -> Style {
         self.fg = Some(color);

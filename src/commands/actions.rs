@@ -4,6 +4,7 @@ use crop::{Rope, RopeSlice};
 use crossterm::event::KeyCode;
 use smartstring::SmartString;
 
+use crate::components::files::Files;
 use crate::graphemes::GraphemeCategory;
 use crate::selection::Cursor;
 use crate::textobject::{self, LongWords, LongWordsBackwards, TextObjectKind, Words, WordsBackwards};
@@ -849,4 +850,13 @@ pub fn delete_selection(ctx: &mut Context) {
 pub fn change_selection(ctx: &mut Context) {
     delete_selection_impl(ctx);
     enter_insert_mode(ctx);
+}
+
+pub fn open_files(ctx: &mut Context) {
+    let (_, doc) = current!(ctx.editor);
+
+    match Files::new(doc.path.as_ref()) {
+        Ok(f) => ctx.push_component(Box::new(f)),
+        Err(e) => ctx.editor.set_error(e.to_string()),
+    }
 }

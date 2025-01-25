@@ -119,7 +119,7 @@ fn ensure_cursor_is_in_view(ctx: &mut Context) -> HashMap<PaneId, (Rect, Rect)> 
 
         (pane.view.scroll.offset_x, pane.view.scroll.offset_y) = compute_offset(document_area);
 
-        pane.view.scroll.ensure_cursor_is_in_view(&sel, &document_area);
+        pane.view.scroll.ensure_point_is_visible(sel.head.x, sel.head.y, &document_area);
 
         areas.insert(pane.id, (gutter_area, document_area));
     }

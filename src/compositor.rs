@@ -40,6 +40,12 @@ pub trait Component: Any + AnyComponent {
     fn type_name(&self) -> &'static str {
         std::any::type_name::<Self>()
     }
+
+    fn dismiss(&mut self) -> EventResult {
+        EventResult::Consumed(Some(Box::new(|compositor: &mut Compositor, _: &mut Context| {
+            _ = compositor.pop();
+        })))
+    }
 }
 
 pub struct Compositor {
@@ -137,30 +143,30 @@ impl Compositor {
 
 /// This trait is automatically implemented for any `T: Component`.
 pub trait AnyComponent {
-    /// Downcast self to a `Any`.
-    fn as_any(&self) -> &dyn Any;
+    // /// Downcast self to a `Any`.
+    // fn as_any(&self) -> &dyn Any;
 
     /// Downcast self to a mutable `Any`.
     fn as_any_mut(&mut self) -> &mut dyn Any;
 
-    /// Returns a boxed any from a boxed self.
-    ///
-    /// Can be used before `Box::downcast()`.
-    fn as_boxed_any(self: Box<Self>) -> Box<dyn Any>;
+    // /// Returns a boxed any from a boxed self.
+    // ///
+    // /// Can be used before `Box::downcast()`.
+    // fn as_boxed_any(self: Box<Self>) -> Box<dyn Any>;
 }
 
 impl<T: Component> AnyComponent for T {
-    /// Downcast self to a `Any`.
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
+    // /// Downcast self to a `Any`.
+    // fn as_any(&self) -> &dyn Any {
+    //     self
+    // }
 
     /// Downcast self to a mutable `Any`.
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
 
-    fn as_boxed_any(self: Box<Self>) -> Box<dyn Any> {
-        self
-    }
+    // fn as_boxed_any(self: Box<Self>) -> Box<dyn Any> {
+    //     self
+    // }
 }

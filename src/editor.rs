@@ -1,9 +1,10 @@
 use crate::{application::Event, commands::actions::GotoCharacterMove, document::DocumentId, graphemes::NEW_LINE, panes::Panes, registers::Registers, search::SearchState, ui::Rect};
-use std::{borrow::Cow, collections::BTreeMap, env, fs, path::PathBuf, sync::mpsc::{self, Receiver, Sender}};
+use std::{borrow::Cow, collections::BTreeMap, fs, path::Path, sync::mpsc::{self, Receiver, Sender}};
 
 use crop::Rope;
 
 use crate::document::Document;
+use anyhow::Result;
 
 #[derive(Eq, Hash, PartialEq, Debug)]
 pub enum Mode {
@@ -13,6 +14,7 @@ pub enum Mode {
     Select,
 }
 
+#[allow(unused)]
 pub enum Severity {
     Hint,
     Info,
@@ -31,7 +33,7 @@ pub struct Editor {
     pub registers: Registers,
     pub search: SearchState,
     pub documents: BTreeMap<DocumentId, Document>,
-    //next_doc_id: DocumentId,
+    next_doc_id: DocumentId,
     pub status: Option<EditorStatus>,
     pub last_goto_character_move: Option<GotoCharacterMove>,
     pub tx: Sender<Event>,
@@ -52,32 +54,6 @@ fn format_size_units(bytes: usize) -> String {
 
 impl Editor {
     pub fn new(area: Rect) -> Self {
-        let mut args: Vec<String> = env::args().collect();
-
-        let mut path = None;
-        let mut status = None;
-        let mut contents = NEW_LINE.to_string();
-
-        if args.len() > 1 {
-            let pa = PathBuf::from(args.pop().unwrap());
-            if pa.is_file() {
-                match std::fs::read_to_string(&pa) {
-                    Ok(c) => {
-                        if !c.is_empty() { contents = c; }
-                        path = pa.canonicalize().ok();
-                    },
-                    Err(err) => {
-                        status = Some(EditorStatus { severity: Severity::Error, message: format!("{err}").into() })
-                    },
-                }
-            }
-        }
-
-        let doc_id = DocumentId::default();
-        let doc = Document::new(doc_id, Rope::from(contents), path);
-        let mut documents = BTreeMap::new();
-        documents.insert(doc_id, doc);
-
         // Remove 1 from bottom for status line
         let panes = Panes::new(area.clip_bottom(1));
 
@@ -85,9 +61,9 @@ impl Editor {
 
         Self {
             mode: Mode::Normal,
-            //next_doc_id: doc_id.next(),
-            documents,
-            status,
+            next_doc_id: DocumentId::default(),
+            documents: BTreeMap::new(),
+            status: None,
             panes,
             rx,
             tx,
@@ -118,6 +94,38 @@ impl Editor {
 
     pub fn has_unsaved_docs(&self) -> bool {
         self.documents.iter().any(|(_, doc)| doc.is_modified())
+    }
+
+    pub fn open(&mut self, path: &Path) -> Result<DocumentId> {
+        let id = self.documents.values()
+            .find(|doc| {
+                match &doc.path {
+                    Some(p) => p == path,
+                    None => false,
+                }
+            })
+            .map(|doc| doc.id);
+
+        let id = if let Some(id) = id {
+            id
+        } else {
+            let next_id = self.next_doc_id;
+            let doc = Document::open(next_id, path)?;
+            self.documents.insert(next_id, doc);
+            self.next_doc_id.advance();
+            next_id
+        };
+
+        Ok(id)
+    }
+
+    pub fn open_scratch(&mut self) -> DocumentId {
+        let rope = Rope::from(NEW_LINE.to_string());
+        let next_id = self.next_doc_id;
+        let doc = Document::new(next_id, rope, None);
+        self.documents.insert(next_id, doc);
+        self.next_doc_id.advance();
+        next_id
     }
 
     pub fn set_error(&mut self, message: impl Into<Cow<'static, str>>) {

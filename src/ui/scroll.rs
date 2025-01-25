@@ -1,4 +1,4 @@
-use crate::{selection::Selection, ui::{Position, Rect}};
+use crate::ui::{Position, Rect};
 
 fn adjust_scroll(dimension: usize, cursor: usize, offset: usize, scroll: usize) -> Option<usize> {
     if cursor > dimension.saturating_sub(offset + 1) + scroll {
@@ -25,17 +25,17 @@ pub struct Scroll {
 }
 
 impl Scroll {
-    pub fn ensure_cursor_is_in_view(&mut self, selection: &Selection, area: &Rect) {
-        if let Some(s) = adjust_scroll(area.height as usize, selection.head.y, self.offset_y, self.y) {
+    pub fn ensure_point_is_visible(&mut self, x: usize, y: usize, area: &Rect) {
+        if let Some(s) = adjust_scroll(area.height as usize, y, self.offset_y, self.y) {
             self.y = s;
         }
 
-        if let Some(s) = adjust_scroll(area.width as usize, selection.head.x, self.offset_x, self.x) {
+        if let Some(s) = adjust_scroll(area.width as usize, x, self.offset_x, self.x) {
             self.x = s;
         }
 
         // adjust cursor
-        self.cursor.row = area.top() + selection.head.y.saturating_sub(self.y) as u16;
-        self.cursor.col = area.left() + selection.head.x.saturating_sub(self.x) as u16;
+        self.cursor.row = area.top() + y.saturating_sub(self.y) as u16;
+        self.cursor.col = area.left() + x.saturating_sub(self.x) as u16;
     }
 }

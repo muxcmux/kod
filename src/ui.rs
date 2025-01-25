@@ -158,7 +158,6 @@ impl From<(u16, u16)> for Rect {
 }
 
 #[cfg(test)]
-
 mod test {
     use super::*;
 

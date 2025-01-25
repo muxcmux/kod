@@ -41,9 +41,9 @@ fn render_dialog(choice: u8, doc: &Document, area: Rect, buffer: &mut Buffer) {
     buffer.put_str(&text, x, area.top() + 1, THEME.get("ui.dialog.text"));
 
     let (first, second, third) = match choice {
-        0 => ("ui.dialog.button.selected", "ui.dialog.button", "ui.dialog.button"),
-        1 => ("ui.dialog.button", "ui.dialog.button.selected", "ui.dialog.button"),
-        _ => ("ui.dialog.button", "ui.dialog.button", "ui.dialog.button.selected"),
+        0 => ("ui.button.selected", "ui.button", "ui.button"),
+        1 => ("ui.button", "ui.button.selected", "ui.button"),
+        _ => ("ui.button", "ui.button", "ui.button.selected"),
     };
 
     let x = x + 1;
@@ -108,12 +108,6 @@ impl Dialog {
             }
         })))
     }
-
-    fn cancel(&mut self) -> EventResult {
-        EventResult::Consumed(Some(Box::new(|compositor: &mut Compositor, _: &mut Context| {
-            _ = compositor.pop();
-        })))
-    }
 }
 
 impl Component for Dialog {
@@ -127,12 +121,12 @@ impl Component for Dialog {
         match event.code {
             KeyCode::Char('y') => self.yes(ctx),
             KeyCode::Char('n') => self.no(ctx),
-            KeyCode::Esc | KeyCode::Char('c') => self.cancel(),
+            KeyCode::Esc | KeyCode::Char('c') => self.dismiss(),
             KeyCode::Enter => {
                 match self.choice {
                     0 => self.yes(ctx),
                     1 => self.no(ctx),
-                    _ => self.cancel()
+                    _ => self.dismiss()
                 }
             },
             KeyCode::Char('l') | KeyCode::Right => {

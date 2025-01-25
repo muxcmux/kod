@@ -1,6 +1,6 @@
 macro_rules! style {
     ($color:literal) => {
-        $crate::ui::style::Style::default().fg($crate::ui::theme::color($color))
+        $crate::ui::style::Style::default().fg($crate::ui::theme::color($color).unwrap())
     };
 
     (
@@ -10,9 +10,9 @@ macro_rules! style {
             let mut style = $crate::ui::style::Style::default();
             $(
                 style = match $key {
-                    "fg" => style.fg($crate::ui::theme::color($value)),
-                    "bg" => style.bg($crate::ui::theme::color($value)),
-                    "ulc" => style.underline_color($crate::ui::theme::color($value)),
+                    "fg" => style.fg($crate::ui::theme::color($value).unwrap()),
+                    "bg" => style.bg($crate::ui::theme::color($value).unwrap()),
+                    "ulc" => style.underline_color($crate::ui::theme::color($value).unwrap()),
                     "ul" => style.underline_style($value.parse().unwrap_or_else(|_| panic!("Invalid ul style: {}", $value))),
                     "mod" => {
                         if $value.starts_with('-') {
@@ -54,38 +54,42 @@ use crate::language::syntax::Highlight;
 
 use super::style::Style;
 use crossterm::style::Color;
+use anyhow::{anyhow, Result};
 
 // Returns a crossterm Color from a str
-fn color(str: &str) -> Color {
+pub fn color(str: &str) -> Result<Color> {
     match str {
-        "reset"        => PALETTE.get(str).map(|c| color(c)).unwrap_or(Color::Reset),
-        "black"        => PALETTE.get(str).map(|c| color(c)).unwrap_or(Color::Black),
-        "dark_grey"    => PALETTE.get(str).map(|c| color(c)).unwrap_or(Color::DarkGrey),
-        "red"          => PALETTE.get(str).map(|c| color(c)).unwrap_or(Color::Red),
-        "dark_red"     => PALETTE.get(str).map(|c| color(c)).unwrap_or(Color::DarkRed),
-        "green"        => PALETTE.get(str).map(|c| color(c)).unwrap_or(Color::Green),
-        "dark_green"   => PALETTE.get(str).map(|c| color(c)).unwrap_or(Color::DarkGreen),
-        "yellow"       => PALETTE.get(str).map(|c| color(c)).unwrap_or(Color::Yellow),
-        "dark_yellow"  => PALETTE.get(str).map(|c| color(c)).unwrap_or(Color::DarkYellow),
-        "blue"         => PALETTE.get(str).map(|c| color(c)).unwrap_or(Color::Blue),
-        "dark_blue"    => PALETTE.get(str).map(|c| color(c)).unwrap_or(Color::DarkBlue),
-        "magenta"      => PALETTE.get(str).map(|c| color(c)).unwrap_or(Color::Magenta),
-        "dark_magenta" => PALETTE.get(str).map(|c| color(c)).unwrap_or(Color::DarkMagenta),
-        "cyan"         => PALETTE.get(str).map(|c| color(c)).unwrap_or(Color::Cyan),
-        "dark_cyan"    => PALETTE.get(str).map(|c| color(c)).unwrap_or(Color::DarkCyan),
-        "white"        => PALETTE.get(str).map(|c| color(c)).unwrap_or(Color::White),
-        "grey"         => PALETTE.get(str).map(|c| color(c)).unwrap_or(Color::Grey),
+        "reset"        => match PALETTE.get(str) { Some(c) => color(c), None => Ok(Color::Reset) },
+        "black"        => match PALETTE.get(str) { Some(c) => color(c), None => Ok(Color::Black) },
+        "dark_grey"    => match PALETTE.get(str) { Some(c) => color(c), None => Ok(Color::DarkGrey) },
+        "red"          => match PALETTE.get(str) { Some(c) => color(c), None => Ok(Color::Red) },
+        "dark_red"     => match PALETTE.get(str) { Some(c) => color(c), None => Ok(Color::DarkRed) },
+        "green"        => match PALETTE.get(str) { Some(c) => color(c), None => Ok(Color::Green) },
+        "dark_green"   => match PALETTE.get(str) { Some(c) => color(c), None => Ok(Color::DarkGreen) },
+        "yellow"       => match PALETTE.get(str) { Some(c) => color(c), None => Ok(Color::Yellow) },
+        "dark_yellow"  => match PALETTE.get(str) { Some(c) => color(c), None => Ok(Color::DarkYellow) },
+        "blue"         => match PALETTE.get(str) { Some(c) => color(c), None => Ok(Color::Blue) },
+        "dark_blue"    => match PALETTE.get(str) { Some(c) => color(c), None => Ok(Color::DarkBlue) },
+        "magenta"      => match PALETTE.get(str) { Some(c) => color(c), None => Ok(Color::Magenta) },
+        "dark_magenta" => match PALETTE.get(str) { Some(c) => color(c), None => Ok(Color::DarkMagenta) },
+        "cyan"         => match PALETTE.get(str) { Some(c) => color(c), None => Ok(Color::Cyan) },
+        "dark_cyan"    => match PALETTE.get(str) { Some(c) => color(c), None => Ok(Color::DarkCyan) },
+        "white"        => match PALETTE.get(str) { Some(c) => color(c), None => Ok(Color::White) },
+        "grey"         => match PALETTE.get(str) { Some(c) => color(c), None => Ok(Color::Grey) },
         s if s.starts_with('#') && s.len() >= 7 => {
-            Color::Rgb {
-                r: u8::from_str_radix(&s[1..3], 16).unwrap_or_else(|_| panic!("Bad color hex value: {s}")),
-                g: u8::from_str_radix(&s[3..5], 16).unwrap_or_else(|_| panic!("Bad color hex value: {s}")),
-                b: u8::from_str_radix(&s[5..7], 16).unwrap_or_else(|_| panic!("Bad color hex value: {s}")),
-            }
+            Ok(Color::Rgb {
+                r: u8::from_str_radix(&s[1..3], 16).map_err(|_| anyhow!("Bad color hex value: {s}"))?,
+                g: u8::from_str_radix(&s[3..5], 16).map_err(|_| anyhow!("Bad color hex value: {s}"))?,
+                b: u8::from_str_radix(&s[5..7], 16).map_err(|_| anyhow!("Bad color hex value: {s}"))?,
+            })
         },
         s if s.parse::<u8>().is_ok() => {
-            Color::AnsiValue(s.parse::<u8>().unwrap())
+            Ok(Color::AnsiValue(s.parse::<u8>()?))
         },
-        s => PALETTE.get(s).map(|c| color(c)).unwrap_or_else(|| panic!("Unknown color: {}", s)),
+        s => match PALETTE.get(s) {
+            Some(c) => color(c),
+            None => Err(anyhow!("Unknown color: {}", s))
+        }
     }
 }
 
@@ -137,15 +141,24 @@ pub static THEME: Lazy<Theme> = Lazy::new(|| {
             "bg" => "#49473e",
         },
 
-        "ui.pane.border" => "muted",
-        "ui.dialog.border" => "fg",
-        "ui.dialog.text" => "fg",
-        "ui.dialog.button" => {
+        "ui.border" => "muted",
+        "ui.border.dialog" => "fg",
+        "ui.text.dialog" => "fg",
+        "ui.button" => {
             "fg" => "fg",
             "mod" => "bold",
         },
-        "ui.dialog.button.selected" => {
+        "ui.button.selected" => {
             "mod" => "rev",
+            "mod" => "bold",
+        },
+
+        "ui.files.title" => {
+            "fg" => "fg",
+            "mod" => "bold",
+        },
+
+        "ui.files.folder" => {
             "mod" => "bold",
         },
 

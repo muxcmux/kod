@@ -11,12 +11,12 @@ macro_rules! make_inc_id_type {
 
         impl $type {
             // return the next id
-            fn next(&self) -> Self {
+            pub fn next(&self) -> Self {
                 Self(std::num::NonZeroIsize::new(self.0.get() + 1).unwrap())
             }
 
             // return the current id and advance it
-            fn advance(&mut self) -> Self {
+            pub fn advance(&mut self) -> Self {
                 let current = *self;
                 *self = self.next();
                 current

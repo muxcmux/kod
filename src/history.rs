@@ -1,7 +1,7 @@
 /// Mostly copied from helix with the difference that
 /// this doesn't have a change set but operates with
 /// transactions straight away
-use std::{num::NonZeroUsize, ops::Range, time::Instant};
+use std::{num::NonZeroUsize, ops::Range};
 
 use crop::Rope;
 use smartstring::{LazyCompact, SmartString};
@@ -40,7 +40,7 @@ impl Default for History {
             revisions: vec![Revision {
                 parent: 0,
                 last_child: None,
-                timestamp: Instant::now(),
+                // timestamp: Instant::now(),
                 transaction: Transaction::default(),
                 inversion: Transaction::default(),
             }]
@@ -52,7 +52,7 @@ impl History {
     pub fn commit_revision(&mut self, transaction: Transaction, original: &State) {
         let inversion = transaction.invert(original);
         let new_current = self.revisions.len();
-        let timestamp = Instant::now();
+        // let timestamp = Instant::now();
 
         self.revisions[self.current].last_child = NonZeroUsize::new(new_current);
 
@@ -61,7 +61,7 @@ impl History {
             last_child: None,
             transaction,
             inversion,
-            timestamp,
+            // timestamp,
         });
 
         self.current = new_current;
@@ -91,7 +91,7 @@ struct Revision {
     last_child: Option<NonZeroUsize>,
     transaction: Transaction,
     inversion: Transaction,
-    timestamp: Instant,
+    // timestamp: Instant,
 }
 
 #[derive(Default, Debug, PartialEq, Eq, Clone)]
