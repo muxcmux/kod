@@ -41,12 +41,12 @@ This is a high-level, unordered, non-exhaustive list of features I want in kod.
 #### Workspace and code nav:
 
 * 🟢 Split windows
-* ⚪️ Multiple open buffers/documents
+* 🟢 Multiple open buffers/documents
+* 🟡 Basic file explorer ala mini.files
 * 🟡 Commands
 * ⚪️ Jump lists
 * ⚪️ Built-in fuzzy finder ala Telescope (suitable for more than finding files)
 * ⚪️ Project-wide search/replace
-* ⚪️ Basic file explorer ala mini.files
 * ⚪️ Quickfix lists
 
 #### IDE:
