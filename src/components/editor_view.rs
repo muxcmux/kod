@@ -98,13 +98,6 @@ impl EditorView {
 
 const MAX_OFFSET_X: usize = 6;
 const MAX_OFFSET_Y: usize = 3;
-fn compute_offset(size: Rect) -> (usize, usize) {
-    (
-        ((size.width as usize).saturating_sub(1).max(1) / 2).min(MAX_OFFSET_X),
-        ((size.height as usize).saturating_sub(1).max(1) / 2).min(MAX_OFFSET_Y),
-    )
-}
-
 
 fn ensure_cursor_is_in_view(ctx: &mut Context) -> HashMap<PaneId, (Rect, Rect)> {
     let mut areas = HashMap::new();
@@ -117,9 +110,8 @@ fn ensure_cursor_is_in_view(ctx: &mut Context) -> HashMap<PaneId, (Rect, Rect)> 
 
         let document_area = pane.area.clip_left(gutter_area.width);
 
-        (pane.view.scroll.offset_x, pane.view.scroll.offset_y) = compute_offset(document_area);
-
-        pane.view.scroll.ensure_point_is_visible(sel.head.x, sel.head.y, &document_area);
+        pane.view.scroll.adjust_offset(&document_area, MAX_OFFSET_X, MAX_OFFSET_Y);
+        pane.view.scroll.ensure_point_is_visible(sel.head.x, sel.head.y, &document_area, None);
 
         areas.insert(pane.id, (gutter_area, document_area));
     }

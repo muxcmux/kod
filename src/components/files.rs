@@ -93,7 +93,8 @@ impl Column {
 
         let inner = bbox.inner();
 
-        self.scroll.ensure_point_is_visible(0, self.index, &inner);
+        self.scroll.adjust_offset(&inner, 0, 3);
+        self.scroll.ensure_point_is_visible(0, self.index, &inner, Some(self.paths.len()));
 
         for i in self.scroll.y..self.scroll.y + inner.height as usize {
             if let Some(path) = self.paths.get(i) {

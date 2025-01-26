@@ -64,7 +64,7 @@ impl TextInput {
     }
 
     pub fn render(&mut self, area: Rect, buffer: &mut Buffer) {
-        self.scroll.ensure_point_is_visible(self.selection.head.x, self.selection.head.y, &area);
+        self.scroll.ensure_point_is_visible(self.selection.head.x, self.selection.head.y, &area, None);
 
         // loop through each visible line
         for row in self.scroll.y..self.scroll.y + area.height as usize {
