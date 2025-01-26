@@ -842,14 +842,25 @@ fn delete_selection_impl(ctx: &mut Context) {
 
     doc.set_selection(pane.id, sel.collapse_to_smaller_end());
 }
+
 pub fn delete_selection(ctx: &mut Context) {
     delete_selection_impl(ctx);
     enter_normal_mode(ctx);
 }
 
+pub fn delete_selection_linewise(ctx: &mut Context) {
+    expand_selection_to_whole_lines(ctx);
+    delete_selection(ctx);
+}
+
 pub fn change_selection(ctx: &mut Context) {
     delete_selection_impl(ctx);
     enter_insert_mode(ctx);
+}
+
+pub fn change_selection_linewise(ctx: &mut Context) {
+    expand_selection_to_whole_lines(ctx);
+    change_selection(ctx);
 }
 
 pub fn open_files(ctx: &mut Context) {

@@ -78,7 +78,7 @@ pub fn normal_mode_keymap() -> Keymap {
             // "f" => delete_character_forward,
             // "T" => delete_until_character_backward,
             // "F" => delete_character_backward,
-            "C-l" => delete_until_eol,
+            "C-l" | "$" | "end" => delete_until_eol,
             // "C-h" => delete_until_first_non_whitespace,
             // "G" => delete_until_last_line,
             // "g" => {
@@ -103,7 +103,7 @@ pub fn normal_mode_keymap() -> Keymap {
             // "f" => change_character_forward,
             // "T" => change_until_character_backward,
             // "F" => change_character_backward,
-            "C-l" => change_until_eol,
+            "C-l" | "$" | "end" => change_until_eol,
             // "C-h" => change_until_first_non_whitespace,
             // "G" => change_until_last_line,
             // "g" => {
@@ -195,7 +195,9 @@ pub fn select_mode_keymap() -> Keymap {
         },
 
         "d" | "x" => delete_selection,
+        "D" | "X" => delete_selection_linewise,
         "c" => change_selection,
+        "C" => change_selection_linewise,
 
         "o" => invert_selection,
     })

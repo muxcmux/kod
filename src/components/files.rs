@@ -131,7 +131,7 @@ impl Files {
                 } else if p.metadata()?.is_file() {
                     (p.parent().ok_or(anyhow!("Can't find parent dir of {:?}", p))?.to_path_buf(), Some(p))
                 } else {
-                    bail!("Given path is neither a file not a dir")
+                    bail!("Given path is neither a file nor a dir")
                 }
             }
             None => (std::env::current_dir()?, None),
