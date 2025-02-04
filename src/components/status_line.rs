@@ -21,14 +21,15 @@ impl Component for StatusLine {
         let (pane, doc) = current!(ctx.editor);
         match &ctx.editor.status {
             Some(status) => {
-                let style = match status.severity {
+                let style = THEME.get(match status.severity {
                     crate::editor::Severity::Hint => "hint",
                     crate::editor::Severity::Info => "info",
                     crate::editor::Severity::Warning => "warning",
                     crate::editor::Severity::Error => "error",
-                };
+                });
 
-                buffer.put_str(&status.message, x, y, THEME.get(style));
+                buffer.put_symbol("●", x, y, style);
+                buffer.put_str(&status.message, x + 2, y, style);
             },
 
             None => {

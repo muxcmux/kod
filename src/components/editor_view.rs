@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
 use crate::commands;
+use crate::commands::actions::ActionResult;
+use crate::commands::actions::ActionStatus;
 use crate::compositor;
 use crate::current;
 use crate::gutter;
@@ -39,7 +41,11 @@ impl EditorView {
         self.waiting_for_input = matches!(result, KeymapResult::Pending);
 
         if let KeymapResult::Found(f) = result {
-            f(ctx);
+            match f(ctx) {
+                Err(ActionStatus::Error(e)) => ctx.editor.set_error(e),
+                Err(ActionStatus::Warning(e)) => ctx.editor.set_warning(e),
+                _ => {}
+            }
             return None;
         }
 
@@ -61,12 +67,12 @@ impl EditorView {
         &mut self,
         event: KeyEvent,
         ctx: &mut commands::Context,
-        char_func: fn(char, &mut commands::Context),
+        char_func: fn(char, &mut commands::Context) -> ActionResult,
     ) -> EventResult {
         match self.handle_keymap_event(event, ctx) {
             Some(KeymapResult::NotFound) => {
                 if let KeyCode::Char(c) = event.code {
-                    char_func(c, ctx);
+                    _ = char_func(c, ctx);
                     EventResult::Consumed(None)
                 } else {
                     EventResult::Ignored(None)
@@ -77,12 +83,16 @@ impl EditorView {
                 for event in pending {
                     match event.code {
                         KeyCode::Char(c) => {
-                            char_func(c, ctx);
+                            _ = char_func(c, ctx);
                             result = EventResult::Consumed(None);
                         }
                         _ => {
                             if let KeymapResult::Found(f) = self.keymaps.get(&ctx.editor.mode, event) {
-                                f(ctx);
+                                match f(ctx) {
+                                    Err(ActionStatus::Error(e)) => ctx.editor.set_error(e),
+                                    Err(ActionStatus::Warning(e)) => ctx.editor.set_warning(e),
+                                    _ => {}
+                                }
                                 result = EventResult::Consumed(None)
                             }
                         }

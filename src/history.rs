@@ -14,7 +14,7 @@ pub struct State {
 }
 
 /// Range of start_byte..end_byte and the replacement string (None to delete)
-type Change = (Range<usize>, Option<SmartString<LazyCompact>>);
+pub type Change = (Range<usize>, Option<SmartString<LazyCompact>>);
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Operation {

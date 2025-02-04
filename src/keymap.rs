@@ -33,9 +33,9 @@ use std::collections::HashMap;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use once_cell::sync::Lazy;
-use crate::{commands, editor::Mode};
+use crate::{commands::{self, actions::ActionResult}, editor::Mode};
 
-type Func = fn(&mut commands::Context);
+type Func = fn(&mut commands::Context) -> ActionResult;
 type Keymap = HashMap<KeyEvent, Action>;
 
 #[derive(Debug)]

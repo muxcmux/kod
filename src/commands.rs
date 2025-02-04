@@ -3,7 +3,7 @@ pub mod palette;
 
 use crossterm::event::KeyEvent;
 
-use crate::{components::confirmation::Dialog, compositor::Component, doc, editor::Editor, panes::Layout};
+use crate::{components::confirmation::Dialog, compositor::Component, current, doc, editor::Editor, panes::Layout};
 
 pub type KeyCallback = Box<dyn FnOnce(&mut Context, KeyEvent)>;
 
@@ -63,10 +63,18 @@ pub fn split_vertically(ctx: &mut Context) {
     ctx.editor.panes.split(Layout::Horizontal);
 }
 
+pub fn toggle_readonly(ctx: &mut Context) {
+    let (_, doc) = current!(ctx.editor);
+    doc.readonly = !doc.readonly;
+    let ro = if doc.readonly { "ON" } else { "OFF" };
+    ctx.editor.set_status(format!("Readonly {ro}"));
+}
+
 pub const COMMANDS: &[Command] = &[
     Command { name: "write", aliases: &["write", "w"], desc: "Save file to disc", func: save },
     Command { name: "quit", aliases: &["q", "Q", "exit"], desc: "Exit kod", func: quit },
     Command { name: "write-quit", aliases: &["wq", "x"], desc: "Save file to disc and exit", func: write_quit },
     Command { name: "split", aliases: &["s"], desc: "Split pane horizontally", func: split_horizontally },
     Command { name: "vsplit", aliases: &["vs"], desc: "Split pane vertically", func: split_vertically },
+    Command { name: "readonly", aliases: &["ro"], desc: "Toggle document readonly mode", func: toggle_readonly },
 ];
