@@ -1,7 +1,7 @@
 use std::{borrow::Cow, cell::Cell, collections::HashMap, path::{Path, PathBuf}, sync::Arc};
 
 use crop::Rope;
-use crate::{graphemes::NEW_LINE, history::{Change, History, State, Transaction}, language::{syntax::{HighlightEvent, Syntax}, LanguageConfiguration, LANG_CONFIG}, panes::PaneId, selection::Selection};
+use crate::{graphemes::{NEW_LINE, NEW_LINE_STR}, history::{Change, History, State, Transaction}, language::{syntax::{HighlightEvent, Syntax}, LanguageConfiguration, LANG_CONFIG}, panes::PaneId, selection::Selection};
 
 use anyhow::{bail, Result};
 
@@ -58,7 +58,7 @@ impl Document {
         }
     }
 
-    pub fn open(id: DocumentId, path: &Path) -> Result<Self> {
+    pub fn open(id: DocumentId, path: &Path) -> Result<(bool, Self)> {
         if !path.metadata()?.is_file() {
             bail!("Cannot open path: {:?}", path)
         }
@@ -71,7 +71,47 @@ impl Document {
 
         let rope = Rope::from(contents);
 
-        Ok(Self::new(id, rope, Some(path.to_path_buf())))
+        let mut doc = Self::new(id, rope, Some(path.to_path_buf()));
+        let hard_wrapped = doc.hard_wrap_long_lines();
+
+        Ok((hard_wrapped, doc))
+    }
+
+    // Insert line breaks on lines longer than LIMIT bytes
+    // and set the document to Readonly. This is to prevent
+    // pathological behaviour with extremely long lines.
+    fn hard_wrap_long_lines(&mut self) -> bool {
+        const LIMIT: usize = 10_000;
+        let mut insert_lines_at = vec![];
+
+        for (i, line) in self.rope.lines().enumerate() {
+            let mut offset = LIMIT;
+            let len = line.byte_len();
+
+            'outer: while offset < len {
+                while !line.is_grapheme_boundary(offset) {
+                    offset += 1;
+                    if len == offset { continue 'outer }
+                }
+
+                insert_lines_at.push(self.rope.byte_of_line(i) + offset + insert_lines_at.len());
+                offset += LIMIT;
+            }
+        }
+
+        let wrap_result = !insert_lines_at.is_empty();
+        self.readonly = wrap_result;
+
+        for offset in insert_lines_at {
+            self.apply(
+                &Transaction::change(
+                    &self.rope,
+                    [(offset..offset, Some(NEW_LINE_STR.into()))].into_iter()
+                )
+            );
+        }
+
+        wrap_result
     }
 
     pub fn is_modified(&self) -> bool {

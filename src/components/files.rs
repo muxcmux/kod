@@ -3,7 +3,9 @@ use anyhow::{anyhow, bail, Result};
 
 use crossterm::{cursor::SetCursorStyle, event::{KeyCode, KeyEvent}};
 
-use crate::{compositor::{Component, Context, EventResult}, language::LANG_CONFIG, ui::{border_box::BorderBox, borders::Borders, buffer::Buffer, scroll::Scroll, style::Style, theme::THEME, Position, Rect}};
+use crate::{compositor::{Component, Compositor, Context, EventResult}, language::LANG_CONFIG, ui::{border_box::BorderBox, borders::Borders, buffer::Buffer, scroll::Scroll, style::Style, theme::THEME, Position, Rect}};
+
+use super::alert::Alert;
 
 const ACTIVE_COLUMN_WIDTH: u16 = 52;
 const INACTIVE_COLUMN_WIDTH: u16 = 17;
@@ -301,10 +303,20 @@ impl Component for Files {
             },
             KeyCode::Char('l') | KeyCode::Enter => {
                 match self.select() {
-                    Ok(Selection::File(file)) => {
-                        match ctx.editor.open(&file) {
-                            Ok(id) => {
+                    Ok(Selection::File(path)) => {
+                        match ctx.editor.open(&path) {
+                            Ok((hard_wrapped, id)) => {
                                 ctx.editor.panes.load_doc_in_focus(id);
+                                if hard_wrapped {
+                                    let alert = Alert::new(
+                                        "⚠ Readonly".into(),
+                                        format!("The document {:?} is set to Readonly because it contains very long lines which have been hard-wrapped.", path.file_name().unwrap())
+                                    );
+                                    return EventResult::Consumed(Some(Box::new(|compositor: &mut Compositor, _: &mut Context| {
+                                        _ = compositor.pop();
+                                        compositor.push(Box::new(alert));
+                                    })))
+                                }
                                 self.dismiss()
                             }
                             Err(e) => {

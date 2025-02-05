@@ -135,6 +135,7 @@ pub static PALETTE: Lazy<HashMap<&str, &str>> = Lazy::new(|| {
 
 pub static THEME: Lazy<Theme> = Lazy::new(|| {
     theme!(
+        "ui" => "fg",
         "text" => "fg",
         "text.whitespace" => "muted1",
         "selection" => {
@@ -149,6 +150,7 @@ pub static THEME: Lazy<Theme> = Lazy::new(|| {
             "mod" => "bold",
         },
         "ui.button.selected" => {
+            "fg" => "fg",
             "mod" => "rev",
             "mod" => "bold",
         },
@@ -159,6 +161,7 @@ pub static THEME: Lazy<Theme> = Lazy::new(|| {
         },
 
         "ui.files.folder" => {
+            "fg" => "fg",
             "mod" => "bold",
         },
 

@@ -75,7 +75,9 @@ impl Editor {
 
     pub fn save_document(&mut self, doc_id: DocumentId) {
         let doc = self.documents.get_mut(&doc_id).unwrap();
-        if let Some(path) = &doc.path {
+        if doc.readonly {
+            self.set_error("Cannot save a Readonly document");
+        } else if let Some(path) = &doc.path {
             match fs::write(path, doc.rope.to_string()) {
                 Ok(_) => {
                     let size = format_size_units(doc.rope.byte_len());
@@ -96,7 +98,7 @@ impl Editor {
         self.documents.iter().any(|(_, doc)| doc.is_modified())
     }
 
-    pub fn open(&mut self, path: &Path) -> Result<DocumentId> {
+    pub fn open(&mut self, path: &Path) -> Result<(bool, DocumentId)> {
         let id = self.documents.values()
             .find(|doc| {
                 match &doc.path {
@@ -106,17 +108,23 @@ impl Editor {
             })
             .map(|doc| doc.id);
 
-        let id = if let Some(id) = id {
-            id
+        // hard_wrapped is used only to indicate that a document
+        // was modified when it was open. We set this to false
+        // for existing documents, because if they were wrapped
+        // when opened for the first time, the notification was
+        // already displayed to the user once
+        let (hard_wrapped, id) = if let Some(id) = id {
+            (false, id)
         } else {
             let next_id = self.next_doc_id;
-            let doc = Document::open(next_id, path)?;
+            let (hard_wrapped, doc) = Document::open(next_id, path)?;
+
             self.documents.insert(next_id, doc);
             self.next_doc_id.advance();
-            next_id
+            (hard_wrapped, next_id)
         };
 
-        Ok(id)
+        Ok((hard_wrapped, id))
     }
 
     pub fn open_scratch(&mut self) -> DocumentId {

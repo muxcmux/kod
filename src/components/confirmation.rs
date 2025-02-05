@@ -33,6 +33,8 @@ fn render_dialog(choice: u8, doc: &Document, area: Rect, buffer: &mut Buffer) {
     let bbox = BorderBox::new(area)
         .title(TITLE)
         .borders(Borders::ALL)
+        .style(THEME.get("info"))
+        .title_style(THEME.get("info"))
         .stroke(Stroke::Plain);
 
     bbox.render(buffer);

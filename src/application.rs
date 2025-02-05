@@ -1,7 +1,7 @@
 use std::{env, path::PathBuf, thread};
 
 use crossterm::{cursor::SetCursorStyle, event::{read, KeyEvent, KeyEventKind}};
-use crate::{components::{editor_view::EditorView, files::Files, status_line::StatusLine}, compositor::{Compositor, Context}, editor::Editor, ui::{terminal::{self, Terminal}, Rect}};
+use crate::{components::{alert::Alert, editor_view::EditorView, files::Files, status_line::StatusLine}, compositor::{Compositor, Context}, editor::Editor, ui::{terminal::{self, Terminal}, Rect}};
 use anyhow::Result;
 
 pub enum Event {
@@ -36,7 +36,16 @@ impl Default for Application {
             if let Ok(path) = path.canonicalize() {
                 if path.is_file() {
                     match editor.open(&path) {
-                        Ok(id) => editor.panes.load_doc_in_focus(id),
+                        Ok((hard_wrapped, id)) => {
+                            editor.panes.load_doc_in_focus(id);
+                            if hard_wrapped {
+                                let alert = Alert::new(
+                                    "⚠ Readonly".into(),
+                                    format!("The document {:?} is set to Readonly because it contains very long lines which have been hard-wrapped.", path.file_name().unwrap())
+                                );
+                                compositor.push(Box::new(alert));
+                            }
+                        },
                         Err(e) => editor.set_error(e.to_string()),
                     }
                 } else if path.is_dir() {

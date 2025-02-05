@@ -631,6 +631,7 @@ pub fn redo(ctx: &mut Context) -> ActionResult {
 
 fn insert_or_replace_char(c: char, range: Range<usize>, selection: Option<Selection>, ctx: &mut Context) -> ActionResult {
     ensure_editable(ctx)?;
+
     let (pane, doc) = current!(ctx.editor);
     let mut string = SmartString::new();
     string.push(c);
