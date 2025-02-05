@@ -5,6 +5,7 @@ use crate::commands::actions::ActionResult;
 use crate::commands::actions::ActionStatus;
 use crate::compositor;
 use crate::current;
+use crate::graphemes;
 use crate::gutter;
 use crate::pane;
 use crate::panes::PaneId;
@@ -204,14 +205,35 @@ impl Component for EditorView {
         }
     }
 
-    // This is a shit implementation just for lulz
-    // and breaks everything because it doesn't use transactions
-    // pls fix, kthxbye
-    // Ok, disabling for now
-    fn handle_paste(&mut self, _str: &str, _ctx: &mut Context) -> EventResult {
-        // let (pane, doc) = current!(ctx.editor);
-        // pane.view.insert_str_at_cursor(&mut doc.rope, str, &ctx.editor.mode);
-        // doc.modified = true;
+    fn handle_paste(&mut self, str: &str, ctx: &mut Context) -> EventResult {
+        let (pane, doc) = current!(ctx.editor);
+        if doc.readonly {
+            ctx.editor.set_warning("Turn off readonly mode before editing");
+            return EventResult::Consumed(None)
+        }
+
+        let sel = doc.selection(pane.id).collapse_to_head();
+        let range = sel.byte_range(&doc.rope, false, true);
+
+        doc.modify((range, Some(str.into())), sel);
+
+        // commit transaction straight away if not in insert mode
+        if ctx.editor.mode != Mode::Insert {
+           doc.commit_transaction_to_history();
+        }
+
+        let delta_y = str.lines().count().saturating_sub(1);
+        let last_line = str.lines().last().unwrap();
+        let delta_x = graphemes::width(last_line);
+        let (x, y) = if delta_y == 0 {
+            (Some(sel.head.x + delta_x), None)
+        } else {
+            (Some(delta_x), Some(sel.head.y + delta_y))
+        };
+
+        let new_sel = sel.head_to(&doc.rope, x, y, &ctx.editor.mode);
+        doc.set_selection(pane.id, new_sel);
+
         EventResult::Consumed(None)
     }
 
