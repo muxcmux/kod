@@ -1,9 +1,9 @@
 use std::{cmp::Ordering, collections::{HashMap, VecDeque}, fs::read_dir, path::{Path, PathBuf}};
 use anyhow::{anyhow, bail, Result};
 
-use crossterm::{cursor::SetCursorStyle, event::{KeyCode, KeyEvent}};
+use crossterm::{cursor::SetCursorStyle, event::{KeyCode, KeyEvent, KeyModifiers}};
 
-use crate::{compositor::{Component, Compositor, Context, EventResult}, language::LANG_CONFIG, ui::{border_box::BorderBox, borders::Borders, buffer::Buffer, scroll::Scroll, style::Style, theme::THEME, Position, Rect}};
+use crate::{compositor::{Component, Compositor, Context, EventResult}, language::LANG_CONFIG, panes::Layout, ui::{border_box::BorderBox, borders::Borders, buffer::Buffer, scroll::Scroll, style::Style, theme::THEME, Position, Rect}};
 
 use super::alert::Alert;
 
@@ -234,8 +234,42 @@ impl Files {
             }
         }
 
-
         Ok(Selection::Invalid)
+    }
+
+    fn open(&mut self, ctx: &mut Context, split: Option<Layout>) -> EventResult {
+        match self.select() {
+            Ok(Selection::File(path)) => {
+                match ctx.editor.open(&path) {
+                    Ok((hard_wrapped, id)) => {
+                        if let Some(split) = split {
+                            ctx.editor.panes.split(split);
+                        }
+                        ctx.editor.panes.load_doc_in_focus(id);
+                        if hard_wrapped {
+                            let alert = Alert::new(
+                                "⚠ Readonly".into(),
+                                format!("The document {:?} is set to Readonly because it contains very long lines which have been hard-wrapped.", path.file_name().unwrap())
+                            );
+                            return EventResult::Consumed(Some(Box::new(|compositor: &mut Compositor, _: &mut Context| {
+                                _ = compositor.pop();
+                                compositor.push(Box::new(alert));
+                            })))
+                        }
+                        self.dismiss()
+                    }
+                    Err(e) => {
+                        ctx.editor.set_error(e.to_string());
+                        EventResult::Consumed(None)
+                    }
+                }
+            },
+            Err(e) => {
+                ctx.editor.set_error(e.to_string());
+                EventResult::Consumed(None)
+            },
+            _ => EventResult::Consumed(None)
+        }
     }
 }
 
@@ -301,37 +335,7 @@ impl Component for Files {
                 self.parent().unwrap_or_else(|e| ctx.editor.set_error(e.to_string()));
                 EventResult::Consumed(None)
             },
-            KeyCode::Char('l') | KeyCode::Enter => {
-                match self.select() {
-                    Ok(Selection::File(path)) => {
-                        match ctx.editor.open(&path) {
-                            Ok((hard_wrapped, id)) => {
-                                ctx.editor.panes.load_doc_in_focus(id);
-                                if hard_wrapped {
-                                    let alert = Alert::new(
-                                        "⚠ Readonly".into(),
-                                        format!("The document {:?} is set to Readonly because it contains very long lines which have been hard-wrapped.", path.file_name().unwrap())
-                                    );
-                                    return EventResult::Consumed(Some(Box::new(|compositor: &mut Compositor, _: &mut Context| {
-                                        _ = compositor.pop();
-                                        compositor.push(Box::new(alert));
-                                    })))
-                                }
-                                self.dismiss()
-                            }
-                            Err(e) => {
-                                ctx.editor.set_error(e.to_string());
-                                EventResult::Consumed(None)
-                            }
-                        }
-                    },
-                    Err(e) => {
-                        ctx.editor.set_error(e.to_string());
-                        EventResult::Consumed(None)
-                    },
-                    _ => EventResult::Consumed(None)
-                }
-            },
+            KeyCode::Char('l') | KeyCode::Enter =>  self.open(ctx, None),
             KeyCode::Char('g') => {
                 self.move_top();
                 EventResult::Consumed(None)
@@ -340,6 +344,20 @@ impl Component for Files {
                 self.move_bottom();
                 EventResult::Consumed(None)
             },
+            KeyCode::Char('v') => {
+                if event.modifiers.intersects(KeyModifiers::CONTROL) {
+                    self.open(ctx, Some(Layout::Vertical))
+                } else {
+                    EventResult::Ignored(None)
+                }
+            },
+            KeyCode::Char('x') => {
+                if event.modifiers.intersects(KeyModifiers::CONTROL) {
+                    self.open(ctx, Some(Layout::Horizontal))
+                } else {
+                    EventResult::Ignored(None)
+                }
+            }
             // let the command interface through
             KeyCode::Char(':') => EventResult::Ignored(None),
             _ => EventResult::Consumed(None),
