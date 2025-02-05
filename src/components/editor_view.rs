@@ -143,7 +143,11 @@ impl Component for EditorView {
         // re-borrow as immutable
         let ctx = &*ctx;
 
-        for (_, pane) in ctx.editor.panes.panes.iter() {
+        for (id, pane) in ctx.editor.panes.panes.iter() {
+            // the id key in the hashmap has to be the same as the pane's id
+            // otherwise there was a screw up somewhere when inserting the
+            // pane
+            debug_assert!(*id == pane.id);
             let (gutter_area, document_area) = areas.get(&pane.id).unwrap();
             // render the view after ajusting the scroll cursor
             pane.view.render(pane, document_area, buffer, ctx);

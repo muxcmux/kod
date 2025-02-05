@@ -355,8 +355,8 @@ impl Panes {
         self.focus = self.next_pane_id;
 
         let doc_id = focused.doc_id;
-        self.panes.insert(self.next_pane_id.advance(), Pane {
-            id: self.next_pane_id,
+        self.panes.insert(self.next_pane_id, Pane {
+            id: self.next_pane_id.advance(),
             doc_id,
             area: Rect::default(),
             view: View::default()
@@ -389,8 +389,8 @@ impl Panes {
                     self.last_focus = self.focus;
                     self.focus = self.next_pane_id;
 
-                    self.panes.insert(self.next_pane_id.advance(), Pane {
-                        id: self.next_pane_id,
+                    self.panes.insert(self.next_pane_id, Pane {
+                        id: self.next_pane_id.advance(),
                         doc_id: focused_pane.doc_id,
                         area: Rect::default(),
                         view: View::default()
