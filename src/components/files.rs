@@ -346,14 +346,14 @@ impl Component for Files {
             },
             KeyCode::Char('v') => {
                 if event.modifiers.intersects(KeyModifiers::CONTROL) {
-                    self.open(ctx, Some(Layout::Vertical))
+                    self.open(ctx, Some(Layout::Horizontal))
                 } else {
                     EventResult::Ignored(None)
                 }
             },
             KeyCode::Char('x') => {
                 if event.modifiers.intersects(KeyModifiers::CONTROL) {
-                    self.open(ctx, Some(Layout::Horizontal))
+                    self.open(ctx, Some(Layout::Vertical))
                 } else {
                     EventResult::Ignored(None)
                 }
