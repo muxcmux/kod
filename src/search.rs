@@ -38,7 +38,7 @@ impl Component for Search {
             "ui.text_input.blur"
         };
 
-        buffer.put_str("", area.left() + 1, area.bottom().saturating_sub(1), THEME.get(style));
+        buffer.put_str("󰍉", area.left() + 1, area.bottom().saturating_sub(1), THEME.get(style));
 
         let y = area.bottom().saturating_sub(2);
 
@@ -57,16 +57,16 @@ impl Component for Search {
             }
         }
 
-        let input_size = area.clip_top(area.height.saturating_sub(1)).clip_left(4);
+        let input_size = area.clip_top(area.height.saturating_sub(1)).clip_left(3);
 
         if ctx.editor.search.focused {
             self.input.render(input_size, buffer);
         } else {
-            buffer.put_str(self.input.value(), area.left() + 4, area.bottom().saturating_sub(1), THEME.get("ui.text_input.blur"));
+            buffer.put_str(self.input.value(), area.left() + 3, area.bottom().saturating_sub(1), THEME.get("ui.text_input.blur"));
         }
 
         if ctx.editor.search.total_matches > 0 {
-            let label = format!("Match {} of {}", ctx.editor.search.current_match + 1, ctx.editor.search.total_matches);
+            let label = format!("{}/{}", ctx.editor.search.current_match + 1, ctx.editor.search.total_matches);
             let label_len = label.chars().count();
             buffer.put_str(&label, area.right().saturating_sub(1 + label_len as u16), area.bottom().saturating_sub(1), THEME.get("ui.text_input.blur"));
         }

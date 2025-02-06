@@ -35,6 +35,7 @@ slotmap = "1"
 ahash = "0.8"
 
 include_dir = "0.7"
+walkdir = "2"
 
 [build-dependencies]
 anyhow = "1"

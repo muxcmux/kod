@@ -31,7 +31,7 @@ This is a high-level, unordered, non-exhaustive list of features I want in kod.
 * 🟢 Replace mode
 * ⚪️ Dot repeat
 * 🟡 Registers
-* ⚪️ Bracketed paste
+* 🟢 Bracketed paste
 * 🟡 Search (search working, but no replace at the moment)
 * ⚪️ Count before a motion e.g. `5dw`
 * 🟢 Syntax highlighting
@@ -42,7 +42,7 @@ This is a high-level, unordered, non-exhaustive list of features I want in kod.
 
 * 🟢 Split windows
 * 🟢 Multiple open buffers/documents
-* 🟡 Basic file explorer ala mini.files
+* 🟡 Basic file explorer ala mini.files / yazi
 * 🟡 Commands
 * ⚪️ Jump lists
 * ⚪️ Built-in fuzzy finder ala Telescope (suitable for more than finding files)
