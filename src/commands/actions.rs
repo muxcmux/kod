@@ -807,12 +807,9 @@ pub fn delete_until_eol(ctx: &mut Context) -> ActionResult {
     let range = sel.anchor()
         .head_to(&doc.rope, Some(usize::MAX), None, &Mode::Select)
         .byte_range(&doc.rope, true, false);
-    if range.start > 0 {
-        doc.modify((range, None), sel);
-        return move_cursor_to(None, None, ctx)
-    }
 
-    Ok(())
+    doc.modify((range, None), sel);
+    move_cursor_to(None, None, ctx)
 }
 
 pub fn change_until_eol(ctx: &mut Context) -> ActionResult {
