@@ -4,7 +4,7 @@ use anyhow::{anyhow, bail, Result};
 use crossterm::{cursor::SetCursorStyle, event::{KeyCode, KeyEvent, KeyModifiers}};
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::{compositor::{Component, Compositor, Context, EventResult}, graphemes, language::LANG_CONFIG, panes::Layout, ui::{border_box::BorderBox, borders::Borders, buffer::Buffer, scroll::Scroll, style::Style, text_input::TextInput, theme::THEME, Position, Rect}};
+use crate::{compositor::{Component, Compositor, Context, EventResult}, document::cwd_relative_name, graphemes, language::LANG_CONFIG, panes::Layout, ui::{border_box::BorderBox, borders::Borders, buffer::Buffer, modal::{Choice, Modal}, scroll::Scroll, style::Style, text_input::TextInput, theme::THEME, Position, Rect}};
 
 use super::alert::Alert;
 
@@ -44,6 +44,16 @@ fn icon(path: &Path) -> (String, Style) {
     } else {
         ("󰈔".into(), THEME.get("ui.files.icon.file"))
     }
+}
+
+fn delete_path(path: &Path) -> Result<()> {
+    if path.metadata()?.is_dir() {
+        std::fs::remove_dir_all(path)?;
+    } else {
+        std::fs::remove_file(path)?;
+    }
+
+    Ok(())
 }
 
 enum Selection {
@@ -144,6 +154,14 @@ impl PasteAction {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum State {
+    Browsing,
+    Searching,
+    ConfirmingDelete(Vec<PathBuf>),
+    ConfirmingOverwrite(Vec<PathBuf>),
+}
+
 pub struct Files {
     active_column: usize,
     columns: VecDeque<Column>,
@@ -152,7 +170,8 @@ pub struct Files {
     yanked_paths: BTreeSet<PathBuf>,
     yank_source_column: usize,
     paste_action: PasteAction,
-    searching: bool,
+    modal: Modal,
+    state: State,
     search: TextInput,
 }
 
@@ -186,7 +205,8 @@ impl Files {
             yanked_paths: BTreeSet::new(),
             yank_source_column: 0,
             paste_action: PasteAction::Copy,
-            searching: false,
+            state: State::Browsing,
+            modal: Modal::new("⚠ Confirm".into(), "".into()),
             search: TextInput::empty(),
         })
     }
@@ -312,7 +332,7 @@ impl Files {
                     format!("The document {:?} is set to Readonly because it contains very long lines which have been hard-wrapped.", path.file_name().unwrap())
                 );
                 return Ok(EventResult::Consumed(Some(Box::new(|compositor: &mut Compositor, _: &mut Context| {
-                    _ = compositor.pop();
+                    compositor.pop();
                     compositor.push(Box::new(alert));
                 }))));
             }
@@ -405,8 +425,32 @@ impl Files {
         Ok(EventResult::Consumed(None))
     }
 
-    fn delete(&mut self) -> Result<EventResult> {
+    fn try_delete(&mut self) -> Result<EventResult> {
+        let mut confirm_paths = vec![];
+        if self.marked_paths.is_empty() {
+            let col = self.columns.get(self.active_column).unwrap();
+            if let Some(marked) = col.paths.get(col.index) {
+                confirm_paths.push(marked.to_path_buf());
+            }
+        } else {
+            while let Some(path) = self.marked_paths.pop_first() {
+                confirm_paths.push(path);
+            }
+        }
+
+        if !confirm_paths.is_empty() {
+            self.state = State::ConfirmingDelete(confirm_paths)
+        }
+
         Ok(EventResult::Consumed(None))
+    }
+
+    fn reposition_cursor(&mut self) {
+        let col = self.columns.get_mut(self.active_column).unwrap();
+
+        if col.index >= col.paths.len() {
+            col.index = col.paths.len().saturating_sub(1);
+        }
     }
 
     fn refresh_columns(&mut self) -> Result<()> {
@@ -422,7 +466,7 @@ impl Files {
         Ok(())
     }
 
-    fn handle_key_event_when_navigating(&mut self, event: KeyEvent, ctx: &mut Context) -> Result<EventResult> {
+    fn handle_key_event_when_browsing(&mut self, event: KeyEvent, ctx: &mut Context) -> Result<EventResult> {
         match event.code {
             KeyCode::Esc | KeyCode::Char('-') | KeyCode::Char('q') => {
                 if !self.marked_paths.is_empty() {
@@ -471,12 +515,12 @@ impl Files {
             },
             KeyCode::Char('y') => Ok(self.yank(ctx)),
             KeyCode::Char('p') => Ok(self.paste()?),
-            KeyCode::Char('d') => Ok(self.delete()?),
+            KeyCode::Char('d') => Ok(self.try_delete()?),
             KeyCode::Char(' ') => Ok(self.mark()),
             KeyCode::Char('/') => {
                 self.close_children();
                 self.search.clear();
-                self.searching = true;
+                self.state = State::Searching;
                 Ok(EventResult::Consumed(None))
             }
             // let the command interface through
@@ -488,7 +532,7 @@ impl Files {
     fn handle_key_event_when_searching(&mut self, event: KeyEvent, _ctx: &mut Context) -> EventResult {
         match event.code {
             KeyCode::Esc | KeyCode::Enter => {
-                self.searching = false;
+                self.state = State::Browsing;
                 EventResult::Consumed(None)
             },
             _ => {
@@ -497,6 +541,38 @@ impl Files {
                 EventResult::Consumed(None)
             }
         }
+    }
+
+    fn handle_key_event_when_confirming_delete(&mut self, event: KeyEvent) -> Result<EventResult> {
+        if self.modal.confirm(event) {
+            if self.modal.choice == Choice::Yes {
+                match &mut self.state {
+                    State::ConfirmingDelete(paths) => {
+                        while let Some(path) = paths.pop() {
+                            if let Err(e) = delete_path(&path) {
+                                self.refresh_columns()?;
+                                return Err(e)
+                            }
+                        }
+                    },
+                    _ => unreachable!()
+                };
+
+            }
+
+            // reset state
+            self.refresh_columns()?;
+            self.reposition_cursor();
+            self.close_children();
+            self.state = State::Browsing;
+            self.modal.choice = Choice::Yes;
+        }
+
+        Ok(EventResult::Consumed(None))
+    }
+
+    fn handle_key_event_when_confirming_overwrite(&mut self, _event: KeyEvent) -> Result<EventResult> {
+        Ok(EventResult::Consumed(None))
     }
 
     fn render_active_column(&mut self, idx: usize, short_title: bool, area: Rect, buffer: &mut Buffer) {
@@ -554,7 +630,7 @@ impl Files {
         let column = self.columns.get_mut(idx).unwrap();
         let inner = column.render(area, buffer, short_title, each_row);
 
-        if self.searching || !search_term.is_empty() {
+        if self.state == State::Searching || !search_term.is_empty() {
             buffer.put_str(format!("󰍉 {}", search_term), inner.left(), inner.bottom(), THEME.get("ui.border.files"));
         }
 
@@ -702,7 +778,6 @@ fn move_path_to_dir(path: &Path, dest_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-
 impl Component for Files {
     fn render(&mut self, area: Rect, buffer: &mut Buffer, _ctx: &mut Context) {
 
@@ -752,23 +827,52 @@ impl Component for Files {
                 self.render_inactive_column(idx, i != 0, area, buffer);
             }
         }
+
+        match &self.state {
+            State::ConfirmingDelete(paths) => {
+                if paths.len() > 1 {
+                    self.modal.body = format!("Delete {} paths?", paths.len());
+                } else {
+                    self.modal.body = format!("Delete {}?", cwd_relative_name(paths.first().unwrap()));
+                }
+                self.modal.render_all(area, buffer);
+            },
+            State::ConfirmingOverwrite(paths) => {
+                self.modal.body = format!("Overwrite {:?}?", paths);
+                self.modal.render_all(area, buffer);
+            },
+            _ => {}
+        }
     }
 
     fn handle_key_event(&mut self, event: KeyEvent, ctx: &mut Context) -> EventResult {
         ctx.editor.status = None;
 
-        if self.searching {
-            self.handle_key_event_when_searching(event, ctx)
-        } else {
-            self.handle_key_event_when_navigating(event, ctx).unwrap_or_else(|e| {
-                ctx.editor.set_error(e.to_string());
-                EventResult::Consumed(None)
-            })
+        match &self.state {
+            State::Browsing => {
+                self.handle_key_event_when_browsing(event, ctx).unwrap_or_else(|e| {
+                    ctx.editor.set_error(e.to_string());
+                    EventResult::Consumed(None)
+                })
+            },
+            State::ConfirmingDelete(_) => {
+                self.handle_key_event_when_confirming_delete(event).unwrap_or_else(|e| {
+                    ctx.editor.set_error(e.to_string());
+                    EventResult::Consumed(None)
+                })
+            }
+            State::ConfirmingOverwrite(_) => {
+                self.handle_key_event_when_confirming_overwrite(event).unwrap_or_else(|e| {
+                    ctx.editor.set_error(e.to_string());
+                    EventResult::Consumed(None)
+                })
+            }
+            State::Searching => self.handle_key_event_when_searching(event, ctx),
         }
     }
 
     fn hide_cursor(&self, _ctx: &Context) -> bool {
-        self.searching
+        self.state != State::Browsing
     }
 
     fn cursor(&self, _area: Rect, _ctx: &Context) -> (Option<Position>, Option<SetCursorStyle>) {

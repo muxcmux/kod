@@ -148,12 +148,10 @@ pub static THEME: Lazy<Theme> = Lazy::new(|| {
         "ui.text.dialog" => "fg",
         "ui.button" => {
             "fg" => "fg",
-            "mod" => "bold",
         },
         "ui.button.selected" => {
             "fg" => "fg",
             "mod" => "rev",
-            "mod" => "bold",
         },
 
         "ui.files.title" => {

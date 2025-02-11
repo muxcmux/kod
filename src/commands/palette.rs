@@ -110,9 +110,7 @@ impl Component for Palette {
             // scroll by a page
             // KeyCode::PageUp => todo!(),
             // KeyCode::PageDown => todo!(),
-            KeyCode::Esc => EventResult::Consumed(Some(Box::new(|compositor, _| {
-                compositor.pop();
-            }))),
+            KeyCode::Esc => self.dismiss(),
             _ => {
                 self.index = 0;
                 self.input.handle_key_event(event);

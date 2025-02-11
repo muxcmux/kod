@@ -1,3 +1,5 @@
+use crate::graphemes;
+
 pub(crate) mod buffer;
 pub(crate) mod terminal;
 pub(crate) mod borders;
@@ -6,6 +8,36 @@ pub(crate) mod text_input;
 pub(crate) mod style;
 pub(crate) mod theme;
 pub(crate) mod scroll;
+pub(crate) mod modal;
+
+pub fn break_into_lines(string: &str, max_width: usize) -> Vec<String> {
+    let width = graphemes::width(string);
+    if width <= max_width {
+        return vec![string.to_string()]
+    }
+
+    let mut line_width = 0;
+    let mut line = String::new();
+    let mut lines = Vec::with_capacity(width / max_width + 1);
+
+    for word in string.split(' ') {
+        let width = graphemes::width(word).max(1);
+        if line_width + width <= max_width {
+            line.push_str(word);
+            line.push(' ');
+            line_width += width + 1
+        } else {
+            lines.push(line);
+            line = word.to_string();
+            line.push(' ');
+            line_width = width + 1;
+        }
+    }
+
+    lines.push(line);
+
+    lines
+}
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Default)]
 pub struct Position {

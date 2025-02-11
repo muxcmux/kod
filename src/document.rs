@@ -9,6 +9,20 @@ make_inc_id_type!(DocumentId);
 
 static SCRATCH: &str = "[scratch]";
 
+pub fn cwd_relative_name(path: &Path) -> Cow<'_, str> {
+    match path.file_name() {
+        Some(f) => {
+            if let Ok(cwd) = std::env::current_dir() {
+                if !path.starts_with(cwd) {
+                    return path.to_string_lossy()
+                }
+            }
+            f.to_string_lossy()
+        },
+        None => SCRATCH.into()
+    }
+}
+
 pub struct Document {
     pub id: DocumentId,
     pub rope: Rope,
@@ -137,17 +151,7 @@ impl Document {
 
     pub fn filename_display(&self) -> Cow<'_, str> {
         match &self.path {
-            Some(p) => match p.file_name() {
-                Some(f) => {
-                    if let Ok(cwd) = std::env::current_dir() {
-                        if !p.starts_with(cwd) {
-                            return p.to_string_lossy()
-                        }
-                    }
-                    f.to_string_lossy()
-                },
-                None => SCRATCH.into()
-            }
+            Some(p) => cwd_relative_name(p),
             None => SCRATCH.into(),
         }
     }

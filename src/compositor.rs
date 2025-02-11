@@ -43,9 +43,16 @@ pub trait Component: Any + AnyComponent {
 
     fn dismiss(&mut self) -> EventResult {
         EventResult::Consumed(Some(Box::new(|compositor: &mut Compositor, _: &mut Context| {
-            _ = compositor.pop();
+            compositor.pop();
         })))
     }
+
+    // // Other components can implement this function to get access to
+    // // the component that was just popped off the compositor stack
+    // // and is about to be removed
+    // fn component_popped(&mut self, _other: &dyn Component) {
+    //     // do nothing
+    // }
 }
 
 pub struct Compositor {
@@ -61,6 +68,14 @@ impl Compositor {
     pub fn push(&mut self, layer: Box<dyn Component>) {
         self.layers.push(layer);
     }
+
+    // pub fn pop(&mut self) {
+    //     if let Some(c) = self.layers.pop() {
+    //         for layer in self.layers.iter_mut().rev() {
+    //             layer.component_popped(c.as_ref());
+    //         }
+    //     }
+    // }
 
     pub fn pop(&mut self) -> Option<Box<dyn Component>>  {
         self.layers.pop()
