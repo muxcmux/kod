@@ -38,7 +38,7 @@ pub struct Document {
 }
 
 impl Document {
-    pub fn new(id: DocumentId, rope: Rope, path: Option<PathBuf>) -> Self {
+    pub fn new(id: DocumentId, pane_id: PaneId, rope: Rope, path: Option<PathBuf>) -> Self {
         let (language, readonly) = match &path {
             Some(p) => {
                 let ro = std::fs::metadata(p).is_ok_and(|m| m.permissions().readonly());
@@ -67,12 +67,12 @@ impl Document {
             old_state: None,
             path,
             readonly,
-            selections: HashMap::new(),
+            selections: HashMap::from([(pane_id, Selection::default())]),
             last_saved_revision: 0,
         }
     }
 
-    pub fn open(id: DocumentId, path: &Path) -> Result<(bool, Self)> {
+    pub fn open(id: DocumentId, pane_id: PaneId, path: &Path) -> Result<(bool, Self)> {
         if !path.metadata()?.is_file() {
             bail!("Cannot open path: {:?}", path)
         }
@@ -85,7 +85,7 @@ impl Document {
 
         let rope = Rope::from(contents);
 
-        let mut doc = Self::new(id, rope, Some(path.to_path_buf()));
+        let mut doc = Self::new(id, pane_id, rope, Some(path.to_path_buf()));
         let hard_wrapped = doc.hard_wrap_long_lines();
 
         Ok((hard_wrapped, doc))
@@ -156,31 +156,22 @@ impl Document {
         }
     }
 
-    pub fn selection(&self, pane_id: PaneId) -> Selection {
-        if let Some(s) = self.selections.get(&pane_id) {
-            return *s;
-        }
-
-        Selection::default()
+    pub fn selection(&self, pane_id: PaneId) -> &Selection {
+        &self.selections[&pane_id]
     }
-
-    // pub fn selections(&self) -> &HashMap<PaneId, Selection> {
-    //     &self.selections
-    // }
 
     pub fn set_selection(&mut self, pane_id: PaneId, selection: Selection) {
         self.selections.insert(pane_id, selection);
     }
 
-    pub fn modify(&mut self, change: Change, selection: Selection) {
-        if !self.readonly {
-            self.apply(
-                &Transaction::change(
-                    &self.rope,
-                    [change].into_iter()
-                ).set_selection(selection)
-            )
+    pub fn modify(&mut self, changes: Vec<Change>, sel: Selection) -> Option<Transaction> {
+        if self.readonly {
+            return None
         }
+
+        let transaction = Transaction::change(&self.rope, changes.into_iter()).set_selection(sel);
+        self.apply(&transaction);
+        Some(transaction)
     }
 
     fn apply(&mut self, transaction: &Transaction) {
@@ -195,7 +186,7 @@ impl Document {
         if t.is_empty() {
             self.old_state = Some(State {
                 rope: self.rope.clone(),
-                selection: transaction.selection,
+                selection: transaction.selection.clone(),
             });
         }
 
@@ -238,7 +229,7 @@ impl Document {
 
         if let Some(t) = if undo { history.undo() } else { history.redo() } {
             self.apply(t);
-            ret = Some(t.selection);
+            ret = Some(t.selection.clone());
         }
 
         self.history.set(history);

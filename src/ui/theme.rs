@@ -131,6 +131,12 @@ pub static PALETTE: Lazy<HashMap<&str, &str>> = Lazy::new(|| {
         ("blossom","#957fb8"),
         ("sky", "#7eb3c9"),
         ("selected", "#49473e"),
+
+        ("magenta", "blossom"),
+        ("green", "leaf"),
+        ("red", "rose"),
+        ("blue", "water"),
+        ("cyan", "sky"),
     ])
 });
 
@@ -189,8 +195,40 @@ pub static THEME: Lazy<Theme> = Lazy::new(|| {
         "ui.statusline" => {
             "bg" => "light_bg",
         },
+        "ui.statusline.normal" => {
+            "fg" => "blue",
+            "mod" => "rev",
+        },
+        "ui.statusline.insert" => {
+            "fg" => "green",
+            "mod" => "rev",
+        },
+        "ui.statusline.select" => {
+            "fg" => "magenta",
+            "mod" => "rev",
+        },
+        "ui.statusline.replace" => {
+            "fg" => "yellow",
+            "mod" => "rev",
+        },
         "ui.statusline.modified" => "wood",
         "ui.statusline.read_only" => "muted",
+
+        "ui.multicursor" => {
+            "mod" => "rev",
+        },
+        "ui.multicursor.insert" => {
+            "fg" => "green",
+            "mod" => "rev",
+        },
+        "ui.multicursor.select" => {
+            "fg" => "magenta",
+            "mod" => "rev",
+        },
+        "ui.multicursor.replace" => {
+            "ulc" => "yellow",
+            "ul" => "line",
+        },
 
         "comment" => "muted",
         "operator" => "wood",

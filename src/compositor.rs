@@ -4,6 +4,7 @@ use crate::ui::Rect;
 use std::any::Any;
 
 use crossterm::{cursor::SetCursorStyle, event::{Event, KeyEvent}};
+use smartstring::{LazyCompact, SmartString};
 
 use crate::editor::Editor;
 
@@ -23,7 +24,11 @@ pub trait Component: Any + AnyComponent {
         EventResult::Ignored(None)
     }
 
-    fn handle_paste(&mut self, _str: &str, _ctx: &mut Context) -> EventResult {
+    fn handle_paste(&mut self, _string: &str, _ctx: &mut Context) -> EventResult {
+        EventResult::Ignored(None)
+    }
+
+    fn handle_buffered_input(&mut self, _string: SmartString<LazyCompact>, _ctx: &mut Context) -> EventResult {
         EventResult::Ignored(None)
     }
 
@@ -119,6 +124,31 @@ impl Compositor {
                 Event::Paste(ref s) => layer.handle_paste(s, ctx),
                 _ => unreachable!()
             };
+            match result {
+                EventResult::Consumed(callback) => {
+                    if let Some(cb) = callback { callbacks.push(cb) }
+                    consumed = true;
+                    break;
+                }
+                EventResult::Ignored(callback) => {
+                    if let Some(cb) = callback { callbacks.push(cb) }
+                }
+            };
+        }
+
+        for callback in callbacks {
+            callback(self, ctx)
+        }
+
+        consumed
+    }
+
+    pub fn handle_buffered_input(&mut self, string: SmartString<LazyCompact>, ctx: &mut Context) -> bool {
+        let mut callbacks = vec![];
+        let mut consumed = false;
+
+        for layer in self.layers.iter_mut().rev() {
+            let result = layer.handle_buffered_input(string.clone(), ctx);
             match result {
                 EventResult::Consumed(callback) => {
                     if let Some(cb) = callback { callbacks.push(cb) }

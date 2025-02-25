@@ -1,11 +1,12 @@
 use std::collections::HashMap;
 
 use crate::commands;
-use crate::commands::actions::ActionResult;
+use crate::commands::actions::append_or_replace_string;
+use crate::commands::actions::append_string;
 use crate::commands::actions::ActionStatus;
 use crate::compositor;
 use crate::current;
-use crate::graphemes;
+use crate::graphemes::NEW_LINE;
 use crate::gutter;
 use crate::pane;
 use crate::panes::PaneId;
@@ -16,9 +17,11 @@ use crossterm::{
     cursor::SetCursorStyle,
     event::{KeyCode, KeyEvent},
 };
+use smartstring::LazyCompact;
+use smartstring::SmartString;
 
 use crate::{
-    commands::{actions, KeyCallback},
+    commands::KeyCallback,
     compositor::{Component, Context, EventResult},
     editor::Mode,
     keymap::{KeymapResult, Keymaps},
@@ -68,15 +71,20 @@ impl EditorView {
         &mut self,
         event: KeyEvent,
         ctx: &mut commands::Context,
-        char_func: fn(char, &mut commands::Context) -> ActionResult,
     ) -> EventResult {
         match self.handle_keymap_event(event, ctx) {
             Some(KeymapResult::NotFound) => {
-                if let KeyCode::Char(c) = event.code {
-                    _ = char_func(c, ctx);
-                    EventResult::Consumed(None)
-                } else {
-                    EventResult::Ignored(None)
+                match event.code {
+                    KeyCode::Char(c) => {
+                        ctx.editor.request_buffered_input(c);
+                        EventResult::Consumed(None)
+                    },
+                    KeyCode::Enter => {
+                        ctx.editor.request_buffered_input(NEW_LINE);
+                        EventResult::Consumed(None)
+                    },
+                    KeyCode::Tab => todo!(),
+                    _ => EventResult::Ignored(None)
                 }
             }
             Some(KeymapResult::Cancelled(pending)) => {
@@ -84,9 +92,14 @@ impl EditorView {
                 for event in pending {
                     match event.code {
                         KeyCode::Char(c) => {
-                            _ = char_func(c, ctx);
+                            ctx.editor.request_buffered_input(c);
                             result = EventResult::Consumed(None);
-                        }
+                        },
+                        KeyCode::Enter => {
+                            ctx.editor.request_buffered_input(NEW_LINE);
+                            result = EventResult::Consumed(None);
+                        },
+                        KeyCode::Tab => todo!(),
                         _ => {
                             if let KeymapResult::Found(f) = self.keymaps.get(&ctx.editor.mode, event) {
                                 match f(ctx) {
@@ -110,7 +123,7 @@ impl EditorView {
 const MAX_OFFSET_X: usize = 6;
 const MAX_OFFSET_Y: usize = 3;
 
-fn ensure_cursor_is_in_view(ctx: &mut Context) -> HashMap<PaneId, (Rect, Rect)> {
+fn ensure_pane_cursors_are_in_view(ctx: &mut Context) -> HashMap<PaneId, (Rect, Rect)> {
     let mut areas = HashMap::new();
 
     for (_, pane) in ctx.editor.panes.panes.iter_mut() {
@@ -122,7 +135,7 @@ fn ensure_cursor_is_in_view(ctx: &mut Context) -> HashMap<PaneId, (Rect, Rect)> 
         let document_area = pane.area.clip_left(gutter_area.width);
 
         pane.view.scroll.adjust_offset(&document_area, MAX_OFFSET_X, MAX_OFFSET_Y);
-        pane.view.scroll.ensure_point_is_visible(sel.head.x, sel.head.y, &document_area, None);
+        pane.view.scroll.ensure_point_is_visible(sel.primary().head.x, sel.primary().head.y, &document_area, None);
 
         areas.insert(pane.id, (gutter_area, document_area));
     }
@@ -139,7 +152,7 @@ impl Component for EditorView {
         // the view's visible byte range. This function also returns the
         // calculated areas for the gutter and document for each pane for
         // convenience
-        let areas = ensure_cursor_is_in_view(ctx);
+        let areas = ensure_pane_cursors_are_in_view(ctx);
 
         // re-borrow as immutable
         let ctx = &*ctx;
@@ -173,8 +186,8 @@ impl Component for EditorView {
             EventResult::Consumed(None)
         } else {
             match action_ctx.editor.mode {
-                Mode::Insert => self.handle_insert_mode_key_event(event, &mut action_ctx, actions::append_character),
-                Mode::Replace => self.handle_insert_mode_key_event(event, &mut action_ctx, actions::append_or_replace_character),
+                Mode::Insert => self.handle_insert_mode_key_event(event, &mut action_ctx),
+                Mode::Replace => self.handle_insert_mode_key_event(event, &mut action_ctx),
                 _ => self.handle_normal_mode_key_event(event, &mut action_ctx),
             }
         };
@@ -205,34 +218,53 @@ impl Component for EditorView {
         }
     }
 
-    fn handle_paste(&mut self, str: &str, ctx: &mut Context) -> EventResult {
-        let (pane, doc) = current!(ctx.editor);
-        if doc.readonly {
-            ctx.editor.set_warning("Turn off readonly mode before editing");
+    fn handle_buffered_input(&mut self, string: SmartString<LazyCompact>, ctx: &mut Context) -> EventResult {
+        let mut action_ctx = commands::Context {
+            editor: ctx.editor,
+            compositor_callbacks: vec![],
+            on_next_key_callback: None,
+        };
+
+        if let Err(status) = match action_ctx.editor.mode {
+            Mode::Insert => append_string(string, &mut action_ctx),
+            Mode::Replace => append_or_replace_string(string, &mut action_ctx),
+            _ => Ok(()),
+        } {
+            match status {
+                ActionStatus::Warning(cow) => action_ctx.editor.set_warning(cow),
+                ActionStatus::Error(cow) => action_ctx.editor.set_error(cow),
+            }
+        }
+
+        EventResult::Consumed(None)
+    }
+
+    fn handle_paste(&mut self, string: &str, ctx: &mut Context) -> EventResult {
+        let mut action_ctx = commands::Context {
+            editor: ctx.editor,
+            compositor_callbacks: vec![],
+            on_next_key_callback: None,
+        };
+
+        if let Err(status) = match action_ctx.editor.mode {
+            Mode::Replace => append_or_replace_string(string.into(), &mut action_ctx),
+            _ => append_string(string.into(), &mut action_ctx),
+        } {
+            match status {
+                ActionStatus::Warning(cow) => action_ctx.editor.set_warning(cow),
+                ActionStatus::Error(cow) => action_ctx.editor.set_error(cow),
+            }
             return EventResult::Consumed(None)
         }
 
-        let sel = doc.selection(pane.id).collapse_to_head();
-        let range = sel.byte_range(&doc.rope, false, true);
-
-        doc.modify((range, Some(str.into())), sel);
-
-        // commit transaction straight away if not in insert mode
-        if ctx.editor.mode != Mode::Insert {
-           doc.commit_transaction_to_history();
+        if action_ctx.editor.mode != Mode::Insert {
+            let (_, doc) = current!(action_ctx.editor);
+            doc.commit_transaction_to_history();
         }
 
-        let delta_y = str.lines().count().saturating_sub(1);
-        let last_line = str.lines().last().unwrap();
-        let delta_x = graphemes::width(last_line);
-        let (x, y) = if delta_y == 0 {
-            (Some(sel.head.x + delta_x), None)
-        } else {
-            (Some(delta_x), Some(sel.head.y + delta_y))
-        };
-
-        let new_sel = sel.head_to(&doc.rope, x, y, &ctx.editor.mode);
-        doc.set_selection(pane.id, new_sel);
+        if action_ctx.editor.mode == Mode::Select {
+            action_ctx.editor.mode = Mode::Normal;
+        }
 
         EventResult::Consumed(None)
     }

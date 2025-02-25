@@ -120,8 +120,8 @@ impl Transaction {
         let mut last = 0;
 
         for (Range {start, end, ..}, text) in changes {
-            debug_assert!(last <= start);
-            debug_assert!(start <= end);
+            debug_assert!(last <= start, "last({last}) is not <= start({start})");
+            debug_assert!(start <= end, "start({start}) is not <= end({end})");
 
             operations.push(Retain(start - last));
 
@@ -307,7 +307,7 @@ impl Transaction {
     pub fn invert(&self, original: &State) -> Self {
         let mut transaction = Self {
             operations: Vec::with_capacity(self.operations.len()),
-            selection: original.selection,
+            selection: original.selection.clone(),
         };
 
         let mut offset = 0;
@@ -342,7 +342,7 @@ impl Transaction {
                 Delete(bytes) => { rope.delete(cursor..cursor + *bytes) },
                 Insert(text) => {
                     rope.insert(cursor, text);
-                    cursor += text.bytes().count();
+                    cursor += text.len();
                 },
             }
         }
@@ -352,6 +352,7 @@ impl Transaction {
 #[cfg(test)]
 mod test {
     use crop::Rope;
+    use smallvec::SmallVec;
     use crate::history::State;
     use crate::selection;
 
@@ -378,8 +379,14 @@ mod test {
 
     #[test]
     fn transaction_composition() {
+        let selection = selection::Selection {
+            primary_index: 0,
+            ranges: SmallVec::from(
+                [selection::Range { head: selection::Cursor { x: 1, y: 0 }, ..Default::default() }]
+            )
+        };
         let a = Transaction {
-            selection: selection::Selection { head: selection::Cursor { x: 1, y: 0 }, ..Default::default()},
+            selection,
             operations: vec![
                 Retain(5),
                 Insert(" test!".into()),
@@ -389,8 +396,14 @@ mod test {
             ],
         };
 
+        let selection = selection::Selection {
+            primary_index: 0,
+            ranges: SmallVec::from(
+                [selection::Range { head: selection::Cursor { x: 5, y: 0 }, ..Default::default() }]
+            )
+        };
         let b = Transaction {
-            selection: selection::Selection { head: selection::Cursor { x: 5, y: 0 }, ..Default::default()},
+            selection,
             operations: vec![
                 Delete(10),
                 Insert("世orld".into()),
@@ -403,8 +416,8 @@ mod test {
         let composed = a.compose(b);
         composed.apply(&mut text);
         assert_eq!(text, "世orld! abc");
-        assert_eq!(composed.selection.head.x, 5);
-        assert_eq!(composed.selection.head.y, 0);
+        assert_eq!(composed.selection.primary().head.x, 5);
+        assert_eq!(composed.selection.primary().head.y, 0);
     }
 
     #[test]

@@ -1,13 +1,15 @@
 use std::{env, path::PathBuf, thread};
 
 use crossterm::{cursor::SetCursorStyle, event::{read, KeyEvent, KeyEventKind}};
-use crate::{components::{alert::Alert, editor_view::EditorView, files::Files, status_line::StatusLine}, compositor::{Compositor, Context}, editor::Editor, ui::{terminal::{self, Terminal}, Rect}};
+use smartstring::{LazyCompact, SmartString};
+use crate::{components::{alert::Alert, editor_view::EditorView, files::Files, status_line::StatusLine}, compositor::{Compositor, Context}, editor::Editor, panes::PaneId, ui::{terminal::{self, Terminal}, Rect}};
 use anyhow::Result;
 
 pub enum Event {
     Draw,
     Quit,
     Term(crossterm::event::Event),
+    BufferedInput(SmartString<LazyCompact>),
 }
 
 pub struct Application {
@@ -35,7 +37,7 @@ impl Default for Application {
             let path = PathBuf::from(args.pop().unwrap());
             if let Ok(path) = path.canonicalize() {
                 if path.is_file() {
-                    match editor.open(&path) {
+                    match editor.open(PaneId::default(), &path) {
                         Ok((hard_wrapped, id)) => {
                             editor.panes.load_doc_in_focus(id);
                             if hard_wrapped {
@@ -63,7 +65,7 @@ impl Default for Application {
 
         // Open a scratch buffer if no files are loaded
         if editor.documents.is_empty() {
-            let id = editor.open_scratch();
+            let id = editor.open_scratch(PaneId::default());
             editor.panes.load_doc_in_focus(id);
         }
 
@@ -96,6 +98,11 @@ impl Application {
                 Ok(event) => match event {
                     Event::Draw => { self.draw()? },
                     Event::Quit => { break },
+                    Event::BufferedInput(s) => {
+                        if self.handle_buffered_input(s) {
+                            self.draw()?
+                        }
+                    }
                     Event::Term(e) => {
                         if self.handle_crossterm_event(e) {
                             self.draw()?
@@ -131,6 +138,11 @@ impl Application {
             Event::FocusLost => false,
             Event::Mouse(_) => false,
         }
+    }
+
+    fn handle_buffered_input(&mut self, string: SmartString<LazyCompact>) -> bool {
+        let mut ctx = Context { editor: &mut self.editor };
+        self.compositor.handle_buffered_input(string, &mut ctx)
     }
 
     fn draw(&mut self) -> Result<()> {

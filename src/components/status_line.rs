@@ -13,10 +13,19 @@ impl Component for StatusLine {
         let (mut x, y) = (area.left(), area.top());
 
         // draw background
-        let line = " ".repeat(area.width as usize);
-        buffer.put_str(&line, x, y, THEME.get("ui.statusline"));
+        buffer.set_style(area, THEME.get("ui.statusline"));
 
-        x += 1_u16;
+        // editor mode
+        let (mode, style) = match ctx.editor.mode {
+            crate::editor::Mode::Normal => (" NOR ", THEME.get("ui.statusline.normal")),
+            crate::editor::Mode::Insert => (" INS ", THEME.get("ui.statusline.insert")),
+            crate::editor::Mode::Replace => (" REP ", THEME.get("ui.statusline.replace")),
+            crate::editor::Mode::Select => (" SEL ", THEME.get("ui.statusline.select")),
+        };
+
+        buffer.put_str(mode, x, y, style);
+
+        x += 6_u16;
 
         let (pane, doc) = current!(ctx.editor);
         match &ctx.editor.status {
@@ -57,9 +66,16 @@ impl Component for StatusLine {
         }
 
         let sel = doc.selection(pane.id);
-        let cursor_position = format!(" {}:{} ", sel.head.y + 1, sel.grapheme_at_head(&doc.rope).0 + 1);
-        let w = area.width.saturating_sub(cursor_position.chars().count() as u16);
+        let cursor_position = format!("{}:{} ", sel.primary().head.y + 1, sel.primary().grapheme_at_head(&doc.rope).0 + 1);
+        let cursor_position_len = cursor_position.chars().count() as u16;
+        let w = area.width.saturating_sub(cursor_position_len);
         buffer.put_str(&cursor_position, w, y, THEME.get("ui.statusline.cursor_pos"));
+
+        if sel.ranges.len() > 1 {
+            let cursors = format!("󰆿({}) ", sel.ranges.len());
+            let x = area.width.saturating_sub(cursor_position_len + cursors.chars().count() as u16);
+            buffer.put_str(&cursors, x, y, THEME.get("ui.statusline.cursor_len"));
+        }
     }
 }
 

@@ -26,6 +26,7 @@ This is a high-level, unordered, non-exhaustive list of features I want in kod.
 * 🟡 Vim motions: The most obvious ones. I try to add more as I go, but full vim parity is not a goal
 * 🟢 Load/Save files from disk
 * 🟢 Unicode characters
+* 🟢 Multiple cursors
 * 🟢 Undo/Redo
 * 🟢 Select mode (similar to vim visual mode)
 * 🟢 Replace mode

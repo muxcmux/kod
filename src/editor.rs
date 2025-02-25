@@ -1,12 +1,13 @@
-use crate::{application::Event, commands::actions::GotoCharacterMove, document::DocumentId, graphemes::NEW_LINE, panes::Panes, registers::Registers, search::SearchState, ui::Rect};
-use std::{borrow::Cow, collections::BTreeMap, fs, path::Path, sync::mpsc::{self, Receiver, Sender}};
+use crate::{application::Event, commands::actions::GotoCharacterMove, document::DocumentId, graphemes::NEW_LINE, panes::{PaneId, Panes}, registers::Registers, search::SearchState, ui::Rect};
+use std::{borrow::Cow, collections::BTreeMap, fs, path::Path, sync::mpsc::{self, Receiver, Sender}, thread, time::{Duration, Instant}};
 
 use crop::Rope;
+use smartstring::{LazyCompact, SmartString};
 
 use crate::document::Document;
 use anyhow::Result;
 
-#[derive(Eq, Hash, PartialEq, Debug)]
+#[derive(Eq, Hash, PartialEq, Debug, Clone)]
 pub enum Mode {
     Normal,
     Insert,
@@ -27,6 +28,50 @@ pub struct EditorStatus {
     pub message: Cow<'static, str>,
 }
 
+struct InputDebounceBuffer {
+    timeout: Duration,
+    last_invoked: Instant,
+    tx: Sender<(char, Sender<Event>)>,
+    debounce_tx: Sender<char>,
+}
+
+impl InputDebounceBuffer {
+    fn new(timeout: Duration) -> Self {
+        let (tx, rx) = mpsc::channel::<(char, Sender<Event>)>();
+        let (debounce_tx, debounce_rx) = mpsc::channel();
+        let mut buffer: SmartString<LazyCompact> = SmartString::new();
+
+        thread::spawn(move || {
+            while let Ok((c, reply)) = rx.recv() {
+                buffer.push(c);
+                while let Ok(c) = debounce_rx.recv_timeout(timeout) {
+                    buffer.push(c);
+                }
+                _ = reply.send(Event::BufferedInput(buffer.clone()));
+                buffer.clear();
+            }
+        });
+
+        InputDebounceBuffer {
+            timeout,
+            last_invoked: Instant::now(),
+            tx,
+            debounce_tx,
+        }
+    }
+
+    fn buffer(&mut self, c: char, reply: Sender<Event>) {
+        if self.last_invoked.elapsed() > self.timeout {
+            _ = self.tx.send((c, reply));
+        } else {
+            _ = self.debounce_tx.send(c);
+        }
+
+        self.last_invoked = Instant::now();
+    }
+}
+
+
 pub struct Editor {
     pub mode: Mode,
     pub panes: Panes,
@@ -36,6 +81,7 @@ pub struct Editor {
     next_doc_id: DocumentId,
     pub status: Option<EditorStatus>,
     pub last_goto_character_move: Option<GotoCharacterMove>,
+    input_buffer: InputDebounceBuffer,
     pub tx: Sender<Event>,
     pub rx: Receiver<Event>,
 }
@@ -69,6 +115,7 @@ impl Editor {
             tx,
             last_goto_character_move: None,
             registers: Registers::default(),
+            input_buffer: InputDebounceBuffer::new(Duration::from_millis(10)),
             search: SearchState::default(),
         }
     }
@@ -98,7 +145,7 @@ impl Editor {
         self.documents.iter().any(|(_, doc)| doc.is_modified())
     }
 
-    pub fn open(&mut self, path: &Path) -> Result<(bool, DocumentId)> {
+    pub fn open(&mut self, pane_id: PaneId, path: &Path) -> Result<(bool, DocumentId)> {
         let id = self.documents.values()
             .find(|doc| {
                 match &doc.path {
@@ -117,7 +164,7 @@ impl Editor {
             (false, id)
         } else {
             let next_id = self.next_doc_id;
-            let (hard_wrapped, doc) = Document::open(next_id, path)?;
+            let (hard_wrapped, doc) = Document::open(next_id, pane_id, path)?;
 
             self.documents.insert(next_id, doc);
             self.next_doc_id.advance();
@@ -127,10 +174,10 @@ impl Editor {
         Ok((hard_wrapped, id))
     }
 
-    pub fn open_scratch(&mut self) -> DocumentId {
+    pub fn open_scratch(&mut self, pane_id: PaneId) -> DocumentId {
         let rope = Rope::from(NEW_LINE.to_string());
         let next_id = self.next_doc_id;
-        let doc = Document::new(next_id, rope, None);
+        let doc = Document::new(next_id, pane_id, rope, None);
         self.documents.insert(next_id, doc);
         self.next_doc_id.advance();
         next_id
@@ -159,5 +206,9 @@ impl Editor {
 
     pub fn quit(&self) {
         _ = self.tx.send(Event::Quit);
+    }
+
+    pub fn request_buffered_input(&mut self, c: char) {
+        self.input_buffer.buffer(c, self.tx.clone());
     }
 }

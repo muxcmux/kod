@@ -3,16 +3,17 @@ use super::Keymap;
 
 pub fn normal_mode_keymap() -> Keymap {
     map!({
+        "esc" => clean_state,
         ":" => command_palette,
         "R" => enter_replace_mode,
         "v" => enter_select_mode,
 
         "minus" => open_files,
 
-        "h" | "left" | "backspace" => cursor_left,
-        "j" | "down" | "enter" => cursor_down,
-        "k" | "up" => cursor_up,
-        "l" | "right" => cursor_right,
+        "h" => move_left,
+        "j" => move_down,
+        "k" => move_up,
+        "l" => move_right,
         "C-u" | "pageup" => half_page_up,
         "C-d" | "pagedown" => half_page_down,
         "w" => goto_word_start_forward,
@@ -28,11 +29,16 @@ pub fn normal_mode_keymap() -> Keymap {
         ";" => repeat_goto_character_next,
         "," => repeat_goto_character_prev,
 
+        "A-j" => add_cursor_below,
+        "A-k" => add_cursor_above,
+        "A-l" => add_cursor_next_word,
+        "A-h" => add_cursor_prev_word,
+
         "C-w" => {
-            "h" | "left" | "C-h" => switch_pane_left,
-            "l" | "right" | "C-l" => switch_pane_right,
-            "k" | "up" | "C-k" => switch_pane_top,
-            "j" | "down" | "C-j" => switch_pane_bottom,
+            "h" | "C-h" => switch_pane_left,
+            "l" | "C-l" => switch_pane_right,
+            "k" | "C-k" => switch_pane_top,
+            "j" | "C-j" => switch_pane_bottom,
             "w" | "C-w" => switch_to_last_pane,
         },
 
@@ -119,10 +125,10 @@ pub fn insert_mode_keymap() -> Keymap {
     map!({
         "esc" => enter_normal_mode,
 
-        "left" => cursor_left,
-        "down" => cursor_down,
-        "up" => cursor_up,
-        "right" => cursor_right,
+        "left" => move_left,
+        "down" => move_down,
+        "up" => move_up,
+        "right" => move_right,
 
         "S-right" => goto_word_start_forward,
         "S-left" => goto_word_start_backward,
@@ -135,8 +141,6 @@ pub fn insert_mode_keymap() -> Keymap {
         },
 
         "backspace" => delete_symbol_to_the_left,
-
-        "enter" => append_new_line,
     })
 }
 
@@ -144,10 +148,10 @@ pub fn replace_mode_keymap() -> Keymap {
     map!({
         "esc" => enter_normal_mode,
 
-        "left" | "backspace" => cursor_left,
-        "down" => cursor_down,
-        "up" => cursor_up,
-        "right" => cursor_right,
+        "left" | "backspace" => move_left,
+        "down" => move_down,
+        "up" => move_up,
+        "right" => move_right,
 
         "C-h" | "home" => goto_line_first_non_whitespace,
         "C-l" | "end" => goto_eol,
@@ -155,8 +159,6 @@ pub fn replace_mode_keymap() -> Keymap {
         "j" => {
             "k" => enter_normal_mode,
         },
-
-        "enter" => append_new_line,
     })
 }
 
@@ -165,15 +167,15 @@ pub fn select_mode_keymap() -> Keymap {
         "esc" => enter_normal_mode,
         "v" => expand_selection_to_whole_lines,
 
-        "h" | "left" | "backspace" => cursor_left,
-        "j" | "down" | "enter" => cursor_down,
-        "k" | "up" => cursor_up,
-        "l" | "right" => cursor_right,
+        "h" => move_left,
+        "j" => move_down,
+        "k" => move_up,
+        "l" => move_right,
         "C-u" | "pageup" => half_page_up,
         "C-d" | "pagedown" => half_page_down,
-        "w" => goto_word_start_forward,
+        "w" | "S-right" => goto_word_start_forward,
         "W" => goto_long_word_start_forward,
-        "b" => goto_word_start_backward,
+        "b" | "S-left" => goto_word_start_backward,
         "B" => goto_long_word_start_backward,
         "e" => goto_word_end_forward,
         "E" => goto_long_word_end_forward,
@@ -199,6 +201,6 @@ pub fn select_mode_keymap() -> Keymap {
         "c" => change_selection,
         "C" => change_selection_linewise,
 
-        "o" => invert_selection,
+        "o" => flip_selection,
     })
 }

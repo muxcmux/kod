@@ -3,7 +3,7 @@ use std::iter::{Peekable, Rev};
 use crop::{iter::Graphemes, Rope, RopeSlice};
 use crossterm::event::KeyCode;
 
-use crate::{graphemes::{width, GraphemeCategory}, selection::Selection};
+use crate::{graphemes::{width, GraphemeCategory}, selection};
 
 // Need to expand this to account for starting and ending row as well
 pub struct Range {
@@ -48,15 +48,15 @@ impl TryFrom<KeyCode> for TextObjectKind {
 }
 
 impl TextObjectKind {
-    pub fn inside(&self, rope: &Rope, selection: &Selection) -> Range {
+    pub fn inside(&self, rope: &Rope, range: &selection::Range) -> Option<Range> {
         match self {
             Self::Word => {
-                let mut words = Words::new(rope.line(selection.head.y));
-                words.find(|w| w.contains(&selection.head.x)).unwrap()
+                let mut words = Words::new(rope.line(range.head.y));
+                words.find(|w| w.contains(&range.head.x))
             },
             Self::LongWord => {
-                let mut words = LongWords::new(rope.line(selection.head.y));
-                words.find(|w| w.contains(&selection.head.x)).unwrap()
+                let mut words = LongWords::new(rope.line(range.head.y));
+                words.find(|w| w.contains(&range.head.x))
             }
         }
     }

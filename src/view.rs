@@ -2,7 +2,7 @@ use std::ops::Range;
 
 use crop::Rope;
 
-use crate::{compositor::Context, editor::Mode, graphemes::{self, GraphemeCategory}, language::syntax::{Highlight, HighlightEvent}, panes::Pane, selection::Selection, ui::{buffer::Buffer, scroll::Scroll, style::Style, theme::THEME, Rect}};
+use crate::{compositor::Context, editor::Mode, graphemes::{self, GraphemeCategory}, language::syntax::{Highlight, HighlightEvent}, panes::Pane, selection::Selection, ui::{buffer::Buffer, scroll::Scroll, style::Style, theme::THEME, Position, Rect}};
 
 /// A wrapper around a HighlightIterator
 /// that merges the layered highlights to create the final text style
@@ -125,7 +125,7 @@ impl View {
                             }
                         }
 
-                        buffer.put_symbol(&g, x, y, visual_selection_style(style, &sel, col, row, &ctx.editor.mode));
+                        buffer.put_symbol(&g, x, y, visual_selection_style(style, sel, col, row, &ctx.editor.mode));
 
                         if GraphemeCategory::from(&g) == GraphemeCategory::Whitespace {
                             trailing_whitespace.push(x);
@@ -141,6 +141,34 @@ impl View {
                 buffer.put_symbol("~", x, y, THEME.get("text.whitespace"));
             }
         }
+
+        // render cursors
+        if pane.id == ctx.editor.panes.focus {
+            for range in sel.ranges.iter() {
+                if range != sel.primary() {
+                    // Skip rendering non-primary cursors which are off-screen
+                    if range.head.x < self.scroll.x ||
+                        range.head.y < self.scroll.y ||
+                        range.head.x >= self.scroll.x + area.width as usize ||
+                        range.head.y >= self.scroll.y + area.height as usize {
+                        continue
+                    }
+                    let position = Position {
+                        col: area.left() + (range.head.x - self.scroll.x) as u16,
+                        row: area.top() + (range.head.y - self.scroll.y) as u16,
+                    };
+                    if let Some(style) = buffer.cell_style(position.col, position.row) {
+                        let style = match ctx.editor.mode {
+                            Mode::Normal => style.patch(THEME.get("ui.multicursor.normal")),
+                            Mode::Insert => style.patch(THEME.get("ui.multicursor.insert")),
+                            Mode::Replace => style.patch(THEME.get("ui.multicursor.replace")),
+                            Mode::Select => style.patch(THEME.get("ui.multicursor.select")),
+                        };
+                        buffer.set_style(Rect { position, width: 1, height: 1 }, style);
+                    }
+                }
+            }
+        }
     }
 
     pub fn visible_byte_range(&self, rope: &Rope, height: u16) -> Range<usize> {
@@ -151,13 +179,6 @@ impl View {
 
         start..end
     }
-
-    // This needs to work with transactions
-    // pub fn insert_str_at_cursor(&mut self, rope: &mut Rope, str: &str, selection: &Selection, _mode: &Mode) {
-    //     let offset = self.byte_offset_at_cursor(rope, selection.head.x, selection.head.y);
-    //     rope.insert(offset, str);
-    //     // TODO: Move the cursor
-    // }
 }
 
 fn visual_selection_style(
@@ -171,7 +192,7 @@ fn visual_selection_style(
         return style
     }
 
-    if sel.contains_cursor(x, y) {
+    if sel.ranges.iter().any(|r| r.contains_cursor(x, y)) {
         return style.patch(THEME.get("selection"))
     }
 

@@ -72,14 +72,14 @@ impl Cell {
         self
     }
 
-    // pub fn style(&self) -> Style {
-    //     Style::default()
-    //         .fg(self.fg)
-    //         .bg(self.bg)
-    //         .underline_color(self.underline_color)
-    //         .underline_style(self.underline_style)
-    //         .add_modifier(self.modifier)
-    // }
+    pub fn style(&self) -> Style {
+        Style::default()
+            .fg(self.fg)
+            .bg(self.bg)
+            .underline_color(self.underline_color)
+            .underline_style(self.underline_style)
+            .add_modifier(self.modifier)
+    }
 }
 
 
@@ -184,6 +184,15 @@ impl Buffer {
 
             x += graphemes::width(g) as u16;
         }
+    }
+
+    pub fn cell_style(&self, x: u16, y: u16) -> Option<Style> {
+        let index = self.index(x, y);
+        if let Some(cell) = self.cells.get(index) {
+            return Some(cell.style())
+        }
+
+        None
     }
 
     pub fn set_style(&mut self, area: Rect, style: Style) {

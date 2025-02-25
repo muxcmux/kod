@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
 
-use crate::{document::DocumentId, ui::{borders::{Stroke, Symbol}, buffer::Buffer, theme::THEME, Rect}, view::View};
+use crate::{document::{Document, DocumentId}, selection::Selection, ui::{borders::{Stroke, Symbol}, buffer::Buffer, theme::THEME, Rect}, view::View};
 
 make_inc_id_type!(PaneId);
 make_inc_id_type!(NodeId);
@@ -367,9 +367,10 @@ impl Panes {
         self.resize_node_recursively(nid, area);
     }
 
-    pub fn split(&mut self, layout: Layout) {
+    pub fn split(&mut self, layout: Layout, doc: &mut Document) {
         let node = self.root.find_by_pane_id(self.focus);
 
+        let selection_pane_id = self.next_pane_id;
         // if the node is root or its parent is a different layout
         // Then we convert the current node to a container and split that
         // Otherwise, we add a new child to the parent and then
@@ -405,6 +406,9 @@ impl Panes {
             },
             None => self.split_pane(layout),
         }
+
+        // don't forget to add a default selection for this pane
+        doc.set_selection(selection_pane_id, Selection::default());
     }
 
     pub fn switch_to_last(&mut self) {

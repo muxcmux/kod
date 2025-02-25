@@ -4,7 +4,7 @@ use anyhow::{anyhow, bail, Result};
 use crossterm::{cursor::SetCursorStyle, event::{KeyCode, KeyEvent, KeyModifiers}};
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::{compositor::{Component, Compositor, Context, EventResult}, document::cwd_relative_name, graphemes, language::LANG_CONFIG, panes::Layout, ui::{border_box::BorderBox, borders::Borders, buffer::Buffer, modal::{Choice, Modal}, scroll::Scroll, style::Style, text_input::TextInput, theme::THEME, Position, Rect}};
+use crate::{compositor::{Component, Compositor, Context, EventResult}, current, document::cwd_relative_name, graphemes, language::LANG_CONFIG, panes::Layout, ui::{border_box::BorderBox, borders::Borders, buffer::Buffer, modal::{Choice, Modal}, scroll::Scroll, style::Style, text_input::TextInput, theme::THEME, Position, Rect}};
 
 use super::alert::Alert;
 
@@ -321,9 +321,12 @@ impl Files {
 
     fn open(&mut self, ctx: &mut Context, split: Option<Layout>) -> Result<EventResult> {
         if let Selection::File(path) = self.select()? {
-            let (hard_wrapped, id) = ctx.editor.open(&path)?;
+            let (pane, _) = current!(ctx.editor);
+            let pane_id = pane.id;
+            let (hard_wrapped, id) = ctx.editor.open(pane_id, &path)?;
             if let Some(split) = split {
-                ctx.editor.panes.split(split);
+                let doc = ctx.editor.documents.get_mut(&id).unwrap();
+                ctx.editor.panes.split(split, doc);
             }
             ctx.editor.panes.load_doc_in_focus(id);
             if hard_wrapped {
@@ -771,7 +774,6 @@ fn move_path_to_dir(path: &Path, dest_dir: &Path) -> Result<()> {
         if to.try_exists()? {
             bail!("{:?} already exists in {:?}", fname, dest_dir);
         }
-        log::debug!("Moving {:?} to {:?}", path, to);
         std::fs::rename(path, to)?;
     }
 

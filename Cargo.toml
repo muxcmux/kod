@@ -37,6 +37,8 @@ ahash = "0.8"
 include_dir = "0.7"
 walkdir = "2"
 
+smallvec = "1"
+
 [build-dependencies]
 anyhow = "1"
 cc = "*"

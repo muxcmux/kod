@@ -213,6 +213,7 @@ dependencies = [
  "serde",
  "serde_json",
  "slotmap",
+ "smallvec",
  "smartstring",
  "threadpool",
  "tree-sitter",

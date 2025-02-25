@@ -1,14 +1,14 @@
 use crop::Rope;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use crate::{editor::Mode, graphemes::{self, line_width, NEW_LINE, NEW_LINE_STR}, selection::Selection};
+use crate::{editor::Mode, graphemes::{self, line_width, NEW_LINE, NEW_LINE_STR}, selection::Range};
 
 use super::{buffer::Buffer, scroll::Scroll, theme::THEME, Rect};
 
 pub struct TextInput {
     pub rope: Rope,
     pub scroll: Scroll,
-    pub selection: Selection,
+    pub cursor: Range,
     pub history: Vec<String>,
     history_idx: usize,
 }
@@ -18,7 +18,7 @@ impl TextInput {
         Self {
             rope: Rope::from(NEW_LINE_STR),
             scroll: Scroll::default(),
-            selection: Selection::default(),
+            cursor: Range::default(),
             history: vec![],
             history_idx: 1,
         }
@@ -29,7 +29,7 @@ impl TextInput {
         Self {
             rope: Rope::from(NEW_LINE_STR),
             scroll: Scroll::default(),
-            selection: Selection::default(),
+            cursor: Range::default(),
             history,
             history_idx,
         }
@@ -39,7 +39,7 @@ impl TextInput {
         Self {
             rope: Rope::from(val),
             scroll: Scroll::default(),
-            selection: Selection::default(),
+            cursor: Range::default(),
             history: vec![],
             history_idx: 1,
         }
@@ -64,7 +64,7 @@ impl TextInput {
     }
 
     pub fn render(&mut self, area: Rect, buffer: &mut Buffer) {
-        self.scroll.ensure_point_is_visible(self.selection.head.x, self.selection.head.y, &area, None);
+        self.scroll.ensure_point_is_visible(self.cursor.head.x, self.cursor.head.y, &area, None);
 
         // loop through each visible line
         for row in self.scroll.y..self.scroll.y + area.height as usize {
@@ -109,37 +109,37 @@ impl TextInput {
     }
 
     fn insert_char_at_cursor(&mut self, char: char) {
-        let offset = self.selection.collapse_to_head().byte_range(&self.rope, true, false).start;
+        let offset = self.cursor.byte_range(&self.rope, &Mode::Insert).start;
         let mut buf = [0; 4];
         let text = char.encode_utf8(&mut buf);
 
         self.rope.insert(offset, text);
 
         if char == NEW_LINE {
-            self.move_cursor_to(Some(0), Some(self.selection.head.y + 1));
+            self.move_cursor_to(Some(0), Some(self.cursor.head.y + 1));
         } else {
-            self.move_cursor_to(Some(self.selection.head.x + 1), None);
+            self.move_cursor_to(Some(self.cursor.head.x + 1), None);
         }
     }
 
     fn move_cursor_to(&mut self, x: Option<usize>, y: Option<usize>) {
-        self.selection = self.selection.head_to(&self.rope, x, y, &Mode::Insert);
+        self.cursor = self.cursor.move_to(&self.rope, x, y, &Mode::Insert);
     }
 
     fn cursor_left(&mut self) {
-        self.selection = self.selection.left(&self.rope, &Mode::Insert);
+        self.cursor = self.cursor.left(&self.rope, &Mode::Insert);
     }
 
     fn cursor_right(&mut self) {
-        self.selection = self.selection.right(&self.rope, &Mode::Insert);
+        self.cursor = self.cursor.right(&self.rope, &Mode::Insert);
     }
 
     pub fn delete_to_the_left(&mut self) -> bool {
-        if self.selection.head.x > 0 {
-            let mut start = self.rope.byte_of_line(self.selection.head.y);
+        if self.cursor.head.x > 0 {
+            let mut start = self.rope.byte_of_line(self.cursor.head.y);
             let mut end = start;
-            let idx = self.selection.grapheme_at_head(&self.rope).0 - 1;
-            for (i, g) in self.rope.line(self.selection.head.y).graphemes().enumerate() {
+            let idx = self.cursor.grapheme_at_head(&self.rope).0 - 1;
+            for (i, g) in self.rope.line(self.cursor.head.y).graphemes().enumerate() {
                 if i < idx { start += g.len() }
                 if i == idx {
                     end = start + g.len();
@@ -150,11 +150,11 @@ impl TextInput {
             self.cursor_left();
             self.rope.delete(start..end);
             return true;
-        } else if self.selection.head.y > 0  {
-            let to = self.rope.byte_of_line(self.selection.head.y);
+        } else if self.cursor.head.y > 0  {
+            let to = self.rope.byte_of_line(self.cursor.head.y);
             let from = to.saturating_sub(NEW_LINE.len_utf8());
             // need to move cursor before deleting
-            self.move_cursor_to(Some(line_width(&self.rope, self.selection.head.y - 1)), Some(self.selection.head.y - 1));
+            self.move_cursor_to(Some(line_width(&self.rope, self.cursor.head.y - 1)), Some(self.cursor.head.y - 1));
             self.rope.delete(from..to);
             return true;
         }

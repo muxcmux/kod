@@ -56,11 +56,13 @@ pub fn write_quit(ctx: &mut Context) {
 }
 
 pub fn split_horizontally(ctx: &mut Context) {
-    ctx.editor.panes.split(Layout::Vertical);
+    let (_, doc) = current!(ctx.editor);
+    ctx.editor.panes.split(Layout::Vertical, doc);
 }
 
 pub fn split_vertically(ctx: &mut Context) {
-    ctx.editor.panes.split(Layout::Horizontal);
+    let (_, doc) = current!(ctx.editor);
+    ctx.editor.panes.split(Layout::Horizontal, doc);
 }
 
 pub fn toggle_readonly(ctx: &mut Context) {

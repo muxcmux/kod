@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 
+use unicode_general_category::{get_general_category, GeneralCategory::*};
 use crop::Rope;
 
 pub const NEW_LINE: char = '\n';
@@ -28,7 +29,6 @@ pub fn grapheme_is_line_ending(grapheme: &str) -> bool {
 
 impl From<&Cow<'_, str>> for GraphemeCategory {
     fn from(g: &Cow<'_, str>) -> Self {
-        use unicode_general_category::{get_general_category, GeneralCategory::*};
         match g.chars().next() {
             Some(c) => match c {
                 ws if ws.is_whitespace() => Self::Whitespace,
