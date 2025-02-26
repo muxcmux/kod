@@ -169,6 +169,20 @@ impl View {
                 }
             }
         }
+
+        // render scrollbar
+        let total = doc.rope.line_len();
+        let visible = area.height as usize;
+        if visible / total == 0 {
+            let window = ((visible as f64 / total as f64) * visible as f64) as usize;
+            let window = window.max(1);
+
+            let offset = self.scroll.y * visible / total;
+            let scroll = area.clip_left(area.width.saturating_sub(1))
+                .clip_top(offset as u16)
+                .clip_bottom(area.height.saturating_sub(offset as u16 + window as u16));
+            buffer.fill_with("▋", THEME.get("ui.scrollbar"), scroll);
+        }
     }
 
     pub fn visible_byte_range(&self, rope: &Rope, height: u16) -> Range<usize> {

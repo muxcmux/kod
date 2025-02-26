@@ -230,6 +230,11 @@ pub static THEME: Lazy<Theme> = Lazy::new(|| {
             "ul" => "line",
         },
 
+        "ui.scrollbar" => {
+            "fg" => "light_bg",
+            "mod" => "rev",
+        },
+
         "comment" => "muted",
         "operator" => "wood",
         "punctuation" => "#7d7d8d",

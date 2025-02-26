@@ -66,14 +66,9 @@ impl Component for StatusLine {
         }
 
         let sel = doc.selection(pane.id);
-        let cursor_position = format!("{}:{} ", sel.primary().head.y + 1, sel.primary().grapheme_at_head(&doc.rope).0 + 1);
-        let cursor_position_len = cursor_position.chars().count() as u16;
-        let w = area.width.saturating_sub(cursor_position_len);
-        buffer.put_str(&cursor_position, w, y, THEME.get("ui.statusline.cursor_pos"));
-
         if sel.ranges.len() > 1 {
-            let cursors = format!("󰆿({}) ", sel.ranges.len());
-            let x = area.width.saturating_sub(cursor_position_len + cursors.chars().count() as u16);
+            let cursors = format!("{} cursors ", sel.ranges.len());
+            let x = area.width.saturating_sub(cursors.chars().count() as u16);
             buffer.put_str(&cursors, x, y, THEME.get("ui.statusline.cursor_len"));
         }
     }

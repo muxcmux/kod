@@ -195,6 +195,18 @@ impl Buffer {
         None
     }
 
+    pub fn fill_with(&mut self, symbol: &str, style: Style, area: Rect) {
+        for y in area.top()..area.bottom() {
+            for x in area.left()..area.right() {
+                let index = self.index(x, y);
+                if let Some(cell) = self.cells.get_mut(index) {
+                    cell.set_symbol(symbol)
+                        .set_style(style);
+                }
+            }
+        }
+    }
+
     pub fn set_style(&mut self, area: Rect, style: Style) {
         for y in area.top()..area.bottom() {
             for x in area.left()..area.right() {
