@@ -900,7 +900,7 @@ fn delete_byte_ranges(
     doc.set_selection(pane.id, sel.transform(|range| {
         if let Some(byte) = byte_pos.pop() {
             let Cursor {x, y} = cursor_at_byte(&doc.rope, byte);
-            let range = range.move_to(&doc.rope, Some(x), Some(y), &Mode::Normal);
+            let range = range.move_to(&doc.rope, Some(x), Some(y), &Mode::Insert);
             last_range = range;
             range
         } else {
