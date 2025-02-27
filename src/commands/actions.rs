@@ -105,6 +105,8 @@ pub enum GotoCharacterMove {
 pub enum ActionStatus {
     Warning(Cow<'static, str>),
     Error(Cow<'static, str>),
+    // signifies nothing happened
+    Noop,
 }
 
 pub type ActionResult = Result<(), ActionStatus>;
@@ -878,6 +880,11 @@ fn delete_byte_ranges(
         }
     }
 
+    // don't do anything if there are no deletes
+    if changes.iter().all(|c| c.0.is_empty() && c.1.is_none()) {
+        return Err(ActionStatus::Noop);
+    }
+
     // Apply the changes to the doc, which returns the transaction.
     // Then use the transaction to find the bytes where deletions occured.
     let mut byte_pos = vec![];
@@ -900,7 +907,11 @@ fn delete_byte_ranges(
     doc.set_selection(pane.id, sel.transform(|range| {
         if let Some(byte) = byte_pos.pop() {
             let Cursor {x, y} = cursor_at_byte(&doc.rope, byte);
-            let range = range.move_to(&doc.rope, Some(x), Some(y), &Mode::Insert);
+            let move_to_mode = match ctx.editor.mode {
+                Mode::Select => &Mode::Insert,
+                _ => &ctx.editor.mode
+            };
+            let range = range.move_to(&doc.rope, Some(x), Some(y), move_to_mode);
             last_range = range;
             range
         } else {
@@ -930,10 +941,15 @@ pub fn delete_symbol_to_the_left(ctx: &mut Context) -> ActionResult {
 
 pub fn delete_current_line(ctx: &mut Context) -> ActionResult {
     delete_byte_ranges(ctx, |range, rope| {
-        let start = rope.byte_of_line(range.head.y);
+        let mut start = rope.byte_of_line(range.head.y);
         let is_last_line = range.head.y == rope.line_len() - 1;
         let end = if is_last_line {
-            rope.line(range.head.y).byte_len()
+            if rope.line_len() >= 1 {
+                start = rope.byte_of_line(range.head.y - 1) + rope.line(range.head.y - 1).byte_len();
+                rope.line_slice(range.head.y..range.head.y + 1).byte_len()
+            } else {
+                rope.line(range.head.y).byte_len()
+            }
         } else {
             rope.line_slice(range.head.y..range.head.y + 1).byte_len()
         };
@@ -946,18 +962,17 @@ fn delete_text_object_inside_impl(ctx: &mut Context, enter_insert_mode: bool) ->
 
     ctx.on_next_key(move |ctx, event| {
         if let Ok(kind) = TextObjectKind::try_from(event.code) {
-            _ = delete_byte_ranges(ctx, |range, rope| {
+            let deleted = delete_byte_ranges(ctx, |range, rope| {
                 kind.inside(rope, range).map(|textobject::Range {start_byte, end_byte, ..}| {
                     let offset = rope.byte_of_line(range.head.y);
                     offset + start_byte..offset + end_byte
                 })
             });
+            if deleted.is_ok() && enter_insert_mode {
+                _ = self::enter_insert_mode(ctx);
+            }
         }
     });
-
-    if enter_insert_mode {
-        _ = self::enter_insert_mode(ctx);
-    }
 
     Ok(())
 }

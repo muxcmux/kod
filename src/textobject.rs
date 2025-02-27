@@ -6,6 +6,7 @@ use crossterm::event::KeyCode;
 use crate::{graphemes::{width, GraphemeCategory}, selection};
 
 // Need to expand this to account for starting and ending row as well
+#[derive(Debug)]
 pub struct Range {
     pub start: usize,
     pub end: usize,
@@ -30,6 +31,8 @@ impl Range {
 pub enum TextObjectKind {
     Word,
     LongWord,
+    Quotes(char),
+    Pairs(char),
 }
 
 impl TryFrom<KeyCode> for TextObjectKind {
@@ -40,6 +43,8 @@ impl TryFrom<KeyCode> for TextObjectKind {
             KeyCode::Char(c) => match c {
                 'w' => Ok(Self::Word),
                 'W' => Ok(Self::LongWord),
+                '"' | '\'' | '`' => Ok(Self::Quotes(c)),
+                '{' | '}' | '[' | ']' | '(' | ')' | '<' | '>' => Ok(Self::Pairs(c)),
                 _ => Err(format!("'{c}' does not map to a valid TextObjectKind"))
             },
             _ => Err(format!("{value} does not map to a valid TextObjectKind")),
@@ -57,7 +62,12 @@ impl TextObjectKind {
             Self::LongWord => {
                 let mut words = LongWords::new(rope.line(range.head.y));
                 words.find(|w| w.contains(&range.head.x))
-            }
+            },
+            Self::Quotes(c) => {
+                let mut quotes = Quotes::new(c, rope.line(range.head.y));
+                quotes.find(|q| q.contains(&range.head.x) || q.start >= range.head.x)
+            },
+            Self::Pairs(_c) => todo!()
         }
     }
 }
@@ -86,6 +96,13 @@ pub struct LongWordsBackwards<'a> {
     offset: usize,
     col: usize,
     graphemes: Peekable<Rev<Graphemes<'a>>>,
+}
+
+struct Quotes<'a> {
+    quote: String,
+    offset: usize,
+    col: usize,
+    graphemes: Graphemes<'a>,
 }
 
 impl<'a> Words<'a> {
@@ -128,6 +145,17 @@ impl<'a> LongWordsBackwards<'a> {
             col,
             offset: slice.byte_len(),
             graphemes: slice.graphemes().rev().peekable(),
+        }
+    }
+}
+
+impl<'a> Quotes<'a> {
+    pub fn new(quote: &char, slice: RopeSlice<'a>) -> Self {
+        Self {
+            quote: quote.to_string(),
+            col: 0,
+            offset: 0,
+            graphemes: slice.graphemes(),
         }
     }
 }
@@ -356,6 +384,43 @@ impl Iterator for LongWordsBackwards<'_> {
     }
 }
 
+impl Iterator for Quotes<'_> {
+
+    type Item = Range;
+    fn next(&mut self) -> Option<Self::Item> {
+        let mut found_start = false;
+        let mut col = self.col;
+        let mut offset = self.offset;
+        let mut range = Range { start: col, start_byte: offset, end: col, end_byte: offset };
+
+        for g in self.graphemes.by_ref() {
+            let width = width(&g);
+            let size = g.len();
+            col += width;
+            offset += size;
+
+            if g == self.quote {
+                if found_start {
+                    range.end = col.saturating_sub(width);
+                    range.end_byte = offset;
+                    self.col = col;
+                    self.offset = offset;
+                    return Some(range);
+                }
+
+                range.start = col.saturating_sub(width);
+                range.start_byte = offset.saturating_sub(size);
+                found_start = true;
+            }
+
+            self.col = col;
+            self.offset = offset;
+        }
+
+        None
+    }
+}
+
 #[cfg(test)]
 mod test {
     use crop::Rope;
@@ -415,6 +480,23 @@ mod test {
             assert_eq!(word.start, expected.0, "\"{}\" starts on {} but shoud be {}", word.slice(line), word.start, expected.0);
             assert_eq!(word.end, expected.1, "\"{}\" ends on {} but shoud be {}", word.slice(line), word.end, expected.1);
             assert_eq!(word.slice(line), expected.2);
+        }
+    }
+
+    #[test]
+    fn test_quotes() {
+        let rope = Rope::from("Hello world, this is a test\nsecond 'line' 'with' (words) '😭😭😭😭' hi it's me, Mario");
+        let line = rope.line(1);
+        let quotes = Quotes::new(&'\'', line);
+        let expected = [
+            (7, 12, "'line'"),
+            (14, 19, "'with'"),
+            (29, 38, "'😭😭😭😭'"),
+        ];
+        for (quote, expected) in quotes.zip(expected.into_iter()) {
+            assert_eq!(quote.start, expected.0, "\"{}\" starts on {} but shoud be {}", quote.slice(line), quote.start, expected.0);
+            assert_eq!(quote.end, expected.1, "\"{}\" ends on {} but shoud be {}", quote.slice(line), quote.end, expected.1);
+            assert_eq!(quote.slice(line), expected.2);
         }
     }
 }

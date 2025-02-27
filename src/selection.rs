@@ -345,11 +345,7 @@ fn max_cursor_x(rope: &Rope, line: usize, mode: &Mode) -> usize {
 
 /// Returns the byte offset from the cursor
 /// NOTE: This does not go past the LAST grapheme on the LAST line
-fn byte_offset_at_cursor(
-    rope: &Rope,
-    cursor: &Cursor,
-    mode: &Mode,
-) -> usize {
+fn byte_offset_at_cursor(rope: &Rope, cursor: &Cursor, mode: &Mode) -> usize {
     let mut offset = rope.byte_of_line(cursor.y);
     let mut col = 0;
     let mut cursor_is_past_last_grapheme = true;

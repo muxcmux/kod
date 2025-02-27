@@ -233,6 +233,7 @@ impl Component for EditorView {
             match status {
                 ActionStatus::Warning(cow) => action_ctx.editor.set_warning(cow),
                 ActionStatus::Error(cow) => action_ctx.editor.set_error(cow),
+                _ => {},
             }
         }
 
@@ -253,6 +254,7 @@ impl Component for EditorView {
             match status {
                 ActionStatus::Warning(cow) => action_ctx.editor.set_warning(cow),
                 ActionStatus::Error(cow) => action_ctx.editor.set_error(cow),
+                _ => {},
             }
             return EventResult::Consumed(None)
         }
