@@ -202,11 +202,27 @@ impl Range {
         (idx, grapheme)
     }
 
+    // Returns the byte range covered by a cursor.
+    //
+    // When the start of the selection is on the first column of a line
+    // and the end is beyond the last grapheme on the last line, we extend
+    // the start to cover the new line byte of the previous line (if any)
+    // which in most cases is the desired behaviour.
     pub fn byte_range(&self, rope: &Rope, mode: &Mode) -> std::ops::Range<usize> {
-        let (start, end) = (
-            byte_offset_at_cursor(rope, &self.from(), &Mode::Normal),
-            byte_offset_at_cursor(rope, &self.to(), mode)
-        );
+        let from = self.from();
+        let to = self.to();
+
+        let start = if from.x == 0 &&
+            from.y > 0 &&
+            to.y == rope.line_len().saturating_sub(1) &&
+            to.x == max_cursor_x(rope, to.y, &Mode::Select) {
+            rope.byte_of_line(from.y - 1) + rope.line(from.y - 1).byte_len()
+        } else {
+            byte_offset_at_cursor(rope, &from, &Mode::Normal)
+        };
+
+        let end = byte_offset_at_cursor(rope, &to, mode);
+
         start..end
     }
 }

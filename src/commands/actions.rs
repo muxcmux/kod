@@ -804,7 +804,11 @@ fn insert_or_replace_buffered_string(
     doc.set_selection(pane.id, sel.transform(|range| {
         let byte = byte_pos.pop().unwrap();
         let Cursor {x, y} = cursor_at_byte(&doc.rope, byte);
-        range.move_to(&doc.rope, Some(x), Some(y), &ctx.editor.mode)
+        let move_to_mode = match ctx.editor.mode {
+            Mode::Select => &Mode::Normal,
+            _ => &ctx.editor.mode
+        };
+        range.move_to(&doc.rope, Some(x), Some(y), move_to_mode)
     }));
 
     Ok(())
@@ -940,21 +944,8 @@ pub fn delete_symbol_to_the_left(ctx: &mut Context) -> ActionResult {
 }
 
 pub fn delete_current_line(ctx: &mut Context) -> ActionResult {
-    delete_byte_ranges(ctx, |range, rope| {
-        let mut start = rope.byte_of_line(range.head.y);
-        let is_last_line = range.head.y == rope.line_len() - 1;
-        let end = if is_last_line {
-            if rope.line_len() >= 1 {
-                start = rope.byte_of_line(range.head.y - 1) + rope.line(range.head.y - 1).byte_len();
-                rope.line_slice(range.head.y..range.head.y + 1).byte_len()
-            } else {
-                rope.line(range.head.y).byte_len()
-            }
-        } else {
-            rope.line_slice(range.head.y..range.head.y + 1).byte_len()
-        };
-        Some(start..start + end)
-    })
+    expand_selection_to_whole_lines(ctx)?;
+    delete_selection_impl(ctx)
 }
 
 fn delete_text_object_inside_impl(ctx: &mut Context, enter_insert_mode: bool) -> ActionResult {
@@ -969,7 +960,7 @@ fn delete_text_object_inside_impl(ctx: &mut Context, enter_insert_mode: bool) ->
                 })
             });
             if deleted.is_ok() && enter_insert_mode {
-                _ = self::enter_insert_mode(ctx);
+                _ = self::enter_insert_mode_relative_to_cursor(1, ctx);
             }
         }
     });
