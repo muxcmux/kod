@@ -953,14 +953,18 @@ fn delete_text_object_inside_impl(ctx: &mut Context, enter_insert_mode: bool) ->
 
     ctx.on_next_key(move |ctx, event| {
         if let Ok(kind) = TextObjectKind::try_from(event.code) {
+            if enter_insert_mode {
+                _ = self::enter_insert_mode(ctx);
+            }
             let deleted = delete_byte_ranges(ctx, |range, rope| {
                 kind.inside(rope, range).map(|textobject::Range {start_byte, end_byte, ..}| {
                     let offset = rope.byte_of_line(range.head.y);
                     offset + start_byte..offset + end_byte
                 })
             });
-            if deleted.is_ok() && enter_insert_mode {
-                _ = self::enter_insert_mode_relative_to_cursor(1, ctx);
+            if enter_insert_mode && deleted.is_err() {
+                _ = move_right(ctx);
+                _ = self::enter_normal_mode(ctx);
             }
         }
     });

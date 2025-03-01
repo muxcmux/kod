@@ -26,6 +26,15 @@ impl Range {
     pub fn contains(&self, col: &usize) -> bool {
         (self.start..=self.end).contains(col)
     }
+
+    fn inside_quotes(self) -> Self {
+        Self {
+            start: self.start + 1,
+            start_byte: self.start_byte + 1,
+            end: self.end.saturating_sub(1),
+            end_byte: self.end_byte.saturating_sub(1),
+        }
+    }
 }
 
 pub enum TextObjectKind {
@@ -66,6 +75,7 @@ impl TextObjectKind {
             Self::Quotes(c) => {
                 let mut quotes = Quotes::new(c, rope.line(range.head.y));
                 quotes.find(|q| q.contains(&range.head.x) || q.start >= range.head.x)
+                    .map(|r| r.inside_quotes())
             },
             Self::Pairs(_c) => todo!()
         }
