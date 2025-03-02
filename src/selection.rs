@@ -207,12 +207,13 @@ impl Range {
     // When the start of the selection is on the first column of a line
     // and the end is beyond the last grapheme on the last line, we extend
     // the start to cover the new line byte of the previous line (if any)
-    // which in most cases is the desired behaviour.
+    // which in Select mode is usually the desired behaviour.
     pub fn byte_range(&self, rope: &Rope, mode: &Mode) -> std::ops::Range<usize> {
         let from = self.from();
         let to = self.to();
 
-        let start = if from.x == 0 &&
+        let start = if mode == &Mode::Select &&
+            from.x == 0 &&
             from.y > 0 &&
             to.y == rope.line_len().saturating_sub(1) &&
             to.x == max_cursor_x(rope, to.y, &Mode::Select) {
