@@ -1,6 +1,11 @@
 use crossterm::{cursor::SetCursorStyle, event::{KeyCode, KeyEvent}};
 
-use crate::{compositor::{Component, Compositor, Context, EventResult}, current, editor::Mode, rope::RopeCursor, selection::{cursor_at_byte, Cursor}, ui::{borders::{BOTTOM_LEFT, BOTTOM_RIGHT, HORIZONTAL, HORIZONTAL_UP, VERTICAL, VERTICAL_LEFT, VERTICAL_RIGHT}, buffer::Buffer, text_input::TextInput, theme::THEME, Position, Rect}};
+use crate::ui::{buffer::Buffer, text_input::TextInput, theme::THEME, Position, Rect};
+use crate::selection::{cursor_at_byte, Cursor};
+use crate::rope::RopeCursor;
+use crate::editor::Mode;
+use crate::current;
+use crate::compositor::{Component, Compositor, Context, EventResult};
 
 #[derive(Default)]
 pub struct SearchState {
@@ -39,23 +44,6 @@ impl Component for Search {
         };
 
         buffer.put_str("󰍉", area.left() + 1, area.bottom().saturating_sub(1), THEME.get(style));
-
-        let y = area.bottom().saturating_sub(2);
-
-        for i in area.left()..area.width {
-            match buffer.get_symbol(i, y) {
-                Some(ref s) => {
-                    if [VERTICAL, BOTTOM_RIGHT, BOTTOM_LEFT, VERTICAL_LEFT, VERTICAL_RIGHT, HORIZONTAL_UP].contains(s) {
-                        buffer.put_str(HORIZONTAL_UP, i, y, THEME.get("ui.border.pane"));
-                    } else {
-                        buffer.put_str(HORIZONTAL, i, y, THEME.get("ui.border.pane"));
-                    }
-                },
-                None => {
-                    buffer.put_str(HORIZONTAL, i, y, THEME.get("ui.border.pane"));
-                },
-            }
-        }
 
         let input_size = area.clip_top(area.height.saturating_sub(1)).clip_left(3);
 
