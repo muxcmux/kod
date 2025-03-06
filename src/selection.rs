@@ -42,11 +42,47 @@ pub struct Range {
 }
 
 impl Range {
-    fn from(&self) -> Cursor {
+    // Creates a new range from a byte range in a doc setting the
+    // anchor at the start of the range and the head and the end
+    pub fn from_byte_range(rope: &Rope, byte_range: std::ops::Range<usize>) -> Self {
+        debug_assert!(byte_range.end < rope.byte_len());
+
+        let (mut x, mut y) = (0, rope.line_of_byte(byte_range.start));
+        let mut offset = rope.byte_of_line(y);
+        let mut range = Self::default();
+
+        while offset < byte_range.end {
+            for g in rope.line(y).graphemes() {
+                if offset >= byte_range.end {
+                    break
+                }
+
+                range.head.x = x;
+                range.sticky_x = x;
+                range.head.y = y;
+
+                if offset <= byte_range.start {
+                    range.anchor.x = x;
+                    range.anchor.y = y;
+                }
+
+                x += graphemes::width(&g);
+                offset += g.bytes().len();
+            }
+
+            y += 1;
+            x = 0;
+            offset = rope.byte_of_line(y);
+        }
+
+        range
+    }
+
+    pub fn from(&self) -> Cursor {
         self.head.min(self.anchor)
     }
 
-    fn to(&self) -> Cursor {
+    pub fn to(&self) -> Cursor {
         self.head.max(self.anchor)
     }
 

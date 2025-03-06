@@ -2,7 +2,14 @@ use std::ops::Range;
 
 use crop::Rope;
 
-use crate::{compositor::Context, editor::Mode, graphemes::{self, GraphemeCategory}, language::syntax::{Highlight, HighlightEvent}, panes::Pane, selection::Selection, ui::{buffer::Buffer, scroll::Scroll, style::Style, theme::THEME, Position, Rect}};
+use crate::ui::{buffer::Buffer, scroll::Scroll, style::Style, theme::THEME, Position, Rect};
+use crate::selection::Selection;
+use crate::search::SearchResult;
+use crate::panes::Pane;
+use crate::language::syntax::{Highlight, HighlightEvent};
+use crate::graphemes::{self, GraphemeCategory};
+use crate::editor::Mode;
+use crate::compositor::Context;
 
 /// A wrapper around a HighlightIterator
 /// that merges the layered highlights to create the final text style
@@ -125,7 +132,9 @@ impl View {
                             }
                         }
 
-                        buffer.put_symbol(&g, x, y, visual_selection_style(style, sel, col, row, &ctx.editor.mode));
+                        let style = visual_selection_style(style, sel, col, row, &ctx.editor.mode);
+                        let style = search_highlight_style(style, col, row, pane, ctx);
+                        buffer.put_symbol(&g, x, y, style);
 
                         if GraphemeCategory::from(&g) == GraphemeCategory::Whitespace {
                             trailing_whitespace.push(x);
@@ -142,8 +151,43 @@ impl View {
             }
         }
 
-        // render cursors
+        self.render_cursors(pane, area, buffer, ctx);
+        self.render_scrollbar(pane, area, buffer, ctx);
+    }
+
+    fn render_scrollbar(
+        &self,
+        pane: &Pane,
+        area: &Rect,
+        buffer: &mut Buffer,
+        ctx: &Context,
+    ) {
+        let doc = ctx.editor.documents.get(&pane.doc_id).expect("Can't get doc from pane id");
+        // render scrollbar
+        let total = doc.rope.line_len();
+        let visible = area.height as usize;
+        if visible / total == 0 {
+            let window = ((visible as f64 / total as f64) * visible as f64) as usize;
+            let window = window.max(1);
+
+            let offset = self.scroll.y * visible / total;
+            let scroll = area.clip_left(area.width.saturating_sub(1))
+                .clip_top(offset as u16)
+                .clip_bottom(area.height.saturating_sub(offset as u16 + window as u16));
+            buffer.fill_with("▋", THEME.get("ui.scrollbar"), scroll);
+        }
+    }
+
+    fn render_cursors(
+        &self,
+        pane: &Pane,
+        area: &Rect,
+        buffer: &mut Buffer,
+        ctx: &Context,
+    ) {
         if pane.id == ctx.editor.panes.focus {
+            let doc = ctx.editor.documents.get(&pane.doc_id).expect("Can't get doc from pane id");
+            let sel = doc.selection(pane.id);
             for range in sel.ranges.iter() {
                 if range != sel.primary() {
                     // Skip rendering non-primary cursors which are off-screen
@@ -168,20 +212,6 @@ impl View {
                     }
                 }
             }
-        }
-
-        // render scrollbar
-        let total = doc.rope.line_len();
-        let visible = area.height as usize;
-        if visible / total == 0 {
-            let window = ((visible as f64 / total as f64) * visible as f64) as usize;
-            let window = window.max(1);
-
-            let offset = self.scroll.y * visible / total;
-            let scroll = area.clip_left(area.width.saturating_sub(1))
-                .clip_top(offset as u16)
-                .clip_bottom(area.height.saturating_sub(offset as u16 + window as u16));
-            buffer.fill_with("▋", THEME.get("ui.scrollbar"), scroll);
         }
     }
 
@@ -212,3 +242,22 @@ fn visual_selection_style(
 
     style
 }
+
+fn search_highlight_style(style: Style, x: usize, y: usize, pane: &Pane, ctx: &Context) -> Style {
+    if ctx.editor.search.focused &&
+        ctx.editor.mode != Mode::Select &&
+        pane.id == ctx.editor.panes.focus
+    {
+        if let Some(SearchResult::Ok(sel)) = &ctx.editor.search.result {
+            let range = sel.primary();
+            if range.contains_cursor(x, y) {
+                return style.patch(THEME.get("search.highlight"))
+            }
+        }
+
+        return style
+    }
+
+    style
+}
+

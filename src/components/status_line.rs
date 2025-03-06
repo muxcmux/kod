@@ -37,8 +37,7 @@ impl Component for StatusLine {
                     crate::editor::Severity::Error => "error",
                 });
 
-                buffer.put_symbol("●", x, y, style);
-                buffer.put_str(&status.message, x + 2, y, style);
+                buffer.put_str(&status.message, x, y, style);
             },
 
             None => {
@@ -67,7 +66,7 @@ impl Component for StatusLine {
 
         let sel = doc.selection(pane.id);
         if sel.ranges.len() > 1 {
-            let cursors = format!("{} cursors ", sel.ranges.len());
+            let cursors = format!("[{} cursors] ", sel.ranges.len());
             let x = area.width.saturating_sub(cursors.chars().count() as u16);
             buffer.put_str(&cursors, x, y, THEME.get("ui.statusline.cursor_len"));
         }

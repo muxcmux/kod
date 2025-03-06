@@ -8,6 +8,7 @@ use smartstring::{LazyCompact, SmartString};
 use crate::components::files::Files;
 use crate::graphemes::GraphemeCategory;
 use crate::history::Change;
+use crate::search::{self, SearchResult};
 use crate::selection::{self, cursor_at_byte, Cursor};
 use crate::textobject::{self, LongWords, LongWordsBackwards, TextObjectKind, Words, WordsBackwards};
 use crate::{editor::Mode, graphemes::{self, line_width, NEW_LINE_STR}, panes::Direction, search::Search};
@@ -272,7 +273,7 @@ pub fn enter_select_mode(ctx: &mut Context) -> ActionResult {
     ctx.editor.mode = Mode::Select;
     doc.set_selection(pane.id, sel.transform(|r| r.anchor()));
 
-    Ok(())
+    hide_search(ctx)
 }
 
 pub fn expand_selection_to_whole_lines(ctx: &mut Context) -> ActionResult {
@@ -1041,42 +1042,54 @@ pub fn search(ctx: &mut Context) -> ActionResult {
         cx.editor.search.focused = true;
         cx.editor.search.total_matches = 0;
         cx.editor.search.current_match = 0;
+        cx.editor.search.result = None;
+        let idx = cx.editor.registers.get('/').map(|r| r.len()).unwrap_or(1);
+        let (pane, doc) = current!(cx.editor);
+        cx.editor.search.original_selection = doc.selection(pane.id).clone();
+        cx.editor.search.query.clear();
         comp.remove::<Search>();
-        let qhistory = cx.editor.search.query_history.clone();
-        comp.push(Box::new(Search::new(qhistory)))
+        comp.push(Box::new(Search::new(idx)));
+    }));
+
+    Ok(())
+}
+
+fn goto_search_match(backwards: bool, idx: usize, ctx: &mut Context) -> ActionResult {
+    let (pane, doc) = current!(ctx.editor);
+    ctx.editor.search.original_selection = doc.selection(pane.id).clone();
+
+    ctx.compositor_callbacks.push(Box::new(move |comp, cx| {
+        cx.editor.search.focused = false;
+        comp.remove::<Search>();
+        match search::search(backwards, cx) {
+            SearchResult::Ok(sel) => {
+                let (pane, doc) = current!(cx.editor);
+                doc.set_selection(pane.id, sel);
+                comp.push(Box::new(Search::new(idx)));
+            },
+            SearchResult::InvalidRegex => {
+                cx.editor.set_error("Invalid search regex");
+            },
+            SearchResult::Empty => {
+                cx.editor.set_warning(format!("No matches found: {}", cx.editor.search.query));
+            },
+            SearchResult::NoQuery => {
+                cx.editor.set_error("No search term");
+            }
+        }
     }));
 
     Ok(())
 }
 
 pub fn next_search_match(ctx: &mut Context) -> ActionResult {
-    if ctx.editor.search.query_history.is_empty() {
-        err!("No search term present");
-    } else {
-        ctx.compositor_callbacks.push(Box::new(|comp, cx| {
-            cx.editor.search.focused = false;
-            crate::search::search(cx, false);
-            comp.remove::<Search>();
-            comp.push(Box::new(Search::with_term(cx.editor.search.query_history.last().unwrap())));
-        }));
-    }
-
-    Ok(())
+    let idx = ctx.editor.registers.get('/').map(|r| r.len()).unwrap_or(1);
+    goto_search_match(false, idx, ctx)
 }
 
 pub fn prev_search_match(ctx: &mut Context) -> ActionResult {
-    if ctx.editor.search.query_history.is_empty() {
-        err!("No search term present");
-    } else {
-        ctx.compositor_callbacks.push(Box::new(|comp, cx| {
-            cx.editor.search.focused = false;
-            crate::search::search(cx, true);
-            comp.remove::<Search>();
-            comp.push(Box::new(Search::with_term(cx.editor.search.query_history.last().unwrap())));
-        }));
-    }
-
-    Ok(())
+    let idx = ctx.editor.registers.get('/').unwrap().len().saturating_sub(1);
+    goto_search_match(true, idx, ctx)
 }
 
 pub fn flip_selection(ctx: &mut Context) -> ActionResult {
@@ -1119,7 +1132,10 @@ pub fn open_files(ctx: &mut Context) -> ActionResult {
     let files = Files::new(doc.path.as_ref())
         .map_err(|e| ActionStatus::Error(e.to_string().into()))?;
 
-    ctx.push_component(Box::new(files));
+    ctx.compositor_callbacks.push(Box::new(move |comp, _| {
+        comp.remove::<Search>();
+        comp.push(Box::new(files));
+    }));
 
     Ok(())
 }

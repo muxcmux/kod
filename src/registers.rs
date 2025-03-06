@@ -2,16 +2,29 @@ use std::collections::HashMap;
 
 #[derive(Default)]
 pub struct Registers {
-    selected: Option<char>,
-    map: HashMap<char, String>
+    // selected: Option<char>,
+    map: HashMap<char, Vec<String>>
 }
 
 impl Registers {
-    pub fn read(&self, reg: char) -> Option<&str> {
-        self.map.get(&reg).map(|x| x.as_str())
+    pub fn get(&self, reg: char) -> Option<&Vec<String>> {
+        self.map.get(&reg)
     }
 
-    pub fn write(&mut self, reg: char, value: String) {
-        self.map.insert(reg, value);
+    pub fn push(&mut self, reg: char, value: String) {
+        match self.map.get_mut(&reg) {
+            Some(contents) => {
+                if contents.last().is_none_or(|c| c != &value) {
+                    contents.push(value);
+                }
+            }
+            None => {
+                self.map.insert(reg, vec![value]);
+            },
+        }
+    }
+
+    pub fn get_nth(&self, reg: char, idx: usize) -> Option<&String> {
+        self.get(reg).and_then(|r| r.get(idx))
     }
 }

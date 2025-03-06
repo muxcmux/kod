@@ -10,6 +10,7 @@ use crate::graphemes::NEW_LINE;
 use crate::gutter;
 use crate::pane;
 use crate::panes::PaneId;
+use crate::search::SearchResult;
 use crate::ui::buffer::Buffer;
 use crate::ui::Position;
 use crate::ui::Rect;
@@ -269,6 +270,12 @@ impl Component for EditorView {
         }
 
         EventResult::Consumed(None)
+    }
+
+    fn hide_cursor(&self, ctx: &Context) -> bool {
+        ctx.editor.search.focused &&
+            ctx.editor.mode != Mode::Select &&
+            matches!(ctx.editor.search.result, Some(SearchResult::Ok(_)))
     }
 
     fn cursor(&self, _area: Rect, ctx: &Context) -> (Option<Position>, Option<SetCursorStyle>) {

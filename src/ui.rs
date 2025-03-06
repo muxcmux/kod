@@ -122,6 +122,13 @@ impl Rect {
         self.position.row + self.height
     }
 
+    // pub fn contains(&self, position: &Position) -> bool {
+    //     position.col < self.right() &&
+    //         position.col >= self.left() &&
+    //         position.row < self.bottom() &&
+    //         position.row >= self.top()
+    // }
+
     /// Splits the rect vertically into N parts
     /// with a single row/col space between each part
     pub fn split_vertically(&self, n: u16) -> Vec<Rect> {

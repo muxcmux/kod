@@ -79,7 +79,7 @@ impl Component for Palette {
         let inner = bbox.inner();
         let input_size = inner.clip_bottom(inner.height.saturating_sub(1));
 
-        self.input.render(input_size, buffer);
+        self.input.render(input_size, false, buffer);
 
         // render list
         let index = self.index;

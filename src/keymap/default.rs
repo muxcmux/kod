@@ -166,6 +166,7 @@ pub fn select_mode_keymap() -> Keymap {
     map!({
         "esc" => enter_normal_mode,
         "v" => expand_selection_to_whole_lines,
+        "/" => search,
 
         "h" => move_left,
         "j" => move_down,

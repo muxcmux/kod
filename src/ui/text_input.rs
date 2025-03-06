@@ -9,8 +9,6 @@ pub struct TextInput {
     pub rope: Rope,
     pub scroll: Scroll,
     pub cursor: Range,
-    pub history: Vec<String>,
-    history_idx: usize,
 }
 
 impl TextInput {
@@ -19,51 +17,23 @@ impl TextInput {
             rope: Rope::from(NEW_LINE_STR),
             scroll: Scroll::default(),
             cursor: Range::default(),
-            history: vec![],
-            history_idx: 1,
         }
-    }
-
-    pub fn with_history(history: Vec<String>) -> Self {
-        let history_idx = 1.max(history.len());
-        Self {
-            rope: Rope::from(NEW_LINE_STR),
-            scroll: Scroll::default(),
-            cursor: Range::default(),
-            history,
-            history_idx,
-        }
-    }
-
-    pub fn with_value(val: &str) -> Self {
-        Self {
-            rope: Rope::from(val),
-            scroll: Scroll::default(),
-            cursor: Range::default(),
-            history: vec![],
-            history_idx: 1,
-        }
-    }
-
-    pub fn remember(&mut self) {
-        let val = self.value();
-        if self.history.last().is_none_or(|v| *v != val) {
-            self.history.push(val);
-        }
-        self.history_idx = self.history.len();
     }
 
     pub fn clear(&mut self) {
         self.rope = Rope::from(NEW_LINE_STR);
-        self.history_idx = self.history.len();
         self.move_cursor_to(Some(0), Some(0));
+    }
+
+    pub fn set_value(&mut self, value: &str) {
+        self.rope = Rope::from(value);
     }
 
     pub fn value(&self) -> String {
         self.rope.line(0).to_string()
     }
 
-    pub fn render(&mut self, area: Rect, buffer: &mut Buffer) {
+    pub fn render(&mut self, area: Rect, render_fake_cursor: bool, buffer: &mut Buffer) {
         self.scroll.ensure_point_is_visible(self.cursor.head.x, self.cursor.head.y, &area, None);
 
         // loop through each visible line
@@ -106,6 +76,10 @@ impl TextInput {
                 }
             }
         }
+
+        if render_fake_cursor {
+            buffer.put_symbol("▏", self.scroll.cursor.col, self.scroll.cursor.row, THEME.get("ui.text_input"));
+        }
     }
 
     fn insert_char_at_cursor(&mut self, char: char) {
@@ -122,7 +96,7 @@ impl TextInput {
         }
     }
 
-    fn move_cursor_to(&mut self, x: Option<usize>, y: Option<usize>) {
+    pub fn move_cursor_to(&mut self, x: Option<usize>, y: Option<usize>) {
         self.cursor = self.cursor.move_to(&self.rope, x, y, &Mode::Insert);
     }
 
@@ -170,25 +144,6 @@ impl TextInput {
             KeyCode::Right => {
                 self.cursor_right();
             }
-            KeyCode::Up => {
-                if let Some(value) = self.history.get(self.history_idx.saturating_sub(1)) {
-                    self.rope = Rope::from(value.as_str());
-                    self.move_cursor_to(Some(usize::MAX), None);
-                    self.history_idx = self.history_idx.saturating_sub(1);
-                }
-            }
-            KeyCode::Down => {
-                match self.history.get(self.history_idx + 1) {
-                    Some(value) => {
-                        self.rope = Rope::from(value.as_str());
-                        self.move_cursor_to(Some(usize::MAX), None);
-                        self.history_idx += 1;
-                    }
-                    None => {
-                        self.clear();
-                    }
-                }
-            }
             KeyCode::Home => {
                 self.move_cursor_to(Some(0), None);
             }
@@ -196,11 +151,9 @@ impl TextInput {
                 self.move_cursor_to(Some(usize::MAX), None);
             }
             KeyCode::Backspace => {
-                self.history_idx = self.history.len();
                 self.delete_to_the_left();
             }
             KeyCode::Char(c) => {
-                self.history_idx = self.history.len();
                 if event.modifiers.contains(KeyModifiers::CONTROL) {
                     match c {
                         'h' => self.move_cursor_to(Some(0), None),

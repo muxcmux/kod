@@ -134,6 +134,7 @@ pub static PALETTE: Lazy<HashMap<&str, &str>> = Lazy::new(|| {
 
         ("magenta", "blossom"),
         ("green", "leaf"),
+        ("yellow", "wood"),
         ("red", "rose"),
         ("blue", "water"),
         ("cyan", "sky"),
@@ -175,9 +176,7 @@ pub static THEME: Lazy<Theme> = Lazy::new(|| {
         "ui.files.paste.move" => "muted",
         "ui.files.count" => "fg",
         "ui.files.search_match" => {
-            "mod" => "italic",
-            "ul" => "line",
-            "fg" => "wood",
+            "mod" => "rev",
         },
 
         "ui.menu" => "muted1",
@@ -232,6 +231,10 @@ pub static THEME: Lazy<Theme> = Lazy::new(|| {
 
         "ui.scrollbar" => {
             "fg" => "light_bg",
+            "mod" => "rev",
+        },
+
+        "search.highlight" => {
             "mod" => "rev",
         },
 

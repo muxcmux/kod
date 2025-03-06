@@ -4,7 +4,19 @@ use anyhow::{anyhow, bail, Result};
 use crossterm::{cursor::SetCursorStyle, event::{KeyCode, KeyEvent, KeyModifiers}};
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::{compositor::{Component, Compositor, Context, EventResult}, current, document::cwd_relative_name, graphemes, language::LANG_CONFIG, panes::Layout, ui::{border_box::BorderBox, borders::Borders, buffer::Buffer, modal::{Choice, Modal}, scroll::Scroll, style::Style, text_input::TextInput, theme::THEME, Position, Rect}};
+use crate::{graphemes, language::LANG_CONFIG, panes::Layout};
+use crate::ui::{Position, Rect};
+use crate::ui::theme::THEME;
+use crate::ui::text_input::TextInput;
+use crate::ui::style::Style;
+use crate::ui::scroll::Scroll;
+use crate::ui::modal::{Choice, Modal};
+use crate::ui::buffer::Buffer;
+use crate::ui::borders::Borders;
+use crate::ui::border_box::BorderBox;
+use crate::document::cwd_relative_name;
+use crate::current;
+use crate::compositor::{Component, Compositor, Context, EventResult};
 
 use super::alert::Alert;
 
@@ -265,7 +277,7 @@ impl Files {
 
         for (i, path) in col.paths.iter().enumerate() {
             if let Some(path) = path.file_name().and_then(|p| p.to_str()) {
-                if path.contains(&self.search.value()) {
+                if path.to_lowercase().contains(&self.search.value().to_lowercase()) {
                     col.index = i;
                     break;
                 }
@@ -584,26 +596,30 @@ impl Files {
         let yanked = &self.yanked_paths;
         let yank_style = self.paste_action.style();
 
+        let searching = self.state == State::Searching;
+
         let each_row = |y, path: &Path, inner: Rect, style: Style, buffer: &mut Buffer| {
             // Highlight search matches
-            if let Some(path) = path.file_name().and_then(|p| p.to_str()) {
-                if let Some(offset) = path.find(search_term) {
-                    let mut byte = 0;
-                    let mut col = 2;
-                    for g in path.graphemes(true) {
-                        if byte < offset {
-                            col += graphemes::width(g);
-                            byte += g.len();
-                        } else {
-                            break;
+            if searching {
+                if let Some(path) = path.file_name().and_then(|p| p.to_str()) {
+                    if let Some(offset) = path.to_lowercase().find(&search_term.to_lowercase()) {
+                        let mut byte = 0;
+                        let mut col = 2;
+                        for g in path.graphemes(true) {
+                            if byte < offset {
+                                col += graphemes::width(g);
+                                byte += g.len();
+                            } else {
+                                break;
+                            }
                         }
+                        let match_area = Rect {
+                            position: Position { col: inner.left() + col as u16, row: y },
+                            width: graphemes::width(search_term) as u16,
+                            height: 1,
+                        };
+                        buffer.set_style(match_area, style.patch(THEME.get("ui.files.search_match")))
                     }
-                    let match_area = Rect {
-                        position: Position { col: inner.left() + col as u16, row: y },
-                        width: graphemes::width(search_term) as u16,
-                        height: 1,
-                    };
-                    buffer.set_style(match_area, style.patch(THEME.get("ui.files.search_match")))
                 }
             }
 
@@ -633,8 +649,16 @@ impl Files {
         let column = self.columns.get_mut(idx).unwrap();
         let inner = column.render(area, buffer, short_title, each_row);
 
-        if self.state == State::Searching || !search_term.is_empty() {
-            buffer.put_str(format!("󰍉 {}", search_term), inner.left(), inner.bottom(), THEME.get("ui.border.files"));
+        if self.state == State::Searching {
+            buffer.put_str("󰍉", inner.left(), inner.bottom(), THEME.get("ui.text_input"));
+            let mut input_area = inner.clip_left(2).clip_top(inner.height.saturating_sub(1));
+            input_area.position.row += 1;
+            let mut input_bg = input_area.clip_right(
+                input_area.width.saturating_sub(graphemes::width(search_term) as u16 + 2)
+            );
+            input_bg.position.col = input_bg.position.col.saturating_sub(1);
+            buffer.clear(input_bg);
+            self.search.render(input_area, false, buffer);
         }
 
         let mut x = inner.right();
@@ -874,17 +898,21 @@ impl Component for Files {
     }
 
     fn hide_cursor(&self, _ctx: &Context) -> bool {
-        self.state != State::Browsing
+        !matches!(self.state, State::Browsing | State::Searching)
     }
 
     fn cursor(&self, _area: Rect, _ctx: &Context) -> (Option<Position>, Option<SetCursorStyle>) {
-        let col = self.columns.get(self.active_column).unwrap();
-        let mut cur = col.scroll.cursor;
+        if self.state == State::Searching {
+            (Some(self.search.scroll.cursor), Some(SetCursorStyle::SteadyBar))
+        } else {
+            let col = self.columns.get(self.active_column).unwrap();
+            let mut cur = col.scroll.cursor;
 
-        if col.paths.get(col.index).is_some() {
-            cur.col += 2;
+            if col.paths.get(col.index).is_some() {
+                cur.col += 2;
+            }
+
+            (Some(cur), None)
         }
-
-        (Some(cur), None)
     }
 }
