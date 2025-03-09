@@ -6,6 +6,7 @@ pub fn normal_mode_keymap() -> Keymap {
         "esc" => clean_state,
         ":" => command_palette,
         "R" => enter_replace_mode,
+        "r" => replace_one,
         "v" => enter_select_mode,
 
         "minus" => open_files,
@@ -61,9 +62,9 @@ pub fn normal_mode_keymap() -> Keymap {
         "n" => next_search_match,
         "N" => prev_search_match,
 
-        "i" => enter_insert_mode_at_cursor,
+        "i" => enter_insert_mode_before_range_start,
         "I" => enter_insert_mode_at_first_non_whitespace,
-        "a" => enter_insert_mode_after_cursor,
+        "a" => enter_insert_mode_after_range_end,
         "A" => enter_insert_mode_at_eol,
         "o" => insert_line_below,
         "O" => insert_line_above,
@@ -164,9 +165,17 @@ pub fn replace_mode_keymap() -> Keymap {
 
 pub fn select_mode_keymap() -> Keymap {
     map!({
+        ":" => command_palette,
         "esc" => enter_normal_mode,
         "v" => expand_selection_to_whole_lines,
+
         "/" => search,
+        "n" => next_search_match,
+        "N" => prev_search_match,
+        "s" => select_matches,
+
+        "i" => enter_insert_mode_before_range_start,
+        "a" => enter_insert_mode_after_range_end,
 
         "h" => move_left,
         "j" => move_down,

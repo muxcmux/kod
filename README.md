@@ -32,8 +32,9 @@ This is a high-level, unordered, non-exhaustive list of features I want in kod.
 * 🟢 Replace mode
 * ⚪️ Dot repeat
 * 🟡 Registers
-* 🟢 Bracketed paste
-* 🟡 Search (search working, but no replace at the moment)
+* ⚪️ Copy(yank)/paste
+* 🟢 Bracketed paste from clipboard
+* 🟢 Document search
 * ⚪️ Count before a motion e.g. `5dw`
 * 🟢 Syntax highlighting
 * 🟡 Theme(s)

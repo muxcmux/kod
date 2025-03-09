@@ -3,7 +3,7 @@ use std::borrow::Cow;
 use crop::Rope;
 use smallvec::SmallVec;
 
-use crate::{editor::Mode, graphemes::{self, line_width}};
+use crate::{editor::Mode, graphemes::{self, grapheme_is_line_ending, line_width}};
 
 // Represents a virtual cursor position in a text rope with
 // absolute positions 0, 0 from the first line/ first col
@@ -43,36 +43,33 @@ pub struct Range {
 
 impl Range {
     // Creates a new range from a byte range in a doc setting the
-    // anchor at the start of the range and the head and the end
+    // head at the start of the range and the anchor and the end
     pub fn from_byte_range(rope: &Rope, byte_range: std::ops::Range<usize>) -> Self {
-        debug_assert!(byte_range.end < rope.byte_len());
+        debug_assert!(byte_range.end <= rope.byte_len());
 
-        let (mut x, mut y) = (0, rope.line_of_byte(byte_range.start));
-        let mut offset = rope.byte_of_line(y);
         let mut range = Self::default();
+        range.head.y = rope.line_of_byte(byte_range.start);
+        let mut offset = rope.byte_of_line(range.head.y);
 
-        while offset < byte_range.end {
-            for g in rope.line(y).graphemes() {
-                if offset >= byte_range.end {
-                    break
-                }
+        // get to the first grapheme and set the head to it
+        for g in rope.line(range.head.y).graphemes() {
+            if offset >= byte_range.start { break }
+            offset += g.len();
+            range.head.x += graphemes::width(&g);
+        }
+        range.sticky_x = range.head.x;
+        range.anchor = range.head;
 
-                range.head.x = x;
-                range.sticky_x = x;
-                range.head.y = y;
-
-                if offset <= byte_range.start {
-                    range.anchor.x = x;
-                    range.anchor.y = y;
-                }
-
-                x += graphemes::width(&g);
-                offset += g.bytes().len();
+        let end = byte_range.end;
+        for g in rope.byte_slice(byte_range).graphemes() {
+            offset += g.len();
+            if offset >= end { break }
+            if grapheme_is_line_ending(&g) {
+                range.anchor.x = 0;
+                range.anchor.y += 1;
+            } else {
+                range.anchor.x += graphemes::width(&g);
             }
-
-            y += 1;
-            x = 0;
-            offset = rope.byte_of_line(y);
         }
 
         range
@@ -96,13 +93,13 @@ impl Range {
             Range {
                 anchor: self.anchor.max(other.anchor),
                 head: self.head.min(other.head),
-                sticky_x: self.sticky_x
+                sticky_x: self.sticky_x.max(other.sticky_x)
             }
         } else {
             Range {
                 anchor: self.from().min(other.from()),
                 head: self.to().max(other.to()),
-                sticky_x: self.sticky_x
+                sticky_x: self.sticky_x.max(other.sticky_x)
             }
         }
     }
@@ -177,6 +174,15 @@ impl Range {
         Self {
             anchor: self.head,
             ..self
+        }
+    }
+
+    pub fn collapse_to_start(self) -> Self {
+        let start = self.from();
+        Self {
+            anchor: start,
+            head: start,
+            sticky_x: start.x,
         }
     }
 

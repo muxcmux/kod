@@ -12,7 +12,7 @@ pub fn width(s: &str) -> usize {
 }
 
 pub fn line_width(rope: &Rope, line: usize) -> usize {
-    rope.line(line).graphemes().map(|g| width(&g)).sum()
+    rope.line(line).chunks().map(width).sum()
 }
 
 #[derive(PartialEq)]

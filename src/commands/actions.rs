@@ -6,12 +6,12 @@ use crossterm::event::KeyCode;
 use smartstring::{LazyCompact, SmartString};
 
 use crate::components::files::Files;
-use crate::graphemes::GraphemeCategory;
+use crate::graphemes::{self, line_width, GraphemeCategory, NEW_LINE_STR};
 use crate::history::Change;
 use crate::search::{self, SearchResult};
 use crate::selection::{self, cursor_at_byte, Cursor};
 use crate::textobject::{self, LongWords, LongWordsBackwards, TextObjectKind, Words, WordsBackwards};
-use crate::{editor::Mode, graphemes::{self, line_width, NEW_LINE_STR}, panes::Direction, search::Search};
+use crate::{editor::Mode, panes::Direction, search::Search};
 
 use super::{palette::Palette, Context};
 
@@ -134,15 +134,6 @@ fn enter_insert_mode(ctx: &mut Context) -> ActionResult {
     ensure_editable(ctx)?;
     ctx.editor.mode = Mode::Insert;
     hide_search(ctx)
-}
-
-fn enter_insert_mode_relative_to_cursor(x: usize, ctx: &mut Context) -> ActionResult {
-    enter_insert_mode(ctx)?;
-    for _ in 0..x {
-        move_right(ctx)?;
-    }
-
-    Ok(())
 }
 
 fn move_all_to(x: Option<usize>, y: Option<usize>, ctx: &mut Context) -> ActionResult {
@@ -305,17 +296,50 @@ pub fn enter_replace_mode(ctx: &mut Context) -> ActionResult {
     hide_search(ctx)
 }
 
-pub fn enter_insert_mode_at_cursor(ctx: &mut Context) -> ActionResult {
-    enter_insert_mode_relative_to_cursor(0, ctx)
+pub fn replace_one(ctx: &mut Context) -> ActionResult {
+    ensure_editable(ctx)?;
+
+    ctx.editor.mode = Mode::Replace;
+    ctx.on_next_key(|ctx, event| {
+        if let KeyCode::Char(c) = event.code {
+            _ = append_or_replace_string(c.to_string().into(), ctx);
+        }
+
+        _ = enter_normal_mode(ctx);
+    });
+
+    Ok(())
+}
+
+pub fn enter_insert_mode_before_range_start(ctx: &mut Context) -> ActionResult {
+    enter_insert_mode(ctx)?;
+
+    let (pane, doc) = current!(ctx.editor);
+    let sel = doc.selection(pane.id);
+    doc.set_selection(pane.id, sel.transform(|range| {
+        let target = range.from();
+        range.move_to(&doc.rope, Some(target.x), Some(target.y), &ctx.editor.mode)
+    }));
+
+    Ok(())
+}
+
+pub fn enter_insert_mode_after_range_end(ctx: &mut Context) -> ActionResult {
+    enter_insert_mode(ctx)?;
+
+    let (pane, doc) = current!(ctx.editor);
+    let sel = doc.selection(pane.id);
+    doc.set_selection(pane.id, sel.transform(|range| {
+        let target = range.to();
+        range.move_to(&doc.rope, Some(target.x + 1), Some(target.y), &ctx.editor.mode)
+    }));
+
+    Ok(())
 }
 
 pub fn enter_insert_mode_at_first_non_whitespace(ctx: &mut Context) -> ActionResult {
     enter_insert_mode(ctx)?;
     goto_line_first_non_whitespace(ctx)
-}
-
-pub fn enter_insert_mode_after_cursor(ctx: &mut Context) -> ActionResult {
-    enter_insert_mode_relative_to_cursor(1, ctx)
 }
 
 pub fn enter_insert_mode_at_eol(ctx: &mut Context) -> ActionResult {
@@ -1037,8 +1061,8 @@ pub fn switch_to_last_pane(ctx: &mut Context) -> ActionResult {
     hide_search(ctx)
 }
 
-pub fn search(ctx: &mut Context) -> ActionResult {
-    ctx.compositor_callbacks.push(Box::new(|comp, cx| {
+fn search_impl(ctx: &mut Context, select_all_matches: bool) -> ActionResult {
+    ctx.compositor_callbacks.push(Box::new(move |comp, cx| {
         cx.editor.search.focused = true;
         cx.editor.search.total_matches = 0;
         cx.editor.search.current_match = 0;
@@ -1048,15 +1072,36 @@ pub fn search(ctx: &mut Context) -> ActionResult {
         cx.editor.search.original_selection = doc.selection(pane.id).clone();
         cx.editor.search.query.clear();
         comp.remove::<Search>();
-        comp.push(Box::new(Search::new(idx)));
+        comp.push(Box::new(Search::new(idx, select_all_matches)));
     }));
 
     Ok(())
 }
 
+pub fn search(ctx: &mut Context) -> ActionResult {
+    search_impl(ctx, false)
+}
+
+pub fn select_matches(ctx: &mut Context) -> ActionResult {
+    search_impl(ctx, true)
+}
+
+
 fn goto_search_match(backwards: bool, idx: usize, ctx: &mut Context) -> ActionResult {
     let (pane, doc) = current!(ctx.editor);
     ctx.editor.search.original_selection = doc.selection(pane.id).clone();
+
+    // When in select mode and there's only one selection
+    // we set that selection range as the search term
+    if doc.selection(pane.id).ranges.len() == 1 && ctx.editor.mode == Mode::Select {
+        let byte_range = doc.selection(pane.id).primary().byte_range(&doc.rope, &ctx.editor.mode);
+        let slice = doc.rope.byte_slice(byte_range).to_string();
+        // if !graphemes::grapheme_is_line_ending(&slice) {
+            let escaped = regex::escape(&slice);
+            ctx.editor.registers.push('/', escaped.clone());
+            ctx.editor.search.query = escaped;
+        // }
+    }
 
     ctx.compositor_callbacks.push(Box::new(move |comp, cx| {
         cx.editor.search.focused = false;
@@ -1064,8 +1109,24 @@ fn goto_search_match(backwards: bool, idx: usize, ctx: &mut Context) -> ActionRe
         match search::search(backwards, cx) {
             SearchResult::Ok(sel) => {
                 let (pane, doc) = current!(cx.editor);
-                doc.set_selection(pane.id, sel);
-                comp.push(Box::new(Search::new(idx)));
+                match cx.editor.mode {
+                    Mode::Select => {
+                        let selection = doc.selection(pane.id);
+                        // primary range coming from search always
+                        // has it's head ahead of it's anchor, so it's
+                        // nice to match that orientation with the new
+                        // selection we push
+                        let last = selection.ranges.last().unwrap();
+                        let range = if last.head > last.anchor {
+                            sel.primary().flip()
+                        } else {
+                            *sel.primary()
+                        };
+                        doc.set_selection(pane.id, selection.push(range));
+                    },
+                    _ => doc.set_selection(pane.id, sel.transform(|range| range.move_to(&doc.rope, None, None, &cx.editor.mode))),
+                }
+                comp.push(Box::new(Search::with_value(idx, &cx.editor.search.query)));
             },
             SearchResult::InvalidRegex => {
                 cx.editor.set_error("Invalid search regex");
@@ -1088,7 +1149,7 @@ pub fn next_search_match(ctx: &mut Context) -> ActionResult {
 }
 
 pub fn prev_search_match(ctx: &mut Context) -> ActionResult {
-    let idx = ctx.editor.registers.get('/').unwrap().len().saturating_sub(1);
+    let idx = ctx.editor.registers.get('/').map(|r| r.len().saturating_sub(1)).unwrap_or(0);
     goto_search_match(true, idx, ctx)
 }
 

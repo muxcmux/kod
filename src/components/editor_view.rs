@@ -272,12 +272,6 @@ impl Component for EditorView {
         EventResult::Consumed(None)
     }
 
-    fn hide_cursor(&self, ctx: &Context) -> bool {
-        ctx.editor.search.focused &&
-            ctx.editor.mode != Mode::Select &&
-            matches!(ctx.editor.search.result, Some(SearchResult::Ok(_)))
-    }
-
     fn cursor(&self, _area: Rect, ctx: &Context) -> (Option<Position>, Option<SetCursorStyle>) {
         (
             Some(pane!(ctx.editor).view.scroll.cursor),

@@ -90,7 +90,7 @@ impl View {
                 }
             }
 
-            let line = doc.rope.line(row);
+            let line = doc.rope.line_slice(row..row + 1);
             let mut graphemes = line.graphemes();
             // accounts for multi-width graphemes
             let mut skip_next_n_cols = 0;
@@ -132,14 +132,24 @@ impl View {
                             }
                         }
 
-                        let style = visual_selection_style(style, sel, col, row, &ctx.editor.mode);
-                        let style = search_highlight_style(style, col, row, pane, ctx);
-                        buffer.put_symbol(&g, x, y, style);
-
-                        if GraphemeCategory::from(&g) == GraphemeCategory::Whitespace {
-                            trailing_whitespace.push(x);
+                        let style = if pane.id == ctx.editor.panes.focus {
+                            let visual = visual_selection_style(style, sel, col, row, &ctx.editor.mode);
+                            search_highlight_style(visual, col, row, pane, ctx)
                         } else {
-                            trailing_whitespace.drain(..);
+                            style
+                        };
+
+
+                        if graphemes::grapheme_is_line_ending(&g) {
+                            buffer.put_symbol(" ", x, y, style);
+                        } else {
+                            buffer.put_symbol(&g, x, y, style);
+
+                            if GraphemeCategory::from(&g) == GraphemeCategory::Whitespace {
+                                trailing_whitespace.push(x);
+                            } else {
+                                trailing_whitespace.drain(..);
+                            }
                         }
                     }
                 }
@@ -189,27 +199,31 @@ impl View {
             let doc = ctx.editor.documents.get(&pane.doc_id).expect("Can't get doc from pane id");
             let sel = doc.selection(pane.id);
             for range in sel.ranges.iter() {
-                if range != sel.primary() {
-                    // Skip rendering non-primary cursors which are off-screen
-                    if range.head.x < self.scroll.x ||
-                        range.head.y < self.scroll.y ||
-                        range.head.x >= self.scroll.x + area.width as usize ||
-                        range.head.y >= self.scroll.y + area.height as usize {
+                // Skip rendering primary cursor unless terminal
+                // cursor is hijacked by search input
+                if range == sel.primary() &&
+                    !ctx.editor.search.focused {
                         continue
-                    }
-                    let position = Position {
-                        col: area.left() + (range.head.x - self.scroll.x) as u16,
-                        row: area.top() + (range.head.y - self.scroll.y) as u16,
+                }
+                // Skip rendering cursors which are off-screen
+                if range.head.x < self.scroll.x ||
+                    range.head.y < self.scroll.y ||
+                    range.head.x >= self.scroll.x + area.width as usize ||
+                    range.head.y >= self.scroll.y + area.height as usize {
+                    continue
+                }
+                let position = Position {
+                    col: area.left() + (range.head.x - self.scroll.x) as u16,
+                    row: area.top() + (range.head.y - self.scroll.y) as u16,
+                };
+                if let Some(style) = buffer.cell_style(position.col, position.row) {
+                    let style = match ctx.editor.mode {
+                        Mode::Normal => style.patch(THEME.get("ui.multicursor.normal")),
+                        Mode::Insert => style.patch(THEME.get("ui.multicursor.insert")),
+                        Mode::Replace => style.patch(THEME.get("ui.multicursor.replace")),
+                        Mode::Select => style.patch(THEME.get("ui.multicursor.select")),
                     };
-                    if let Some(style) = buffer.cell_style(position.col, position.row) {
-                        let style = match ctx.editor.mode {
-                            Mode::Normal => style.patch(THEME.get("ui.multicursor.normal")),
-                            Mode::Insert => style.patch(THEME.get("ui.multicursor.insert")),
-                            Mode::Replace => style.patch(THEME.get("ui.multicursor.replace")),
-                            Mode::Select => style.patch(THEME.get("ui.multicursor.select")),
-                        };
-                        buffer.set_style(Rect { position, width: 1, height: 1 }, style);
-                    }
+                    buffer.set_style(Rect { position, width: 1, height: 1 }, style);
                 }
             }
         }

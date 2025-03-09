@@ -658,7 +658,7 @@ impl Files {
             );
             input_bg.position.col = input_bg.position.col.saturating_sub(1);
             buffer.clear(input_bg);
-            self.search.render(input_area, false, buffer);
+            self.search.render(input_area, buffer, None);
         }
 
         let mut x = inner.right();

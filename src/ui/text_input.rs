@@ -3,7 +3,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::{editor::Mode, graphemes::{self, line_width, NEW_LINE, NEW_LINE_STR}, selection::Range};
 
-use super::{buffer::Buffer, scroll::Scroll, theme::THEME, Rect};
+use super::{buffer::Buffer, scroll::Scroll, style::Style, theme::THEME, Rect};
 
 pub struct TextInput {
     pub rope: Rope,
@@ -15,6 +15,14 @@ impl TextInput {
     pub fn empty() -> Self {
         Self {
             rope: Rope::from(NEW_LINE_STR),
+            scroll: Scroll::default(),
+            cursor: Range::default(),
+        }
+    }
+
+    pub fn with_value(val: &str) -> Self {
+        Self {
+            rope: Rope::from(val),
             scroll: Scroll::default(),
             cursor: Range::default(),
         }
@@ -33,7 +41,7 @@ impl TextInput {
         self.rope.line(0).to_string()
     }
 
-    pub fn render(&mut self, area: Rect, render_fake_cursor: bool, buffer: &mut Buffer) {
+    pub fn render(&mut self, area: Rect, buffer: &mut Buffer, style: Option<Style>) {
         self.scroll.ensure_point_is_visible(self.cursor.head.x, self.cursor.head.y, &area, None);
 
         // loop through each visible line
@@ -71,14 +79,10 @@ impl TextInput {
 
                         skip_next_n_cols = width - 1;
 
-                        buffer.put_symbol(&g, x, y, THEME.get("ui.text_input"));
+                        buffer.put_symbol(&g, x, y, style.unwrap_or(THEME.get("ui.text_input")));
                     }
                 }
             }
-        }
-
-        if render_fake_cursor {
-            buffer.put_symbol("▏", self.scroll.cursor.col, self.scroll.cursor.row, THEME.get("ui.text_input"));
         }
     }
 
