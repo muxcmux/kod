@@ -407,11 +407,9 @@ fn max_cursor_x(rope: &Rope, line: usize, mode: &Mode) -> usize {
 fn byte_offset_at_cursor(rope: &Rope, cursor: &Cursor, mode: &Mode) -> usize {
     let mut offset = rope.byte_of_line(cursor.y);
     let mut col = 0;
-    let mut cursor_is_past_last_grapheme = true;
 
-    for g in rope.line(cursor.y).graphemes() {
+    for g in rope.line_slice(cursor.y..cursor.y + 1).graphemes() {
         if col == cursor.x {
-            cursor_is_past_last_grapheme = false;
             // In select mode, we want to include
             // the current cursor's grapheme
             if mode == &Mode::Select {
@@ -421,16 +419,6 @@ fn byte_offset_at_cursor(rope: &Rope, cursor: &Cursor, mode: &Mode) -> usize {
         }
         col += graphemes::width(&g);
         offset += g.len();
-    }
-
-    // In select mode the cursor can go after the last grapheme
-    // just like insert mode. This indicates that the selection
-    // includes the line ending, so we need to include that byte
-    // in the range too
-    let include_eol = mode == &Mode::Select;
-    let is_last_line = cursor.y == rope.line_len() - 1;
-    if cursor_is_past_last_grapheme && include_eol && !is_last_line {
-        offset = rope.line_slice(..cursor.y + 1).byte_len();
     }
 
     offset
