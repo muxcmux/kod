@@ -1084,21 +1084,55 @@ pub fn select_matches(ctx: &mut Context) -> ActionResult {
     search_impl(ctx, true)
 }
 
+pub fn search_word_under_cursor(ctx: &mut Context) -> ActionResult {
+    let (pane, doc) = current!(ctx.editor);
+    let range = doc.selection(pane.id).primary();
 
-fn goto_search_match(backwards: bool, idx: usize, ctx: &mut Context) -> ActionResult {
+    match ctx.editor.mode {
+        Mode::Select => {
+            let q = doc.rope.byte_slice(range.byte_range(&doc.rope, &ctx.editor.mode)).to_string();
+            let term = format!("\\<{}\\>", regex::escape(&q));
+            ctx.editor.search.query = term.clone();
+            ctx.editor.registers.push('/', term);
+            let idx = ctx.editor.registers.get('/').map(|r| r.len()).unwrap_or(1);
+            goto_search_match(false, false, idx, ctx)
+        },
+        _ => {
+            let slice = doc.rope.line(range.head.y);
+            let words = Words::new(slice);
+            for word in words {
+                if word.is_blank(slice) { continue }
+
+                if range.head.x <= word.end {
+                    let q = word.slice(slice).to_string();
+                    let term = format!("\\<{}\\>", regex::escape(&q));
+                    ctx.editor.search.query = term.clone();
+                    ctx.editor.registers.push('/', term);
+                    return next_search_match(ctx);
+                }
+            }
+            Ok(())
+        }
+    }
+}
+
+fn goto_search_match(
+    backwards: bool,
+    use_selection_for_term: bool,
+    idx: usize,
+    ctx: &mut Context
+) -> ActionResult {
     let (pane, doc) = current!(ctx.editor);
     ctx.editor.search.original_selection = doc.selection(pane.id).clone();
 
     // When in select mode and there's only one selection
     // we set that selection range as the search term
-    if doc.selection(pane.id).ranges.len() == 1 && ctx.editor.mode == Mode::Select {
+    if use_selection_for_term && doc.selection(pane.id).ranges.len() == 1 && ctx.editor.mode == Mode::Select {
         let byte_range = doc.selection(pane.id).primary().byte_range(&doc.rope, &ctx.editor.mode);
         let slice = doc.rope.byte_slice(byte_range).to_string();
-        // if !graphemes::grapheme_is_line_ending(&slice) {
-            let escaped = regex::escape(&slice);
-            ctx.editor.registers.push('/', escaped.clone());
-            ctx.editor.search.query = escaped;
-        // }
+        let escaped = regex::escape(&slice);
+        ctx.editor.registers.push('/', escaped.clone());
+        ctx.editor.search.query = escaped;
     }
 
     ctx.compositor_callbacks.push(Box::new(move |comp, cx| {
@@ -1143,12 +1177,12 @@ fn goto_search_match(backwards: bool, idx: usize, ctx: &mut Context) -> ActionRe
 
 pub fn next_search_match(ctx: &mut Context) -> ActionResult {
     let idx = ctx.editor.registers.get('/').map(|r| r.len()).unwrap_or(1);
-    goto_search_match(false, idx, ctx)
+    goto_search_match(false, true, idx, ctx)
 }
 
 pub fn prev_search_match(ctx: &mut Context) -> ActionResult {
     let idx = ctx.editor.registers.get('/').map(|r| r.len().saturating_sub(1)).unwrap_or(0);
-    goto_search_match(true, idx, ctx)
+    goto_search_match(true, true, idx, ctx)
 }
 
 pub fn flip_selection(ctx: &mut Context) -> ActionResult {

@@ -61,6 +61,7 @@ pub fn normal_mode_keymap() -> Keymap {
         "/" => search,
         "n" => next_search_match,
         "N" => prev_search_match,
+        "*" => search_word_under_cursor,
 
         "i" => enter_insert_mode_before_range_start,
         "I" => enter_insert_mode_at_first_non_whitespace,
@@ -173,6 +174,7 @@ pub fn select_mode_keymap() -> Keymap {
         "n" => next_search_match,
         "N" => prev_search_match,
         "s" => select_matches,
+        "*" => search_word_under_cursor,
 
         "i" => enter_insert_mode_before_range_start,
         "a" => enter_insert_mode_after_range_end,
