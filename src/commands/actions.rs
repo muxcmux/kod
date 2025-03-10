@@ -93,7 +93,7 @@ macro_rules! doc {
 
 // macro_rules! info { ($string:expr) => { return Err(ActionStatus::Info($string.into())) } }
 macro_rules! warn { ($string:expr) => { return Err(ActionStatus::Warning($string.into())) } }
-macro_rules! err { ($string:expr) => { return Err(ActionStatus::Error($string.into())) } }
+// macro_rules! err { ($string:expr) => { return Err(ActionStatus::Error($string.into())) } }
 
 #[derive(Copy, Clone)]
 pub enum GotoCharacterMove {

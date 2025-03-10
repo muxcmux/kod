@@ -1,5 +1,3 @@
-use std::borrow::Cow;
-
 use crop::Rope;
 use smallvec::SmallVec;
 
@@ -224,24 +222,6 @@ impl Range {
         }
 
         sel
-    }
-
-    pub fn grapheme_at_head<'a>(&'a self, rope: &'a Rope) -> (usize, Option<Cow<'a, str>>)  {
-        let mut idx = 0;
-        let mut col = 0;
-        let mut grapheme = None;
-
-        let mut iter = rope.line(self.head.y).graphemes().enumerate().peekable();
-        while let Some((i, g)) = iter.next() {
-            idx = i;
-            let width = graphemes::width(&g);
-            grapheme = Some(g);
-            if col >= self.head.x { break }
-            if iter.peek().is_none() { idx += 1 }
-            col += width;
-        }
-
-        (idx, grapheme)
     }
 
     // Returns the byte range covered by a cursor.
