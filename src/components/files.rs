@@ -546,7 +546,7 @@ impl Files {
 
     fn handle_key_event_when_searching(&mut self, event: KeyEvent, ctx: &mut Context) -> EventResult {
         match event.code {
-            KeyCode::Esc | KeyCode::Enter => {
+            KeyCode::Esc => {
                 self.state = State::Browsing;
                 EventResult::Consumed(None)
             },
@@ -555,6 +555,11 @@ impl Files {
                     Some(changed) => if changed { self.move_to_first_search_match() },
                     None => ctx.editor.request_buffered_input(c)
                 }
+                EventResult::Consumed(None)
+            }
+            KeyCode::Enter => {
+                self.move_to_first_search_match();
+                self.state = State::Browsing;
                 EventResult::Consumed(None)
             }
             _ => {
@@ -910,6 +915,17 @@ impl Component for Files {
 
     fn hide_cursor(&self, _ctx: &Context) -> bool {
         !matches!(self.state, State::Browsing | State::Searching)
+    }
+
+    fn handle_buffered_input(&mut self, string: &str, ctx: &mut Context) -> EventResult {
+        match self.state {
+            State::Searching => {
+                self.search.handle_buffered_input(string);
+                self.move_to_first_search_match();
+                EventResult::Consumed(None)
+            },
+            _ => EventResult::Ignored(None)
+        }
     }
 
     fn cursor(&self, _area: Rect, _ctx: &Context) -> (Option<Position>, Option<SetCursorStyle>) {
