@@ -152,7 +152,7 @@ impl Component for Search {
             KeyCode::Up => {
                 if let Some(value) = ctx.editor.registers.get_nth('/', self.history_idx.saturating_sub(1)) {
                     self.input.set_value(value);
-                    self.input.move_cursor_to(Some(usize::MAX), None);
+                    self.input.move_cursor_to(Some(usize::MAX));
                     self.history_idx = self.history_idx.saturating_sub(1);
                 }
                 self.search(ctx)
@@ -161,7 +161,7 @@ impl Component for Search {
                 match ctx.editor.registers.get_nth('/', self.history_idx + 1) {
                     Some(value) => {
                         self.input.set_value(value);
-                        self.input.move_cursor_to(Some(usize::MAX), None);
+                        self.input.move_cursor_to(Some(usize::MAX));
                         self.history_idx += 1;
                     }
                     None => {
@@ -170,11 +170,29 @@ impl Component for Search {
                 }
                 self.search(ctx)
             }
+            KeyCode::Char(c) => {
+                match self.input.handle_key_event(event) {
+                    Some(changed) => if changed { return self.search(ctx) },
+                    None => ctx.editor.request_buffered_input(c),
+                }
+
+                EventResult::Consumed(None)
+            }
             _ => {
-                self.input.handle_key_event(event);
-                self.search(ctx)
+                match self.input.handle_key_event(event) {
+                    Some(changed) => {
+                        if changed { return self.search(ctx) }
+                        EventResult::Consumed(None)
+                    }
+                    None => EventResult::Ignored(None)
+                }
             }
         }
+    }
+
+    fn handle_buffered_input(&mut self, string: &str, ctx: &mut Context) -> EventResult {
+        self.input.handle_buffered_input(string);
+        self.search(ctx)
     }
 
     fn cursor(&self, _area: Rect, ctx: &Context) -> (Option<Position>, Option<SetCursorStyle>) {

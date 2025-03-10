@@ -4,7 +4,6 @@ use crate::ui::Rect;
 use std::any::Any;
 
 use crossterm::{cursor::SetCursorStyle, event::{Event, KeyEvent}};
-use smartstring::{LazyCompact, SmartString};
 
 use crate::editor::Editor;
 
@@ -24,12 +23,12 @@ pub trait Component: Any + AnyComponent {
         EventResult::Ignored(None)
     }
 
-    fn handle_paste(&mut self, _string: &str, _ctx: &mut Context) -> EventResult {
+    fn handle_buffered_input(&mut self, _string: &str, _ctx: &mut Context) -> EventResult {
         EventResult::Ignored(None)
     }
 
-    fn handle_buffered_input(&mut self, _string: SmartString<LazyCompact>, _ctx: &mut Context) -> EventResult {
-        EventResult::Ignored(None)
+    fn handle_paste(&mut self, string: &str, ctx: &mut Context) -> EventResult {
+        self.handle_buffered_input(string, ctx)
     }
 
     fn render(&mut self, area: Rect, buffer: &mut Buffer, ctx: &mut Context);
@@ -143,12 +142,12 @@ impl Compositor {
         consumed
     }
 
-    pub fn handle_buffered_input(&mut self, string: SmartString<LazyCompact>, ctx: &mut Context) -> bool {
+    pub fn handle_buffered_input(&mut self, string: &str, ctx: &mut Context) -> bool {
         let mut callbacks = vec![];
         let mut consumed = false;
 
         for layer in self.layers.iter_mut().rev() {
-            let result = layer.handle_buffered_input(string.clone(), ctx);
+            let result = layer.handle_buffered_input(string, ctx);
             match result {
                 EventResult::Consumed(callback) => {
                     if let Some(cb) = callback { callbacks.push(cb) }

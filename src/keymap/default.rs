@@ -131,8 +131,8 @@ pub fn insert_mode_keymap() -> Keymap {
         "up" => move_up,
         "right" => move_right,
 
-        "S-right" => goto_word_start_forward,
-        "S-left" => goto_word_start_backward,
+        "S-right" | "A-right" => goto_word_start_forward,
+        "S-left" | "A-left" => goto_word_start_backward,
 
         "C-h" | "home" => goto_line_first_non_whitespace,
         "C-l" | "end" => goto_eol,

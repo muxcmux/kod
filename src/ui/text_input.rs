@@ -1,7 +1,8 @@
 use crop::Rope;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-
-use crate::{editor::Mode, graphemes::{self, line_width, NEW_LINE, NEW_LINE_STR}, selection::Range};
+use crate::textobject::{Words, WordsBackwards};
+use crate::{editor::Mode, selection::Range};
+use crate::graphemes::{self, NEW_LINE_STR, NEW_LINE_STR_WIN};
 
 use super::{buffer::Buffer, scroll::Scroll, style::Style, theme::THEME, Rect};
 
@@ -30,11 +31,11 @@ impl TextInput {
 
     pub fn clear(&mut self) {
         self.rope = Rope::from(NEW_LINE_STR);
-        self.move_cursor_to(Some(0), Some(0));
+        self.move_cursor_to(Some(0));
     }
 
     pub fn set_value(&mut self, value: &str) {
-        self.rope = Rope::from(value);
+        self.rope = Rope::from(format!("{value}\n"));
     }
 
     pub fn value(&self) -> String {
@@ -44,64 +45,42 @@ impl TextInput {
     pub fn render(&mut self, area: Rect, buffer: &mut Buffer, style: Option<Style>) {
         self.scroll.ensure_point_is_visible(self.cursor.head.x, self.cursor.head.y, &area, None);
 
-        // loop through each visible line
-        for row in self.scroll.y..self.scroll.y + area.height as usize {
-            if row >= self.rope.line_len() { break }
+        let mut graphemes = self.rope.line(0).graphemes();
+        // accounts for multi-width graphemes
+        let mut skip_next_n_cols = 0;
 
-            let line = self.rope.line(row);
-            let mut graphemes = line.graphemes();
-            // accounts for multi-width graphemes
-            let mut skip_next_n_cols = 0;
-
-            // advance the iterator to account for scroll
-            let mut advance = 0;
-            while advance < self.scroll.x {
-                if let Some(g) = graphemes.next() {
-                    advance += graphemes::width(&g);
-                    skip_next_n_cols = advance.saturating_sub(self.scroll.x);
-                } else {
-                    break
-                }
+        // advance the iterator to account for scroll
+        let mut advance = 0;
+        while advance < self.scroll.x {
+            if let Some(g) = graphemes.next() {
+                advance += graphemes::width(&g);
+                skip_next_n_cols = advance.saturating_sub(self.scroll.x);
+            } else {
+                break
             }
+        }
 
-            let y = row.saturating_sub(self.scroll.y) as u16 + area.top();
+        for col in self.scroll.x..self.scroll.x + area.width as usize {
+            if skip_next_n_cols > 0 {
+                skip_next_n_cols -= 1;
+                continue;
+            }
+            match graphemes.next() {
+                None => break,
+                Some(g) => {
+                    let width = graphemes::width(&g);
+                    let x = col.saturating_sub(self.scroll.x) as u16 + area.left();
 
-            for col in self.scroll.x..self.scroll.x + area.width as usize {
-                if skip_next_n_cols > 0 {
-                    skip_next_n_cols -= 1;
-                    continue;
-                }
-                match graphemes.next() {
-                    None => break,
-                    Some(g) => {
-                        let width = graphemes::width(&g);
-                        let x = col.saturating_sub(self.scroll.x) as u16 + area.left();
+                    skip_next_n_cols = width - 1;
 
-                        skip_next_n_cols = width - 1;
-
-                        buffer.put_symbol(&g, x, y, style.unwrap_or(THEME.get("ui.text_input")));
-                    }
+                    buffer.put_symbol(&g, x, area.top(), style.unwrap_or(THEME.get("ui.text_input")));
                 }
             }
         }
     }
 
-    fn insert_char_at_cursor(&mut self, char: char) {
-        let offset = self.cursor.byte_range(&self.rope, &Mode::Insert).start;
-        let mut buf = [0; 4];
-        let text = char.encode_utf8(&mut buf);
-
-        self.rope.insert(offset, text);
-
-        if char == NEW_LINE {
-            self.move_cursor_to(Some(0), Some(self.cursor.head.y + 1));
-        } else {
-            self.move_cursor_to(Some(self.cursor.head.x + 1), None);
-        }
-    }
-
-    pub fn move_cursor_to(&mut self, x: Option<usize>, y: Option<usize>) {
-        self.cursor = self.cursor.move_to(&self.rope, x, y, &Mode::Insert);
+    pub fn move_cursor_to(&mut self, x: Option<usize>) {
+        self.cursor = self.cursor.move_to(&self.rope, x, None, &Mode::Insert);
     }
 
     fn cursor_left(&mut self) {
@@ -112,63 +91,141 @@ impl TextInput {
         self.cursor = self.cursor.right(&self.rope, &Mode::Insert);
     }
 
-    pub fn delete_to_the_left(&mut self) -> bool {
+    fn word_left(&mut self) {
+        let slice = self.rope.line(0);
+        for word in WordsBackwards::new(slice) {
+            if word.is_blank(slice) { continue }
+
+            if self.cursor.head.x > word.start {
+                self.move_cursor_to(Some(word.start));
+                break
+            }
+        }
+    }
+
+    fn word_right(&mut self) {
+        let slice = self.rope.line(0);
+        let mut moved = false;
+        for word in Words::new(slice) {
+            if word.is_blank(slice) { continue }
+
+            if self.cursor.head.x < word.start {
+                self.move_cursor_to(Some(word.start));
+                moved = true;
+                break
+            }
+        }
+
+        if !moved {
+            self.move_cursor_to(Some(usize::MAX));
+        }
+    }
+
+    fn delete_word_left(&mut self) -> bool {
         if self.cursor.head.x > 0 {
-            let mut start = self.rope.byte_of_line(self.cursor.head.y);
-            let mut end = start;
-            let idx = self.cursor.grapheme_at_head(&self.rope).0 - 1;
-            for (i, g) in self.rope.line(self.cursor.head.y).graphemes().enumerate() {
-                if i < idx { start += g.len() }
-                if i == idx {
-                    end = start + g.len();
-                    break
+            let slice = self.rope.line(0);
+            let mut words = WordsBackwards::new(slice).peekable();
+            while let Some(word) = words.next() {
+                if self.cursor.head.x > word.start {
+                    let end = if word.is_blank(slice) {
+                        match words.peek() {
+                            Some(next) => next.start,
+                            None => 0,
+                        }
+                    } else {
+                        word.start
+                    };
+                    let cursor = self.cursor.move_to(&self.rope, Some(end), None, &Mode::Select);
+                    let byte_range = cursor.byte_range(&self.rope, &Mode::Normal);
+                    self.rope.delete(byte_range);
+                    self.cursor = cursor.collapse_to_head();
+                    return true
                 }
             }
+            return true
+        }
 
-            self.cursor_left();
-            self.rope.delete(start..end);
-            return true;
-        } else if self.cursor.head.y > 0  {
-            let to = self.rope.byte_of_line(self.cursor.head.y);
-            let from = to.saturating_sub(NEW_LINE.len_utf8());
-            // need to move cursor before deleting
-            self.move_cursor_to(Some(line_width(&self.rope, self.cursor.head.y - 1)), Some(self.cursor.head.y - 1));
-            self.rope.delete(from..to);
+        false
+    }
+
+    pub fn delete_to_the_left(&mut self) -> bool {
+        if self.cursor.head.x > 0 {
+            let range = self.cursor.move_to(&self.rope, Some(self.cursor.head.x - 1), None, &Mode::Select);
+            self.rope.delete(range.byte_range(&self.rope, &Mode::Insert));
+            self.cursor = range.collapse_to_head();
             return true;
         }
 
         false
     }
 
-    pub fn handle_key_event(&mut self, event: KeyEvent) {
+    // Some(true) -> Event handled and input changed
+    // Some(false) -> Event Handled and input not changed
+    // None -> Event unhandled
+    // This should probably be an enum...
+    pub fn handle_key_event(&mut self, event: KeyEvent) -> Option<bool> {
         match event.code {
             KeyCode::Left => {
-                self.cursor_left();
+                if event.modifiers.intersects(KeyModifiers::SHIFT | KeyModifiers::ALT) {
+                    self.word_left();
+                } else {
+                    self.cursor_left();
+                }
+                Some(false)
             }
             KeyCode::Right => {
-                self.cursor_right();
+                if event.modifiers.intersects(KeyModifiers::SHIFT | KeyModifiers::ALT) {
+                    self.word_right();
+                } else {
+                    self.cursor_right();
+                }
+                Some(false)
             }
             KeyCode::Home => {
-                self.move_cursor_to(Some(0), None);
+                self.move_cursor_to(Some(0));
+                Some(false)
             }
             KeyCode::End => {
-                self.move_cursor_to(Some(usize::MAX), None);
+                self.move_cursor_to(Some(usize::MAX));
+                Some(false)
             }
             KeyCode::Backspace => {
-                self.delete_to_the_left();
+                if event.modifiers.contains(KeyModifiers::ALT) {
+                    Some(self.delete_word_left())
+                } else {
+                    Some(self.delete_to_the_left())
+                }
             }
             KeyCode::Char(c) => {
                 if event.modifiers.contains(KeyModifiers::CONTROL) {
                     match c {
-                        'h' => self.move_cursor_to(Some(0), None),
-                        'l' => self.move_cursor_to(Some(usize::MAX), None),
-                        _ => {},
+                        'h' => {
+                            self.move_cursor_to(Some(0));
+                            Some(false)
+                        }
+                        'l' => {
+                            self.move_cursor_to(Some(usize::MAX));
+                            Some(false)
+                        }
+                        'w' => {
+                            Some(self.delete_word_left())
+                        }
+                        _ => None,
                     }
                 } else {
-                    self.insert_char_at_cursor(c);
+                    None
                 }
             }
-            _ => {}
+            _ => None
         }
+    }
+
+    pub fn handle_buffered_input(&mut self, string: &str) {
+        let offset = self.cursor.byte_range(&self.rope, &Mode::Insert).start;
+        let escaped = string.replace(NEW_LINE_STR, "\\n")
+            .replace(NEW_LINE_STR_WIN, "\\n\\r");
+        let width = graphemes::width(&escaped);
+        self.rope.insert(offset, escaped);
+        self.move_cursor_to(Some(self.cursor.head.x + width));
     }
 }

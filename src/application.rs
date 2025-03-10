@@ -142,7 +142,7 @@ impl Application {
 
     fn handle_buffered_input(&mut self, string: SmartString<LazyCompact>) -> bool {
         let mut ctx = Context { editor: &mut self.editor };
-        self.compositor.handle_buffered_input(string, &mut ctx)
+        self.compositor.handle_buffered_input(string.as_ref(), &mut ctx)
     }
 
     fn draw(&mut self) -> Result<()> {

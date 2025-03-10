@@ -1,9 +1,7 @@
 use std::borrow::Cow;
-use std::str::FromStr;
 
 use crop::{Rope, RopeSlice};
 use crossterm::event::KeyCode;
-use smartstring::{LazyCompact, SmartString};
 
 use crate::components::files::Files;
 use crate::graphemes::{self, line_width, GraphemeCategory, NEW_LINE_STR};
@@ -302,7 +300,7 @@ pub fn replace_one(ctx: &mut Context) -> ActionResult {
     ctx.editor.mode = Mode::Replace;
     ctx.on_next_key(|ctx, event| {
         if let KeyCode::Char(c) = event.code {
-            _ = append_or_replace_string(c.to_string().into(), ctx);
+            _ = append_or_replace_string(&c.to_string(), ctx);
         }
 
         _ = enter_normal_mode(ctx);
@@ -790,7 +788,7 @@ pub fn redo(ctx: &mut Context) -> ActionResult {
 }
 
 fn insert_or_replace_buffered_string(
-    string: SmartString<LazyCompact>,
+    string: &str,
     ctx: &mut Context,
     byte_range_fn: impl Fn(&selection::Range, &Rope) -> std::ops::Range<usize>,
 ) -> ActionResult {
@@ -802,7 +800,7 @@ fn insert_or_replace_buffered_string(
     let mut changes = Vec::with_capacity(sel.ranges.len());
     for range in sel.ranges.iter() {
         let byte_range = byte_range_fn(range, &doc.rope);
-        changes.push((byte_range, Some(string.clone())));
+        changes.push((byte_range, Some(string.into())));
     }
 
     // Apply the changes to the doc, which returns the transaction.
@@ -839,15 +837,15 @@ fn insert_or_replace_buffered_string(
     Ok(())
 }
 
-pub fn append_string(string: SmartString<LazyCompact>, ctx: &mut Context) -> ActionResult {
+pub fn append_string(string: &str, ctx: &mut Context) -> ActionResult {
     let mode = ctx.editor.mode.clone();
     insert_or_replace_buffered_string(string, ctx, |range, rope| {
         range.byte_range(rope, &mode)
     })
 }
 
-pub fn append_or_replace_string(string: SmartString<LazyCompact>, ctx: &mut Context) -> ActionResult {
-    let width = graphemes::width(&string);
+pub fn append_or_replace_string(string: &str, ctx: &mut Context) -> ActionResult {
+    let width = graphemes::width(string);
     insert_or_replace_buffered_string(string, ctx, |range, rope| {
         range.move_to(rope, Some(range.head.x + width), None, &Mode::Select)
             .byte_range(rope, &Mode::Replace)
@@ -857,7 +855,7 @@ pub fn append_or_replace_string(string: SmartString<LazyCompact>, ctx: &mut Cont
 pub fn insert_line_below(ctx: &mut Context) -> ActionResult {
     enter_insert_mode(ctx)?;
 
-    insert_or_replace_buffered_string(SmartString::from_str(NEW_LINE_STR).unwrap(), ctx, |range, rope| {
+    insert_or_replace_buffered_string(NEW_LINE_STR, ctx, |range, rope| {
         let offset = rope.byte_of_line(range.head.y) + rope.line(range.head.y).byte_len();
         offset..offset
     })
@@ -867,7 +865,7 @@ pub fn insert_line_above(ctx: &mut Context) -> ActionResult {
     enter_insert_mode(ctx)?;
 
 
-    insert_or_replace_buffered_string(SmartString::from_str(NEW_LINE_STR).unwrap(), ctx, |range, rope| {
+    insert_or_replace_buffered_string(NEW_LINE_STR, ctx, |range, rope| {
         let offset = rope.byte_of_line(range.head.y);
         offset..offset
     })?;

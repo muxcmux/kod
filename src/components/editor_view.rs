@@ -10,7 +10,6 @@ use crate::graphemes::NEW_LINE;
 use crate::gutter;
 use crate::pane;
 use crate::panes::PaneId;
-use crate::search::SearchResult;
 use crate::ui::buffer::Buffer;
 use crate::ui::Position;
 use crate::ui::Rect;
@@ -18,8 +17,6 @@ use crossterm::{
     cursor::SetCursorStyle,
     event::{KeyCode, KeyEvent},
 };
-use smartstring::LazyCompact;
-use smartstring::SmartString;
 
 use crate::{
     commands::KeyCallback,
@@ -219,7 +216,7 @@ impl Component for EditorView {
         }
     }
 
-    fn handle_buffered_input(&mut self, string: SmartString<LazyCompact>, ctx: &mut Context) -> EventResult {
+    fn handle_buffered_input(&mut self, string: &str, ctx: &mut Context) -> EventResult {
         let mut action_ctx = commands::Context {
             editor: ctx.editor,
             compositor_callbacks: vec![],
@@ -249,8 +246,8 @@ impl Component for EditorView {
         };
 
         if let Err(status) = match action_ctx.editor.mode {
-            Mode::Replace => append_or_replace_string(string.into(), &mut action_ctx),
-            _ => append_string(string.into(), &mut action_ctx),
+            Mode::Replace => append_or_replace_string(string, &mut action_ctx),
+            _ => append_string(string, &mut action_ctx),
         } {
             match status {
                 ActionStatus::Warning(cow) => action_ctx.editor.set_warning(cow),

@@ -111,12 +111,30 @@ impl Component for Palette {
             // KeyCode::PageUp => todo!(),
             // KeyCode::PageDown => todo!(),
             KeyCode::Esc => self.dismiss(),
-            _ => {
-                self.index = 0;
-                self.input.handle_key_event(event);
+            KeyCode::Char(c) => {
+                match self.input.handle_key_event(event) {
+                    Some(changed) => if changed { self.index = 0 },
+                    None => ctx.editor.request_buffered_input(c),
+                }
+
                 EventResult::Consumed(None)
             }
+
+            _ => {
+                match self.input.handle_key_event(event) {
+                    Some(changed) => {
+                        if changed { self.index = 0 }
+                        EventResult::Consumed(None)
+                    }
+                    None => EventResult::Ignored(None)
+                }
+            }
         }
+    }
+
+    fn handle_buffered_input(&mut self, string: &str, _ctx: &mut Context) -> EventResult {
+        self.input.handle_buffered_input(string);
+        EventResult::Consumed(None)
     }
 
     fn cursor(&self, _area: Rect, _ctx: &Context) -> (Option<Position>, Option<SetCursorStyle>) {

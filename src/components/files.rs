@@ -544,16 +544,27 @@ impl Files {
         }
     }
 
-    fn handle_key_event_when_searching(&mut self, event: KeyEvent, _ctx: &mut Context) -> EventResult {
+    fn handle_key_event_when_searching(&mut self, event: KeyEvent, ctx: &mut Context) -> EventResult {
         match event.code {
             KeyCode::Esc | KeyCode::Enter => {
                 self.state = State::Browsing;
                 EventResult::Consumed(None)
             },
-            _ => {
-                self.search.handle_key_event(event);
-                self.move_to_first_search_match();
+            KeyCode::Char(c) => {
+                match self.search.handle_key_event(event) {
+                    Some(changed) => if changed { self.move_to_first_search_match() },
+                    None => ctx.editor.request_buffered_input(c)
+                }
                 EventResult::Consumed(None)
+            }
+            _ => {
+                match self.search.handle_key_event(event) {
+                    Some(changed) => {
+                        if changed { self.move_to_first_search_match() }
+                        EventResult::Consumed(None)
+                    }
+                    None => EventResult::Ignored(None)
+                }
             }
         }
     }
