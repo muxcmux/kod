@@ -966,6 +966,20 @@ pub fn delete_symbol_to_the_left(ctx: &mut Context) -> ActionResult {
     })
 }
 
+pub fn delete_current_symbol(ctx: &mut Context) -> ActionResult {
+    let (pane, doc) = current!(ctx.editor);
+    let sel = doc.selection(pane.id).clone();
+
+    delete_selection_impl(ctx)?;
+
+    let (pane, doc) = current!(ctx.editor);
+    doc.set_selection(pane.id, sel.transform(|range|
+        range.move_to(&doc.rope, Some(range.head.x), None, &ctx.editor.mode)
+    ));
+
+    Ok(())
+}
+
 pub fn delete_current_line(ctx: &mut Context) -> ActionResult {
     expand_selection_to_whole_lines(ctx)?;
     delete_selection_impl(ctx)
@@ -1031,6 +1045,11 @@ pub fn change_current_line(ctx: &mut Context) -> ActionResult {
 
 pub fn change_symbol_to_the_left(ctx: &mut Context) -> ActionResult {
     delete_symbol_to_the_left(ctx)?;
+    enter_insert_mode(ctx)
+}
+
+pub fn change_current_symbol(ctx: &mut Context) -> ActionResult {
+    delete_current_symbol(ctx)?;
     enter_insert_mode(ctx)
 }
 

@@ -72,10 +72,11 @@ pub fn normal_mode_keymap() -> Keymap {
 
         "D" => delete_until_eol,
         "X" => delete_symbol_to_the_left,
+        "x" => delete_current_symbol,
         "d" =>  {
             "d" => delete_current_line,
             "h" => delete_symbol_to_the_left,
-            // "l" => delete_symbol_to_the_right,
+            "l" => delete_current_symbol,
             // "j" => delete_line_below,
             // "k" => delete_line_above,
             // "w" | "e" => delete_word,
@@ -100,7 +101,7 @@ pub fn normal_mode_keymap() -> Keymap {
         "c" =>  {
             "c" => change_current_line,
             "h" => change_symbol_to_the_left,
-            // "l" => change_symbol_to_the_right,
+            "l" => change_current_symbol,
             // "j" => change_line_below,
             // "k" => change_line_above,
             // "w" | "e" => change_word,
