@@ -69,7 +69,7 @@ impl Component for Dialog {
     }
 
     fn handle_key_event(&mut self, event: KeyEvent, ctx: &mut Context) -> EventResult {
-        if self.modal.confirm(event) {
+        if self.modal.handle_choice(event) {
             match self.modal.choice {
                 Choice::Yes => return self.yes(ctx),
                 Choice::No => return self.no(ctx),

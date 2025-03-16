@@ -77,6 +77,7 @@ enum Selection {
 struct Column {
     index: usize,
     scroll: Scroll,
+    calculated_height: u16,
     path: PathBuf,
     paths: Vec<PathBuf>,
 }
@@ -91,6 +92,7 @@ impl Column {
             path,
             paths,
             index,
+            calculated_height: 0,
             scroll: Scroll::default(),
         })
     }
@@ -123,6 +125,8 @@ impl Column {
         bbox.render(buffer);
 
         let inner = bbox.inner();
+
+        self.calculated_height = inner.height;
 
         self.scroll.adjust_offset(&inner, 0, 3);
         self.scroll.ensure_point_is_visible(0, self.index, &inner, Some(self.paths.len()));
@@ -170,8 +174,8 @@ impl PasteAction {
 enum State {
     Browsing,
     Searching,
-    ConfirmingDelete(Vec<PathBuf>),
-    ConfirmingOverwrite(Vec<PathBuf>),
+    ConfirmDelete(Vec<PathBuf>),
+    ConfirmOverwrite(PathBuf),
 }
 
 pub struct Files {
@@ -180,7 +184,6 @@ pub struct Files {
     position_cache: HashMap<PathBuf, PathBuf>,
     marked_paths: BTreeSet<PathBuf>,
     yanked_paths: BTreeSet<PathBuf>,
-    yank_source_column: usize,
     paste_action: PasteAction,
     modal: Modal,
     state: State,
@@ -215,7 +218,6 @@ impl Files {
             active_column: 0,
             marked_paths: BTreeSet::new(),
             yanked_paths: BTreeSet::new(),
-            yank_source_column: 0,
             paste_action: PasteAction::Copy,
             state: State::Browsing,
             modal: Modal::new("⚠ Confirm".into(), "".into()),
@@ -250,6 +252,26 @@ impl Files {
 
         if col.index < col.paths.len().saturating_sub(1) {
             col.index += 1;
+            self.close_children();
+        }
+    }
+
+    fn move_half_page_up(&mut self) {
+        let col = self.columns.get_mut(self.active_column).unwrap();
+
+        if col.index > 0 {
+            col.index = col.index.saturating_sub((col.calculated_height / 2).into());
+            self.close_children();
+        }
+    }
+
+    fn move_half_page_down(&mut self) {
+        let col = self.columns.get_mut(self.active_column).unwrap();
+
+        let len = col.paths.len().saturating_sub(1);
+        if col.index < len {
+            let plus_half = col.index + (col.calculated_height / 2) as usize;
+            col.index = plus_half.min(len);
             self.close_children();
         }
     }
@@ -331,7 +353,7 @@ impl Files {
         Ok(Selection::Invalid)
     }
 
-    fn open(&mut self, ctx: &mut Context, split: Option<Layout>) -> Result<EventResult> {
+    fn open(&mut self, ctx: &mut Context, split: Option<Layout>, close_files: bool) -> Result<EventResult> {
         if let Selection::File(path) = self.select()? {
             let (pane, _) = current!(ctx.editor);
             let pane_id = pane.id;
@@ -351,7 +373,9 @@ impl Files {
                     compositor.push(Box::new(alert));
                 }))));
             }
-            return Ok(self.dismiss());
+            if close_files {
+                return Ok(self.dismiss());
+            }
         }
 
         Ok(EventResult::Consumed(None))
@@ -375,8 +399,6 @@ impl Files {
     }
 
     fn copy(&mut self) -> Option<usize> {
-        self.yank_source_column = self.active_column;
-
         if self.marked_paths.is_empty() {
             let col = self.columns.get(self.active_column).unwrap();
             if let Some(marked) = col.paths.get(col.index) {
@@ -415,29 +437,52 @@ impl Files {
         EventResult::Consumed(None)
     }
 
-    fn paste(&mut self) -> Result<EventResult> {
+    fn try_paste(&mut self) -> Result<EventResult> {
+        self.reset()?;
+
         if self.yanked_paths.is_empty() {
-            bail!("Nothing to paste")
+            return Ok(EventResult::Consumed(None))
         }
 
         let dest_dir = &self.columns.get(self.active_column).unwrap().path;
         // This relies on the fact that self.select disallows
         // navigating into directories marked for yanking
-        while let Some(path) = self.yanked_paths.pop_first() {
+        while let Some(mut path) = self.yanked_paths.pop_first() {
+            if let Some(parent) = path.parent() {
+                if parent == dest_dir {
+                    path = next_available_path_name(&path);
+                }
+            }
+
+            if let Some(file_or_dir) = path.file_name().and_then(|f| f.to_str()) {
+                let new_path = dest_dir.join(file_or_dir);
+                if new_path.exists() {
+                    self.state = State::ConfirmOverwrite(path);
+                    return Ok(EventResult::Consumed(None))
+                }
+            }
+
             // These ops are blocking and are running in the main
             // thread so they can block the ui for larger files
             // or large amount of yanked paths
-            if let Err(e) = match self.paste_action {
-                PasteAction::Copy => copy_path_to_dir(&path, dest_dir),
-                PasteAction::Move => move_path_to_dir(&path, dest_dir),
-            } {
-                self.refresh_columns()?;
+            if let Err(e) = self.paste(&path, dest_dir) {
+                self.reset()?;
                 return Err(e);
             }
         }
 
-        self.refresh_columns()?;
+        self.reset()?;
+
         Ok(EventResult::Consumed(None))
+    }
+
+    fn paste(&self, path: &Path, dest_dir: &Path) -> Result<()> {
+        match self.paste_action {
+            PasteAction::Copy => copy_path_to_dir(path, dest_dir)?,
+            PasteAction::Move => move_path_to_dir(path, dest_dir)?,
+        }
+
+        Ok(())
     }
 
     fn try_delete(&mut self) -> Result<EventResult> {
@@ -454,26 +499,22 @@ impl Files {
         }
 
         if !confirm_paths.is_empty() {
-            self.state = State::ConfirmingDelete(confirm_paths)
+            self.state = State::ConfirmDelete(confirm_paths)
         }
 
         Ok(EventResult::Consumed(None))
     }
 
     fn reposition_cursor(&mut self) {
-        let col = self.columns.get_mut(self.active_column).unwrap();
-
-        if col.index >= col.paths.len() {
-            col.index = col.paths.len().saturating_sub(1);
+        for col in self.columns.iter_mut() {
+            if col.index >= col.paths.len() {
+                col.index = col.paths.len().saturating_sub(1);
+            }
         }
     }
 
     fn refresh_columns(&mut self) -> Result<()> {
-        if let Some(col) = self.columns.get_mut(self.yank_source_column) {
-            col.paths = sorted_entries(&col.path)?;
-            self.position_cache.remove(&col.path);
-        }
-        if let Some(col) = self.columns.get_mut(self.active_column) {
+        for col in self.columns.iter_mut() {
             col.paths = sorted_entries(&col.path)?;
             self.position_cache.remove(&col.path);
         }
@@ -481,7 +522,7 @@ impl Files {
         Ok(())
     }
 
-    fn handle_key_event_when_browsing(&mut self, event: KeyEvent, ctx: &mut Context) -> Result<EventResult> {
+    fn handle_browsing_key_event(&mut self, event: KeyEvent, ctx: &mut Context) -> Result<EventResult> {
         match event.code {
             KeyCode::Esc | KeyCode::Char('-') | KeyCode::Char('q') => {
                 if !self.marked_paths.is_empty() {
@@ -505,7 +546,8 @@ impl Files {
                 self.parent()?;
                 Ok(EventResult::Consumed(None))
             },
-            KeyCode::Char('l') | KeyCode::Right | KeyCode::Enter =>  Ok(self.open(ctx, None)?),
+            KeyCode::Char('l') | KeyCode::Right =>  Ok(self.open(ctx, None, false)?),
+            KeyCode::Enter => Ok(self.open(ctx, None, true)?),
             KeyCode::Char('g') => {
                 self.move_top();
                 Ok(EventResult::Consumed(None))
@@ -516,21 +558,32 @@ impl Files {
             },
             KeyCode::Char('v') => {
                 if event.modifiers.intersects(KeyModifiers::CONTROL) {
-                    Ok(self.open(ctx, Some(Layout::Horizontal))?)
+                    Ok(self.open(ctx, Some(Layout::Horizontal), true)?)
                 } else {
                     Ok(EventResult::Consumed(None))
                 }
             },
             KeyCode::Char('x') => {
                 if event.modifiers.intersects(KeyModifiers::CONTROL) {
-                    Ok(self.open(ctx, Some(Layout::Vertical))?)
+                    Ok(self.open(ctx, Some(Layout::Vertical), true)?)
                 } else {
                     Ok(self.cut(ctx))
                 }
             },
             KeyCode::Char('y') => Ok(self.yank(ctx)),
-            KeyCode::Char('p') => Ok(self.paste()?),
-            KeyCode::Char('d') => Ok(self.try_delete()?),
+            KeyCode::Char('p') => Ok(self.try_paste()?),
+            KeyCode::Char('d') => {
+                if event.modifiers.intersects(KeyModifiers::CONTROL) {
+                    self.move_half_page_down();
+                    Ok(EventResult::Consumed(None))
+                } else {
+                    Ok(self.try_delete()?)
+                }
+            },
+            KeyCode::Char('u') if event.modifiers.intersects(KeyModifiers::CONTROL) => {
+                self.move_half_page_up();
+                Ok(EventResult::Consumed(None))
+            },
             KeyCode::Char(' ') => Ok(self.mark()),
             KeyCode::Char('/') => {
                 self.close_children();
@@ -544,7 +597,7 @@ impl Files {
         }
     }
 
-    fn handle_key_event_when_searching(&mut self, event: KeyEvent, ctx: &mut Context) -> EventResult {
+    fn handle_searching_key_event(&mut self, event: KeyEvent, ctx: &mut Context) -> EventResult {
         match event.code {
             KeyCode::Esc => {
                 self.state = State::Browsing;
@@ -574,35 +627,64 @@ impl Files {
         }
     }
 
-    fn handle_key_event_when_confirming_delete(&mut self, event: KeyEvent) -> Result<EventResult> {
-        if self.modal.confirm(event) {
+    fn reset(&mut self) -> Result<()> {
+        self.state = State::Browsing;
+        self.refresh_columns()?;
+        self.reposition_cursor();
+        self.modal.choice = Choice::Yes;
+        Ok(())
+    }
+
+    fn handle_delete_confirmation_key_event(&mut self, event: KeyEvent) -> Result<EventResult> {
+        if self.modal.handle_choice(event) {
             if self.modal.choice == Choice::Yes {
                 match &mut self.state {
-                    State::ConfirmingDelete(paths) => {
+                    State::ConfirmDelete(paths) => {
                         while let Some(path) = paths.pop() {
                             if let Err(e) = delete_path(&path) {
-                                self.refresh_columns()?;
+                                self.close_children();
+                                self.reset()?;
                                 return Err(e)
                             }
                         }
                     },
                     _ => unreachable!()
                 };
-
             }
 
-            // reset state
-            self.refresh_columns()?;
-            self.reposition_cursor();
             self.close_children();
-            self.state = State::Browsing;
-            self.modal.choice = Choice::Yes;
+            self.reset()?
         }
 
         Ok(EventResult::Consumed(None))
     }
 
-    fn handle_key_event_when_confirming_overwrite(&mut self, _event: KeyEvent) -> Result<EventResult> {
+    fn handle_overwrite_confirmation_key_event(&mut self, event: KeyEvent) -> Result<EventResult> {
+        if self.modal.handle_choice(event) {
+            match self.modal.choice {
+                Choice::Yes => match &self.state {
+                    State::ConfirmOverwrite(path) => {
+                        let dest_dir = &self.columns.get(self.active_column).unwrap().path;
+                        if let Err(e) = self.paste(path, dest_dir) {
+                            self.reset()?;
+                            return Err(e)
+                        }
+
+                        return self.try_paste();
+                    },
+                    _ => unreachable!()
+                },
+                Choice::No => {
+                    return self.try_paste();
+                },
+                Choice::Cancel => {
+                    self.yanked_paths.clear();
+                },
+            }
+
+            self.reset()?;
+        }
+
         Ok(EventResult::Consumed(None))
     }
 
@@ -715,7 +797,7 @@ impl Files {
     }
 }
 
-fn next_available_file_name(path: &Path) -> PathBuf {
+fn next_available_path_name(path: &Path) -> PathBuf {
     let dir = path.parent().unwrap();
     let name = path.file_stem().and_then(|s| s.to_str()).unwrap();
     let mut num = 1;
@@ -734,27 +816,20 @@ fn next_available_file_name(path: &Path) -> PathBuf {
     new_path
 }
 
+// This assumes that all checks have been carried out
+// and will overwrite shit.
 fn copy_path_to_dir(path: &Path, dest_dir: &Path) -> Result<()> {
     if path.metadata()?.is_dir() {
-        copy_dir_to_dir(path, dest_dir)?;
+        let dir_name = path.file_name().unwrap();
+        let new_path = dest_dir.join(dir_name);
+        recursively_copy_files(path, &new_path)?;
     } else if path.metadata()?.is_file() {
-        copy_file_to_dir(path, dest_dir)?;
+        let file_name = path.file_name().unwrap();
+        let to = dest_dir.join(file_name);
+        std::fs::copy(path, to)?;
     }
 
     Ok(())
-}
-
-fn copy_dir_to_dir(path: &Path, dest_dir: &Path) -> Result<()> {
-    let dir_name = path.file_name().unwrap();
-    let new_path = dest_dir.join(dir_name);
-
-    let destination = if new_path.exists() {
-        &next_available_file_name(&new_path)
-    } else {
-        &new_path
-    };
-
-    recursively_copy_files(path, destination)
 }
 
 // This assumes all checks are carried out and that
@@ -780,27 +855,8 @@ fn recursively_copy_files(from: &Path, to: &Path) -> Result<()> {
     Ok(())
 }
 
-fn copy_file_to_dir(path: &Path, dest_dir: &Path) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        if parent == dest_dir {
-            // When copying to the same parent dir
-            // get next available file name and copy
-            std::fs::copy(path, next_available_file_name(path))?;
-            return Ok(())
-        }
-    }
-
-    let file_name = path.file_name().unwrap();
-    let to = dest_dir.join(file_name);
-    if to.exists() {
-        bail!("{:?} already exists in {:?}", file_name, dest_dir);
-    } else {
-        std::fs::copy(path, to)?;
-    }
-
-    Ok(())
-}
-
+// This assumes that all checks have been carried out
+// and will overwrite shite.
 fn move_path_to_dir(path: &Path, dest_dir: &Path) -> Result<()> {
     if let Some(parent) = path.parent() {
         // Nothing to do when moving to the same destination
@@ -811,9 +867,7 @@ fn move_path_to_dir(path: &Path, dest_dir: &Path) -> Result<()> {
 
     if let Some(fname) = path.file_name().and_then(|p| p.to_str()) {
         let to = dest_dir.join(fname);
-        if to.try_exists()? {
-            bail!("{:?} already exists in {:?}", fname, dest_dir);
-        }
+        log::debug!("Renaming {:?} to {:?}", path, to);
         std::fs::rename(path, to)?;
     }
 
@@ -871,7 +925,7 @@ impl Component for Files {
         }
 
         match &self.state {
-            State::ConfirmingDelete(paths) => {
+            State::ConfirmDelete(paths) => {
                 if paths.len() > 1 {
                     self.modal.body = format!("Delete {} paths?", paths.len());
                 } else {
@@ -879,8 +933,8 @@ impl Component for Files {
                 }
                 self.modal.render_all(area, buffer);
             },
-            State::ConfirmingOverwrite(paths) => {
-                self.modal.body = format!("Overwrite {:?}?", paths);
+            State::ConfirmOverwrite(path) => {
+                self.modal.body = format!("Overwrite {}?", path.file_name().and_then(|f| f.to_str()).unwrap());
                 self.modal.render_all(area, buffer);
             },
             _ => {}
@@ -892,24 +946,24 @@ impl Component for Files {
 
         match &self.state {
             State::Browsing => {
-                self.handle_key_event_when_browsing(event, ctx).unwrap_or_else(|e| {
+                self.handle_browsing_key_event(event, ctx).unwrap_or_else(|e| {
                     ctx.editor.set_error(e.to_string());
                     EventResult::Consumed(None)
                 })
             },
-            State::ConfirmingDelete(_) => {
-                self.handle_key_event_when_confirming_delete(event).unwrap_or_else(|e| {
+            State::ConfirmDelete(_) => {
+                self.handle_delete_confirmation_key_event(event).unwrap_or_else(|e| {
                     ctx.editor.set_error(e.to_string());
                     EventResult::Consumed(None)
                 })
             }
-            State::ConfirmingOverwrite(_) => {
-                self.handle_key_event_when_confirming_overwrite(event).unwrap_or_else(|e| {
+            State::ConfirmOverwrite(_) => {
+                self.handle_overwrite_confirmation_key_event(event).unwrap_or_else(|e| {
                     ctx.editor.set_error(e.to_string());
                     EventResult::Consumed(None)
                 })
             }
-            State::Searching => self.handle_key_event_when_searching(event, ctx),
+            State::Searching => self.handle_searching_key_event(event, ctx),
         }
     }
 
@@ -917,7 +971,7 @@ impl Component for Files {
         !matches!(self.state, State::Browsing | State::Searching)
     }
 
-    fn handle_buffered_input(&mut self, string: &str, ctx: &mut Context) -> EventResult {
+    fn handle_buffered_input(&mut self, string: &str, _ctx: &mut Context) -> EventResult {
         match self.state {
             State::Searching => {
                 self.search.handle_buffered_input(string);

@@ -13,9 +13,10 @@ pub fn cwd_relative_name(path: &Path) -> Cow<'_, str> {
     match path.file_name() {
         Some(f) => {
             if let Ok(cwd) = std::env::current_dir() {
-                if !path.starts_with(cwd) {
+                if !path.starts_with(&cwd) {
                     return path.to_string_lossy()
                 }
+                return path.to_string_lossy().replace(&format!("{}/", cwd.to_string_lossy()), "").into()
             }
             f.to_string_lossy()
         },

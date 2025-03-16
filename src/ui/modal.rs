@@ -117,7 +117,7 @@ impl Modal {
         buffer.put_str(PROMPT_CANCEL, x, y, THEME.get(third));
     }
 
-    pub fn confirm(&mut self, event: KeyEvent) -> bool {
+    pub fn handle_choice(&mut self, event: KeyEvent) -> bool {
         match event.code {
             KeyCode::Char('y') => {
                 self.choice = Choice::Yes;
