@@ -175,6 +175,7 @@ impl PasteAction {
 enum State {
     Browsing,
     Searching,
+    Adding,
     Renaming(PathBuf),
     ConfirmDelete(Vec<PathBuf>),
     ConfirmOverwrite(PathBuf),
@@ -536,12 +537,23 @@ impl Files {
         EventResult::Consumed(None)
     }
 
+    fn start_add(&mut self) -> EventResult {
+        self.file_name_input.clear();
+        self.state = State::Adding;
+        let col = self.columns.get_mut(self.active_column).unwrap();
+        col.paths.insert((col.index + 1).min(col.paths.len()), col.path.clone());
+        self.move_down();
+
+        EventResult::Consumed(None)
+    }
+
     fn rename(&mut self) -> Result<EventResult> {
         let col = &self.columns[self.active_column];
 
         if let Some(current_path) = col.paths.get(col.index) {
-            let new_path = col.path.join(self.file_name_input.value());
-            rename_is_valid(current_path, &new_path)?;
+            let value = self.file_name_input.value();
+            let new_path = col.path.join(&value);
+            rename_is_valid(current_path, &new_path, &value)?;
 
             if current_path == &new_path {
                 self.state = State::Browsing;
@@ -555,15 +567,38 @@ impl Files {
                 let tmp_path = current_path.parent().unwrap().join(nanoid!());
                 std::fs::rename(current_path, &tmp_path)?;
                 std::fs::create_dir_all(new_path.parent().unwrap())?;
-                std::fs::rename(&tmp_path, new_path)?;
+                std::fs::rename(&tmp_path, &new_path)?;
             } else {
                 std::fs::create_dir_all(new_path.parent().unwrap())?;
-                std::fs::rename(current_path, new_path)?;
+                std::fs::rename(current_path, &new_path)?;
             }
+
+            self.close_children();
+            self.reset()?;
+            self.goto_path(&new_path);
         }
 
-        self.close_children();
+        Ok(EventResult::Consumed(None))
+    }
+
+    fn add(&mut self) -> Result<EventResult> {
+        let col = &self.columns[self.active_column];
+
+        let value = self.file_name_input.value();
+        let new_path = col.path.join(&value);
+        rename_is_valid(&col.path, &new_path, &value)?;
+
+
+        std::fs::create_dir_all(new_path.parent().unwrap())?;
+
+        if value.ends_with(std::path::MAIN_SEPARATOR) {
+            std::fs::create_dir(&new_path)?;
+        } else {
+            std::fs::write(&new_path, "")?;
+        }
+
         self.reset()?;
+        self.goto_path(&new_path);
         Ok(EventResult::Consumed(None))
     }
 
@@ -647,6 +682,7 @@ impl Files {
                 Ok(EventResult::Consumed(None))
             },
             KeyCode::Char('r') => Ok(self.start_rename()),
+            KeyCode::Char('a') => Ok(self.start_add()),
             KeyCode::Char(' ') => Ok(self.mark()),
             KeyCode::Char('/') => {
                 self.close_children();
@@ -660,10 +696,10 @@ impl Files {
         }
     }
 
-    fn handle_renaming_key_event(&mut self, event: KeyEvent, ctx: &mut Context) -> Result<EventResult> {
+    fn handle_file_name_input_key_event(&mut self, event: KeyEvent, ctx: &mut Context) -> Result<EventResult> {
         match event.code {
             KeyCode::Esc => {
-                self.state = State::Browsing;
+                self.reset()?;
                 Ok(EventResult::Consumed(None))
             },
             KeyCode::Char(c) => {
@@ -672,7 +708,10 @@ impl Files {
                 }
                 Ok(EventResult::Consumed(None))
             }
-            KeyCode::Enter => self.rename(),
+            KeyCode::Enter => match self.state {
+                State::Adding => self.add(),
+                _ => self.rename(),
+            }
             _ => {
                 match self.file_name_input.handle_key_event(event) {
                     Some(_) => Ok(EventResult::Consumed(None)),
@@ -894,8 +933,9 @@ impl Files {
             .clip_left(2);
         buffer.clear(area);
 
-        let new_path = col.path.join(self.file_name_input.value());
-        let style = match rename_is_valid(path, &new_path) {
+        let value = self.file_name_input.value();
+        let new_path = col.path.join(&value);
+        let style = match rename_is_valid(path, &new_path, &value) {
             Ok(_) => None,
             Err(_) => Some(THEME.get("ui.files.existing")),
         };
@@ -904,32 +944,16 @@ impl Files {
     }
 }
 
-fn rename_is_valid(current_path: &Path, new_path: &Path) -> Result<()> {
-    if current_path.metadata()?.is_dir() {
-        if new_path != current_path {
-            // dirs up the tree with the same name
-            if !current_path.starts_with(new_path.parent().unwrap()) && new_path.exists() {
-                bail!("{:?} already exists", new_path.canonicalize().unwrap())
-            }
-
-            // dirs in the current level with the same name
-            if current_path.parent() == new_path.parent() && new_path.exists() {
-                bail!("{:?} already exists", new_path.canonicalize().unwrap())
-            }
-        }
-
-        return Ok(())
-    } else if current_path.metadata()?.is_file() {
-        // for files, it is enough to check if the path exists
-        // and in those cases, we can't really rename
-        if new_path != current_path && new_path.exists() {
-            bail!("{:?} already exists", new_path.canonicalize().unwrap())
-        }
-
-        return Ok(())
+fn rename_is_valid(current_path: &Path, new_path: &Path, new_name: &str) -> Result<()> {
+    if new_name.is_empty() {
+        bail!("No file name given")
     }
 
-    bail!("Path is neither a file nor a dir");
+    if new_path != current_path && new_path.exists() {
+        bail!("{:?} already exists", new_path.canonicalize().unwrap())
+    }
+
+    Ok(())
 }
 
 fn next_available_path_name(path: &Path) -> PathBuf {
@@ -1070,7 +1094,7 @@ impl Component for Files {
                 self.modal.body = format!("Overwrite {}?", path.file_name().and_then(|f| f.to_str()).unwrap());
                 self.modal.render_all(area, buffer);
             },
-            State::Renaming(_) => self.render_file_input(buffer),
+            State::Adding | State::Renaming(_) => self.render_file_input(buffer),
             _ => {}
         }
     }
@@ -1098,8 +1122,8 @@ impl Component for Files {
                 })
             }
             State::Searching => self.handle_searching_key_event(event, ctx),
-            State::Renaming(_) => {
-                self.handle_renaming_key_event(event, ctx).unwrap_or_else(|e| {
+            State::Adding | State::Renaming(_) => {
+                self.handle_file_name_input_key_event(event, ctx).unwrap_or_else(|e| {
                     ctx.editor.set_error(e.to_string());
                     EventResult::Consumed(None)
                 })
@@ -1108,7 +1132,7 @@ impl Component for Files {
     }
 
     fn hide_cursor(&self, _ctx: &Context) -> bool {
-        !matches!(self.state, State::Browsing | State::Searching | State::Renaming(_))
+        matches!(self.state, State::ConfirmDelete(_) | State::ConfirmOverwrite(_))
     }
 
     fn handle_buffered_input(&mut self, string: &str, _ctx: &mut Context) -> EventResult {
@@ -1118,7 +1142,7 @@ impl Component for Files {
                 self.move_to_first_search_match();
                 EventResult::Consumed(None)
             },
-            State::Renaming(_) => {
+            State::Adding | State::Renaming(_) => {
                 self.file_name_input.handle_buffered_input(string);
                 EventResult::Consumed(None)
             }
@@ -1152,7 +1176,7 @@ impl Component for Files {
     fn cursor(&self, _area: Rect, _ctx: &Context) -> (Option<Position>, Option<SetCursorStyle>) {
         match self.state {
             State::Searching => (Some(self.search_input.scroll.cursor), Some(SetCursorStyle::SteadyBar)),
-            State::Renaming(_) => (Some(self.file_name_input.scroll.cursor), Some(SetCursorStyle::SteadyBar)),
+            State::Adding | State::Renaming(_) => (Some(self.file_name_input.scroll.cursor), Some(SetCursorStyle::SteadyBar)),
             _ => {
                 let col = &self.columns[self.active_column];
                 let mut cur = col.scroll.cursor;
