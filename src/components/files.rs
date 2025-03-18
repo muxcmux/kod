@@ -194,6 +194,14 @@ pub struct Files {
     file_name_input: TextInput,
 }
 
+enum StartRenamingCursorPosition {
+    Start,
+    End,
+    FilenameEnd,
+    FilenameRemoved,
+    NewName,
+}
+
 impl Files {
     pub fn new(path: Option<&PathBuf>) -> Result<Self> {
         let (dir, file) = match path {
@@ -523,12 +531,51 @@ impl Files {
         Ok(EventResult::Consumed(None))
     }
 
-    fn start_rename(&mut self) -> EventResult {
+    fn start_rename(&mut self, pos: StartRenamingCursorPosition) -> EventResult {
         if let Some(col) = self.columns.get(self.active_column) {
             if let Some(path) = col.paths.get(col.index) {
                 if let Some(name) = path.file_name().and_then(|p| p.to_str()) {
-                    self.file_name_input.set_value(name);
-                    self.file_name_input.move_cursor_to(usize::MAX);
+                    match pos {
+                        StartRenamingCursorPosition::Start => {
+                            self.file_name_input.set_value(name);
+                            self.file_name_input.move_cursor_to(0);
+                        },
+                        StartRenamingCursorPosition::End => {
+                            self.file_name_input.set_value(name);
+                            self.file_name_input.move_cursor_to(usize::MAX);
+                        },
+                        StartRenamingCursorPosition::FilenameEnd => {
+                            self.file_name_input.set_value(name);
+                            let mut col = name.graphemes(true).count();
+                            let mut has_dot = false;
+                            for g in name.graphemes(true).rev() {
+                                col = col.saturating_sub(1);
+                                if g == "." {
+                                    has_dot = true;
+                                    break
+                                }
+                            }
+                            if has_dot {
+                                self.file_name_input.move_cursor_to(col);
+                            } else {
+                                self.file_name_input.move_cursor_to(usize::MAX);
+                            }
+                        },
+                        StartRenamingCursorPosition::FilenameRemoved => {
+                            let last = name.split('.').last().unwrap();
+                            if last == name {
+                                self.file_name_input.clear();
+                            } else {
+                                self.file_name_input.set_value(&format!(".{}", last));
+                            }
+                            self.file_name_input.move_cursor_to(0);
+                        },
+                        StartRenamingCursorPosition::NewName => {
+                            self.file_name_input.clear();
+                            self.file_name_input.move_cursor_to(0);
+                        },
+                    }
+
                     self.state = State::Renaming(path.clone())
                 }
             }
@@ -681,8 +728,12 @@ impl Files {
                 self.move_half_page_up();
                 Ok(EventResult::Consumed(None))
             },
-            KeyCode::Char('r') => Ok(self.start_rename()),
-            KeyCode::Char('a') => Ok(self.start_add()),
+            KeyCode::Char('i') => Ok(self.start_rename(StartRenamingCursorPosition::Start)),
+            KeyCode::Char('A') => Ok(self.start_rename(StartRenamingCursorPosition::End)),
+            KeyCode::Char('a') => Ok(self.start_rename(StartRenamingCursorPosition::FilenameEnd)),
+            KeyCode::Char('c') => Ok(self.start_rename(StartRenamingCursorPosition::FilenameRemoved)),
+            KeyCode::Char('C') => Ok(self.start_rename(StartRenamingCursorPosition::NewName)),
+            KeyCode::Char('o') => Ok(self.start_add()),
             KeyCode::Char(' ') => Ok(self.mark()),
             KeyCode::Char('/') => {
                 self.close_children();
