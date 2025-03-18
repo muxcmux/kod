@@ -242,6 +242,15 @@ impl Files {
         }
     }
 
+    fn goto_path(&mut self, path: &Path) {
+        for (i, p) in self.columns[self.active_column].paths.iter().enumerate() {
+            if path == p {
+                self.columns.get_mut(self.active_column).unwrap().index = i;
+                break;
+            }
+        }
+    }
+
     fn move_up(&mut self) {
         let col = self.columns.get_mut(self.active_column).unwrap();
 
@@ -449,6 +458,7 @@ impl Files {
         }
 
         let dest_dir = &self.columns[self.active_column].path;
+        let mut last = PathBuf::new();
         // This relies on the fact that self.select disallows
         // navigating into directories marked for yanking
         while let Some(mut path) = self.yanked_paths.pop_first() {
@@ -464,6 +474,7 @@ impl Files {
                     self.state = State::ConfirmOverwrite(path);
                     return Ok(EventResult::Consumed(None))
                 }
+                last = new_path
             }
 
             // These ops are blocking and are running in the main
@@ -477,6 +488,7 @@ impl Files {
 
         self.close_children();
         self.reset()?;
+        self.goto_path(&last);
 
         Ok(EventResult::Consumed(None))
     }
@@ -537,7 +549,7 @@ impl Files {
             }
 
             if new_path.starts_with(current_path) {
-                // renaming results in becoming a child of itself
+                // if renaming results in becoming a child of itself
                 // in this case we move all the immediate child paths
                 // to the newly created path
                 let tmp_path = current_path.parent().unwrap().join(nanoid!());
@@ -735,13 +747,16 @@ impl Files {
     fn handle_overwrite_confirmation_key_event(&mut self, event: KeyEvent) -> Result<EventResult> {
         if self.modal.handle_choice(event) {
             match self.modal.choice {
-                Choice::Yes => match &self.state {
-                    State::ConfirmOverwrite(path) => {
+                Choice::Yes => match self.state {
+                    State::ConfirmOverwrite(ref path) => {
                         let dest_dir = &self.columns[self.active_column].path;
                         if let Err(e) = self.paste(path, dest_dir) {
                             self.reset()?;
                             return Err(e)
                         }
+
+                        let goto = dest_dir.join(path.file_name().unwrap());
+                        self.goto_path(&goto);
 
                         return self.try_paste();
                     },
@@ -1108,6 +1123,29 @@ impl Component for Files {
                 EventResult::Consumed(None)
             }
             _ => EventResult::Ignored(None)
+        }
+    }
+
+    fn handle_paste(&mut self, string: &str, ctx: &mut Context) -> EventResult {
+        match self.state {
+            State::Browsing => {
+                let path = PathBuf::from(string);
+                if path.exists() {
+                    // cannot copy onto itself
+                    if !self.columns[self.active_column].path.starts_with(&path) {
+                        self.yanked_paths.insert(path);
+                        return self.try_paste().unwrap_or_else(|e| {
+                            ctx.editor.set_error(e.to_string());
+                            EventResult::Consumed(None)
+                        })
+                    } else {
+                        ctx.editor.set_error(format!("Cannot copy {:?} here", path));
+                    }
+                }
+
+                EventResult::Consumed(None)
+            }
+            _ => self.handle_buffered_input(string, ctx)
         }
     }
 
