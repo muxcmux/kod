@@ -178,6 +178,7 @@ pub static THEME: Lazy<Theme> = Lazy::new(|| {
         "ui.files.search_match" => {
             "mod" => "rev",
         },
+        "ui.files.existing" => "red",
 
         "ui.menu" => "muted1",
         "ui.menu.selected" => "fg",

@@ -152,7 +152,7 @@ impl Component for Search {
             KeyCode::Up => {
                 if let Some(value) = ctx.editor.registers.get_nth('/', self.history_idx.saturating_sub(1)) {
                     self.input.set_value(value);
-                    self.input.move_cursor_to(Some(usize::MAX));
+                    self.input.move_cursor_to(usize::MAX);
                     self.history_idx = self.history_idx.saturating_sub(1);
                 }
                 self.search(ctx)
@@ -161,7 +161,7 @@ impl Component for Search {
                 match ctx.editor.registers.get_nth('/', self.history_idx + 1) {
                     Some(value) => {
                         self.input.set_value(value);
-                        self.input.move_cursor_to(Some(usize::MAX));
+                        self.input.move_cursor_to(usize::MAX);
                         self.history_idx += 1;
                     }
                     None => {

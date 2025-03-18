@@ -36,6 +36,7 @@ ahash = "0.8"
 
 include_dir = "0.7"
 walkdir = "2"
+nanoid = "0.4"
 
 smallvec = "1"
 

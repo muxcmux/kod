@@ -31,7 +31,7 @@ impl TextInput {
 
     pub fn clear(&mut self) {
         self.rope = Rope::from(NEW_LINE_STR);
-        self.move_cursor_to(Some(0));
+        self.move_cursor_to(0);
     }
 
     pub fn set_value(&mut self, value: &str) {
@@ -79,8 +79,8 @@ impl TextInput {
         }
     }
 
-    pub fn move_cursor_to(&mut self, x: Option<usize>) {
-        self.cursor = self.cursor.move_to(&self.rope, x, None, &Mode::Insert);
+    pub fn move_cursor_to(&mut self, x: usize) {
+        self.cursor = self.cursor.move_to(&self.rope, Some(x), None, &Mode::Insert);
     }
 
     fn cursor_left(&mut self) {
@@ -97,7 +97,7 @@ impl TextInput {
             if word.is_blank(slice) { continue }
 
             if self.cursor.head.x > word.start {
-                self.move_cursor_to(Some(word.start));
+                self.move_cursor_to(word.start);
                 break
             }
         }
@@ -110,14 +110,14 @@ impl TextInput {
             if word.is_blank(slice) { continue }
 
             if self.cursor.head.x < word.start {
-                self.move_cursor_to(Some(word.start));
+                self.move_cursor_to(word.start);
                 moved = true;
                 break
             }
         }
 
         if !moved {
-            self.move_cursor_to(Some(usize::MAX));
+            self.move_cursor_to(usize::MAX);
         }
     }
 
@@ -182,11 +182,11 @@ impl TextInput {
                 Some(false)
             }
             KeyCode::Home => {
-                self.move_cursor_to(Some(0));
+                self.move_cursor_to(0);
                 Some(false)
             }
             KeyCode::End => {
-                self.move_cursor_to(Some(usize::MAX));
+                self.move_cursor_to(usize::MAX);
                 Some(false)
             }
             KeyCode::Backspace => {
@@ -200,11 +200,11 @@ impl TextInput {
                 if event.modifiers.contains(KeyModifiers::CONTROL) {
                     match c {
                         'h' => {
-                            self.move_cursor_to(Some(0));
+                            self.move_cursor_to(0);
                             Some(false)
                         }
                         'l' => {
-                            self.move_cursor_to(Some(usize::MAX));
+                            self.move_cursor_to(usize::MAX);
                             Some(false)
                         }
                         'w' => {
@@ -226,6 +226,6 @@ impl TextInput {
             .replace(NEW_LINE_STR_WIN, "\\n\\r");
         let width = graphemes::width(&escaped);
         self.rope.insert(offset, escaped);
-        self.move_cursor_to(Some(self.cursor.head.x + width));
+        self.move_cursor_to(self.cursor.head.x + width);
     }
 }
