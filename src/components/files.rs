@@ -253,7 +253,7 @@ impl Files {
 
     fn goto_path(&mut self, path: &Path) {
         for (i, p) in self.columns[self.active_column].paths.iter().enumerate() {
-            if path == p {
+            if path.ancestors().any(|a| a == p) {
                 self.columns.get_mut(self.active_column).unwrap().index = i;
                 break;
             }
