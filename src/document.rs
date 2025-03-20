@@ -1,7 +1,16 @@
-use std::{borrow::Cow, cell::Cell, collections::HashMap, path::{Path, PathBuf}, sync::Arc};
+use std::time::SystemTime;
+use std::sync::Arc;
+use std::path::{Path, PathBuf};
+use std::collections::HashMap;
+use std::cell::Cell;
+use std::borrow::Cow;
 
 use crop::Rope;
-use crate::{graphemes::{NEW_LINE, NEW_LINE_STR}, history::{Change, History, State, Transaction}, language::{syntax::{HighlightEvent, Syntax}, LanguageConfiguration, LANG_CONFIG}, panes::PaneId, selection::Selection};
+use crate::selection::Selection;
+use crate::panes::PaneId;
+use crate::language::{syntax::{HighlightEvent, Syntax}, LanguageConfiguration, LANG_CONFIG};
+use crate::history::{Change, History, State, Transaction};
+use crate::graphemes::{NEW_LINE, NEW_LINE_STR};
 
 use anyhow::{bail, Result};
 
@@ -31,6 +40,7 @@ pub struct Document {
     pub readonly: bool,
     pub language: Option<Arc<LanguageConfiguration>>,
     pub syntax: Option<Syntax>,
+    pub last_saved_at: SystemTime,
     last_saved_revision: usize,
     selections: HashMap<PaneId, Selection>,
     history: Cell<History>,
@@ -69,6 +79,7 @@ impl Document {
             path,
             readonly,
             selections: HashMap::from([(pane_id, Selection::default())]),
+            last_saved_at: SystemTime::now(),
             last_saved_revision: 0,
         }
     }
@@ -148,6 +159,12 @@ impl Document {
 
     pub fn save(&mut self) {
         self.last_saved_revision = self.get_current_revision();
+        if let Some(path) = &self.path {
+            self.last_saved_at = path.metadata()
+                .map(|m| m.modified().unwrap_or(SystemTime::now()))
+                .unwrap_or(SystemTime::now())
+        }
+        log::debug!("SAVED: {:?}", self.last_saved_at);
     }
 
     pub fn filename_display(&self) -> Cow<'_, str> {

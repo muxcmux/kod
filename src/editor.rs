@@ -1,5 +1,20 @@
-use crate::{application::Event, commands::actions::GotoCharacterMove, document::DocumentId, graphemes::NEW_LINE, panes::{PaneId, Panes}, registers::Registers, search::SearchState, ui::Rect};
-use std::{borrow::Cow, collections::BTreeMap, fs, path::Path, sync::mpsc::{self, Receiver, Sender}, thread, time::{Duration, Instant}};
+use crate::components::alert::Alert;
+use crate::compositor::{Callback, Compositor};
+use crate::ui::Rect;
+use crate::search::SearchState;
+use crate::registers::Registers;
+use crate::panes::{Layout, PaneId, Panes};
+use crate::graphemes::NEW_LINE;
+use crate::document::DocumentId;
+use crate::commands::actions::GotoCharacterMove;
+use crate::application::Event;
+use std::time::{Duration, Instant};
+use std::thread;
+use std::sync::mpsc::{self, Receiver, Sender};
+use std::fs;
+use std::path::Path;
+use std::collections::BTreeMap;
+use std::borrow::Cow;
 
 use crop::Rope;
 use smartstring::{LazyCompact, SmartString};
@@ -145,7 +160,12 @@ impl Editor {
         self.documents.iter().any(|(_, doc)| doc.is_modified())
     }
 
-    pub fn open(&mut self, pane_id: PaneId, path: &Path) -> Result<(bool, DocumentId)> {
+    pub fn open(
+        &mut self,
+        pane_id: PaneId,
+        path: &Path,
+        split: Option<Layout>,
+    ) -> Result<Option<Callback>> {
         let id = self.documents.values()
             .find(|doc| {
                 match &doc.path {
@@ -171,7 +191,24 @@ impl Editor {
             (hard_wrapped, next_id)
         };
 
-        Ok((hard_wrapped, id))
+        if let Some(split) = split {
+            let doc = self.documents.get_mut(&id).unwrap();
+            self.panes.split(split, doc);
+        }
+
+        self.panes.load_doc_in_focus(id);
+
+        if hard_wrapped {
+            let alert = Alert::new(
+                "⚠ Readonly".into(),
+                format!("The document {:?} is set to Readonly because it contains very long lines which have been hard-wrapped.", path.file_name().unwrap())
+            );
+            return Ok(Some(Box::new(|compositor, _| {
+                compositor.push(Box::new(alert));
+            })));
+        }
+
+        Ok(None)
     }
 
     pub fn open_scratch(&mut self, pane_id: PaneId) -> DocumentId {

@@ -4,6 +4,7 @@ use crate::ui::Rect;
 use std::any::Any;
 
 use crossterm::{cursor::SetCursorStyle, event::{Event, KeyEvent}};
+use notify_debouncer_full::DebouncedEvent;
 
 use crate::editor::Editor;
 
@@ -29,6 +30,10 @@ pub trait Component: Any + AnyComponent {
 
     fn handle_paste(&mut self, string: &str, ctx: &mut Context) -> EventResult {
         self.handle_buffered_input(string, ctx)
+    }
+
+    fn handle_file_event(&mut self, _event: &DebouncedEvent, _ctx: &mut Context) -> EventResult {
+        EventResult::Ignored(None)
     }
 
     fn render(&mut self, area: Rect, buffer: &mut Buffer, ctx: &mut Context);
@@ -147,8 +152,31 @@ impl Compositor {
         let mut consumed = false;
 
         for layer in self.layers.iter_mut().rev() {
-            let result = layer.handle_buffered_input(string, ctx);
-            match result {
+            match layer.handle_buffered_input(string, ctx) {
+                EventResult::Consumed(callback) => {
+                    if let Some(cb) = callback { callbacks.push(cb) }
+                    consumed = true;
+                    break;
+                }
+                EventResult::Ignored(callback) => {
+                    if let Some(cb) = callback { callbacks.push(cb) }
+                }
+            };
+        }
+
+        for callback in callbacks {
+            callback(self, ctx)
+        }
+
+        consumed
+    }
+
+    pub fn handle_file_event(&mut self, event: DebouncedEvent, ctx: &mut Context) -> bool {
+        let mut callbacks = vec![];
+        let mut consumed = false;
+
+        for layer in self.layers.iter_mut().rev() {
+            match layer.handle_file_event(&event, ctx) {
                 EventResult::Consumed(callback) => {
                     if let Some(cb) = callback { callbacks.push(cb) }
                     consumed = true;

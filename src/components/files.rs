@@ -17,9 +17,7 @@ use crate::ui::borders::Borders;
 use crate::ui::border_box::BorderBox;
 use crate::document::cwd_relative_name;
 use crate::current;
-use crate::compositor::{Component, Compositor, Context, EventResult};
-
-use super::alert::Alert;
+use crate::compositor::{Component, Context, EventResult};
 
 const ACTIVE_COLUMN_WIDTH: u16 = 52;
 const INACTIVE_COLUMN_WIDTH: u16 = 17;
@@ -379,24 +377,20 @@ impl Files {
         if let Selection::File(path) = self.select()? {
             let (pane, _) = current!(ctx.editor);
             let pane_id = pane.id;
-            let (hard_wrapped, id) = ctx.editor.open(pane_id, &path)?;
-            if let Some(split) = split {
-                let doc = ctx.editor.documents.get_mut(&id).unwrap();
-                ctx.editor.panes.split(split, doc);
-            }
-            ctx.editor.panes.load_doc_in_focus(id);
-            if hard_wrapped {
-                let alert = Alert::new(
-                    "⚠ Readonly".into(),
-                    format!("The document {:?} is set to Readonly because it contains very long lines which have been hard-wrapped.", path.file_name().unwrap())
-                );
-                return Ok(EventResult::Consumed(Some(Box::new(|compositor: &mut Compositor, _: &mut Context| {
-                    compositor.pop();
-                    compositor.push(Box::new(alert));
-                }))));
-            }
-            if close_files {
-                return Ok(self.dismiss());
+            match ctx.editor.open(pane_id, &path, split)? {
+                Some(callback) => {
+                    return Ok(EventResult::Consumed(Some(Box::new(move |compositor, cx| {
+                        if close_files {
+                            compositor.pop();
+                        }
+                        callback(compositor, cx);
+                    }))));
+                }
+                None => {
+                    if close_files {
+                        return Ok(self.dismiss());
+                    }
+                }
             }
         }
 

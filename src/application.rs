@@ -1,8 +1,17 @@
-use std::{env, path::PathBuf, thread};
+use std::thread;
+use std::sync::mpsc::{self, Sender};
+use std::path::PathBuf;
+use std::env;
+use std::time::Duration;
 
 use crossterm::{cursor::SetCursorStyle, event::{read, KeyEvent, KeyEventKind}};
+use notify_debouncer_full::{new_debouncer, notify::RecursiveMode, DebouncedEvent};
 use smartstring::{LazyCompact, SmartString};
-use crate::{components::{alert::Alert, editor_view::EditorView, files::Files, status_line::StatusLine}, compositor::{Compositor, Context}, editor::Editor, panes::PaneId, ui::{terminal::{self, Terminal}, Rect}};
+use crate::ui::{terminal::{self, Terminal}, Rect};
+use crate::panes::PaneId;
+use crate::editor::Editor;
+use crate::compositor::{Compositor, Context};
+use crate::components::{editor_view::EditorView, files::Files, status_line::StatusLine};
 use anyhow::Result;
 
 pub enum Event {
@@ -10,6 +19,7 @@ pub enum Event {
     Quit,
     Term(crossterm::event::Event),
     BufferedInput(SmartString<LazyCompact>),
+    FileEvent(DebouncedEvent),
 }
 
 pub struct Application {
@@ -37,15 +47,11 @@ impl Default for Application {
             let path = PathBuf::from(args.pop().unwrap());
             if let Ok(path) = path.canonicalize() {
                 if path.is_file() {
-                    match editor.open(PaneId::default(), &path) {
-                        Ok((hard_wrapped, id)) => {
-                            editor.panes.load_doc_in_focus(id);
-                            if hard_wrapped {
-                                let alert = Alert::new(
-                                    "⚠ Readonly".into(),
-                                    format!("The document {:?} is set to Readonly because it contains very long lines which have been hard-wrapped.", path.file_name().unwrap())
-                                );
-                                compositor.push(Box::new(alert));
+                    match editor.open(PaneId::default(), &path, None) {
+                        Ok(callback) => {
+                            if let Some(cb) = callback {
+                                let mut ctx = Context { editor: &mut editor };
+                                cb(&mut compositor, &mut ctx);
                             }
                         },
                         Err(e) => editor.set_error(e.to_string()),
@@ -68,6 +74,8 @@ impl Default for Application {
             let id = editor.open_scratch(PaneId::default());
             editor.panes.load_doc_in_focus(id);
         }
+
+        watch_file_changes(editor.tx.clone());
 
         Self { editor, compositor, terminal }
     }
@@ -108,6 +116,11 @@ impl Application {
                             self.draw()?
                         }
                     },
+                    Event::FileEvent(e) => {
+                        if self.handle_file_event(e) {
+                            self.draw()?
+                        }
+                    }
                 },
                 Err(err) => {
                     log::error!("Application channel hung up {err}");
@@ -145,6 +158,11 @@ impl Application {
         self.compositor.handle_buffered_input(string.as_ref(), &mut ctx)
     }
 
+    fn handle_file_event(&mut self, event: DebouncedEvent) -> bool {
+        let mut ctx = Context { editor: &mut self.editor };
+        self.compositor.handle_file_event(event, &mut ctx)
+    }
+
     fn draw(&mut self) -> Result<()> {
         let mut ctx = Context { editor: &mut self.editor };
 
@@ -163,4 +181,34 @@ impl Application {
 
         self.terminal.flush()
     }
+}
+
+fn watch_file_changes(app_tx: Sender<Event>) {
+    std::thread::spawn(move || {
+        let (tx, rx) = mpsc::channel();
+
+        let mut debouncer = new_debouncer(Duration::from_secs(1), None, tx)
+            .expect("can't create file watcher");
+        let dir = std::env::current_dir().expect("Can't get current working dir");
+
+        debouncer.watch(&dir, RecursiveMode::Recursive)
+            .expect("Can't watch file changes in current working dir");
+
+        for res in rx {
+            match res {
+                Ok(events) => {
+                    for event in events {
+                        if let Err(error) = app_tx.send(Event::FileEvent(event)) {
+                            log::error!("Sending file event failed: {}", error);
+                        }
+                    }
+                },
+                Err(errors) => {
+                    for error in errors {
+                        log::error!("File watcher failed: {}", error);
+                    }
+                },
+            }
+        }
+    });
 }
