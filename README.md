@@ -44,7 +44,7 @@ This is a high-level, unordered, non-exhaustive list of features I want in kod.
 
 * 🟢 Split windows
 * 🟢 Multiple open buffers/documents
-* 🟡 Basic file explorer ala mini.files / yazi
+* 🟢 Basic file explorer ala mini.files / yazi
 * 🟡 Commands
 * ⚪️ Jump lists
 * ⚪️ Built-in fuzzy finder ala Telescope (suitable for more than finding files)
