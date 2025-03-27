@@ -1053,28 +1053,47 @@ pub fn change_current_symbol(ctx: &mut Context) -> ActionResult {
     enter_insert_mode(ctx)
 }
 
+// This is shite API really, but this fn needs
+// to be called every time focus is shifted from
+// one pane to another, e.g.: when splitting,
+// moving between panes, closing a pane, etc.
+pub fn sync_active_pane_changes(ctx: &mut Context) {
+    let (pane, doc) = current!(ctx.editor);
+    let pane_id = pane.id;
+    let doc_id = doc.id;
+    let (_, callback) = ctx.editor.sync_pane_changes(pane_id, doc_id);
+    if let Some(cb) = callback {
+        ctx.compositor_callbacks.push(cb);
+    }
+}
+
 pub fn switch_pane_top(ctx: &mut Context) -> ActionResult {
     ctx.editor.panes.switch(Direction::Up);
+    sync_active_pane_changes(ctx);
     hide_search(ctx)
 }
 
 pub fn switch_pane_bottom(ctx: &mut Context) -> ActionResult {
     ctx.editor.panes.switch(Direction::Down);
+    sync_active_pane_changes(ctx);
     hide_search(ctx)
 }
 
 pub fn switch_pane_left(ctx: &mut Context) -> ActionResult {
     ctx.editor.panes.switch(Direction::Left);
+    sync_active_pane_changes(ctx);
     hide_search(ctx)
 }
 
 pub fn switch_pane_right(ctx: &mut Context) -> ActionResult {
     ctx.editor.panes.switch(Direction::Right);
+    sync_active_pane_changes(ctx);
     hide_search(ctx)
 }
 
 pub fn switch_to_last_pane(ctx: &mut Context) -> ActionResult {
     ctx.editor.panes.switch_to_last();
+    sync_active_pane_changes(ctx);
     hide_search(ctx)
 }
 

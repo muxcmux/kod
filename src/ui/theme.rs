@@ -212,6 +212,7 @@ pub static THEME: Lazy<Theme> = Lazy::new(|| {
             "mod" => "rev",
         },
         "ui.statusline.modified" => "wood",
+        "ui.statusline.deleted" => "red",
         "ui.statusline.read_only" => "muted",
 
         "ui.multicursor" => {

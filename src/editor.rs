@@ -1,10 +1,9 @@
-use crate::components::alert::Alert;
-use crate::compositor::{Callback, Compositor};
+use crate::components::dialogs::{Alert, FileModified};
+use crate::compositor::Callback;
 use crate::ui::Rect;
 use crate::search::SearchState;
 use crate::registers::Registers;
 use crate::panes::{Layout, PaneId, Panes};
-use crate::graphemes::NEW_LINE;
 use crate::document::DocumentId;
 use crate::commands::actions::GotoCharacterMove;
 use crate::application::Event;
@@ -16,7 +15,6 @@ use std::path::Path;
 use std::collections::BTreeMap;
 use std::borrow::Cow;
 
-use crop::Rope;
 use smartstring::{LazyCompact, SmartString};
 
 use crate::document::Document;
@@ -180,15 +178,15 @@ impl Editor {
         // for existing documents, because if they were wrapped
         // when opened for the first time, the notification was
         // already displayed to the user once
-        let (hard_wrapped, id) = if let Some(id) = id {
-            (false, id)
+        let (should_reload, hard_wrapped, id) = if let Some(id) = id {
+            (true, false, id)
         } else {
             let next_id = self.next_doc_id;
             let (hard_wrapped, doc) = Document::open(next_id, pane_id, path)?;
 
             self.documents.insert(next_id, doc);
             self.next_doc_id.advance();
-            (hard_wrapped, next_id)
+            (false, hard_wrapped, next_id)
         };
 
         if let Some(split) = split {
@@ -208,13 +206,70 @@ impl Editor {
             })));
         }
 
+        // hard_wrapped and should_reload are mutually exclusive as can be seen
+        // from the code above. This doesn't mean that the document will not
+        // be hard_wrapped again when reloaded - this bool is only an indication
+        // from the Document::open.
+        //
+        // document.reload() also does hard wrapping, but in this case, we chose
+        // not to display the wrapping notification and instead push any callbacks
+        // resulting from the reload to the compositor (e.g. file was externally
+        // modified)
+        if should_reload {
+            return Ok(self.sync_pane_changes(pane_id, id).1)
+        }
+
         Ok(None)
     }
 
+    // Reloads the document in the pane id if doc needs reloading
+    // Returns the need for re-render and an optional callback
+    pub fn sync_pane_changes(&mut self, pane_id: PaneId, doc_id: DocumentId) -> (bool, Option<Callback>) {
+        let doc = self.documents.get_mut(&doc_id).unwrap();
+
+        if let Some(path) = &doc.path {
+            if !path.exists() {
+                // let p = path.to_path_buf();
+                // self.set_error(format!("File {:?} no longer exists", p));
+                return (true, None);
+            }
+        }
+
+        if doc.was_changed() {
+            if doc.is_modified() {
+                (true, Some(Box::new(|compositor, _| {
+                    let confirmation = FileModified::new();
+                    compositor.remove::<FileModified>();
+                    compositor.push(Box::new(confirmation))
+                })))
+            } else {
+                match doc.reload() {
+                    Err(e) => self.set_error(e.to_string()),
+                    Ok(_) => {
+                        let sel = doc.selection(pane_id);
+                        doc.set_selection(pane_id, sel.transform(|r| {
+                            r.move_to(&doc.rope, None, None, &self.mode)
+                        }));
+                    }
+                }
+
+                (true, None)
+            }
+        } else {
+            // reposition the cursor, because the doc might have been
+            // reloaded while it was not visible on screen
+            let sel = doc.selection(pane_id);
+            doc.set_selection(pane_id, sel.transform(|r| {
+                r.move_to(&doc.rope, None, None, &self.mode)
+            }));
+
+            (false, None)
+        }
+    }
+
     pub fn open_scratch(&mut self, pane_id: PaneId) -> DocumentId {
-        let rope = Rope::from(NEW_LINE.to_string());
         let next_id = self.next_doc_id;
-        let doc = Document::new(next_id, pane_id, rope, None);
+        let doc = Document::new(next_id, pane_id);
         self.documents.insert(next_id, doc);
         self.next_doc_id.advance();
         next_id
@@ -247,5 +302,18 @@ impl Editor {
 
     pub fn request_buffered_input(&mut self, c: char) {
         self.input_buffer.buffer(c, self.tx.clone());
+    }
+
+    // Returns the PaneIds where the given doc id is currently open
+    pub fn doc_in_panes(&self, doc_id: DocumentId) -> Vec<PaneId> {
+        self.panes.panes.iter()
+            .filter_map(move |(id, pane)| {
+                if pane.doc_id == doc_id {
+                    Some(*id)
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 }

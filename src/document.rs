@@ -10,7 +10,7 @@ use crate::selection::Selection;
 use crate::panes::PaneId;
 use crate::language::{syntax::{HighlightEvent, Syntax}, LanguageConfiguration, LANG_CONFIG};
 use crate::history::{Change, History, State, Transaction};
-use crate::graphemes::{NEW_LINE, NEW_LINE_STR};
+use crate::graphemes::NEW_LINE_STR;
 
 use anyhow::{bail, Result};
 
@@ -40,7 +40,7 @@ pub struct Document {
     pub readonly: bool,
     pub language: Option<Arc<LanguageConfiguration>>,
     pub syntax: Option<Syntax>,
-    pub last_saved_at: SystemTime,
+    pub last_modified_at: SystemTime,
     last_saved_revision: usize,
     selections: HashMap<PaneId, Selection>,
     history: Cell<History>,
@@ -49,58 +49,79 @@ pub struct Document {
 }
 
 impl Document {
-    pub fn new(id: DocumentId, pane_id: PaneId, rope: Rope, path: Option<PathBuf>) -> Self {
-        let (language, readonly) = match &path {
-            Some(p) => {
-                let ro = std::fs::metadata(p).is_ok_and(|m| m.permissions().readonly());
-                let lc = LANG_CONFIG.language_config_for_path(p)
-                        .or(LANG_CONFIG.language_config_for_shebang(rope.line(0)));
-                (lc, ro)
-            },
-            None => (None, false)
-        };
-
-        let syntax = match language {
-            Some(ref lang) => match lang.highlight_config() {
-                Some(cfg) => Syntax::new(rope.clone(), cfg),
-                None => None
-            }
-            None => None
-        };
-
+    pub fn new(id: DocumentId, pane_id: PaneId) -> Self {
         Self {
             id,
-            rope,
-            language,
-            syntax,
+            rope: Rope::from(NEW_LINE_STR),
+            language: None,
+            syntax: None,
             transaction: Cell::new(Transaction::default()),
             history: Cell::new(History::default()),
             old_state: None,
-            path,
-            readonly,
+            path: None,
+            readonly: false,
             selections: HashMap::from([(pane_id, Selection::default())]),
-            last_saved_at: SystemTime::now(),
+            last_modified_at: SystemTime::now(),
             last_saved_revision: 0,
         }
     }
 
-    pub fn open(id: DocumentId, pane_id: PaneId, path: &Path) -> Result<(bool, Self)> {
+    fn load_from_path(&mut self) -> Result<bool> {
+        if self.path.is_none() {
+            bail!("Cannot load contents for a document without a path")
+        }
+
+        let path = self.path.as_ref().unwrap();
+
+        if !path.exists() {
+            bail!("Path {:?} no longer exists", path)
+        }
+
         if !path.metadata()?.is_file() {
-            bail!("Cannot open path: {:?}", path)
+            bail!("Cannot load path: {:?}", self.path)
         }
 
-        let mut contents = std::fs::read_to_string(path)?;
-
-        if contents.is_empty() {
-            contents = NEW_LINE.to_string();
+        if let Ok(md) = path.metadata() {
+            if let Ok(t) = md.modified() {
+                self.last_modified_at = t;
+            }
         }
 
-        let rope = Rope::from(contents);
+        let contents = std::fs::read_to_string(path)?;
 
-        let mut doc = Self::new(id, pane_id, rope, Some(path.to_path_buf()));
-        let hard_wrapped = doc.hard_wrap_long_lines();
+        self.rope = if contents.is_empty() {
+            Rope::from(NEW_LINE_STR)
+        } else {
+            Rope::from(contents)
+        };
 
-        Ok((hard_wrapped, doc))
+        self.readonly = path.metadata().is_ok_and(|m| m.permissions().readonly());
+        self.language = LANG_CONFIG.language_config_for_path(path)
+                            .or(LANG_CONFIG.language_config_for_shebang(self.rope.line(0)));
+
+        if let Some(lang) = &self.language {
+            if let Some(config) = lang.highlight_config() {
+                self.syntax = Syntax::new(self.rope.clone(), config);
+            }
+        }
+
+        Ok(self.hard_wrap_long_lines())
+    }
+
+    pub fn open(id: DocumentId, pane_id: PaneId, path: &Path) -> Result<(bool, Self)> {
+        let mut doc = Self::new(id, pane_id);
+        doc.path = Some(path.to_path_buf());
+        Ok((doc.load_from_path()?, doc))
+    }
+
+    pub fn reload(&mut self) -> Result<bool> {
+        let hard_wrapped = self.load_from_path()?;
+
+        // TODO: handle transaction stuff otherwise we crash
+        log::warn!("reloaded doc without transaction. undo/redo might cause a panic");
+        self.save();
+
+        Ok(hard_wrapped)
     }
 
     // Insert line breaks on lines longer than LIMIT bytes
@@ -140,6 +161,7 @@ impl Document {
         wrap_result
     }
 
+    // Checks if the document has been modified by us
     pub fn is_modified(&self) -> bool {
         let history = self.history.take();
         let transaction = self.transaction.take();
@@ -148,6 +170,24 @@ impl Document {
         self.history.set(history);
         self.transaction.set(transaction);
         current_revision != self.last_saved_revision || !transaction_is_empty
+    }
+
+    // Checks if the file of the document has been modified externally
+    // NOTE: This will not check if the file still exists on disk and will
+    // return false (not changed) in this case
+    pub fn was_changed(&self) -> bool {
+        match self.path.as_ref() {
+            None => false,
+            Some(path) => {
+                if let Ok(md) = path.metadata() {
+                    if let Ok(t) = md.modified() {
+                        return t > self.last_modified_at
+                    }
+                }
+
+                false
+            }
+        }
     }
 
     fn get_current_revision(&mut self) -> usize {
@@ -160,11 +200,10 @@ impl Document {
     pub fn save(&mut self) {
         self.last_saved_revision = self.get_current_revision();
         if let Some(path) = &self.path {
-            self.last_saved_at = path.metadata()
+            self.last_modified_at = path.metadata()
                 .map(|m| m.modified().unwrap_or(SystemTime::now()))
                 .unwrap_or(SystemTime::now())
         }
-        log::debug!("SAVED: {:?}", self.last_saved_at);
     }
 
     pub fn filename_display(&self) -> Cow<'_, str> {

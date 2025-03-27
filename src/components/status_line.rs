@@ -94,7 +94,11 @@ impl Component for StatusLine {
                 }
 
                 if doc.readonly {
-                    _ = draw_left("[readonly]", x, y, buffer, THEME.get("ui.statusline.read_only"));
+                    x = draw_left("[readonly]", x, y, buffer, THEME.get("ui.statusline.read_only"));
+                }
+
+                if doc.path.as_ref().is_some_and(|p| !p.exists()) {
+                    _ = draw_left("[]", x, y, buffer, THEME.get("ui.statusline.deleted"));
                 }
             },
         }

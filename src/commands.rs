@@ -1,9 +1,15 @@
 pub mod actions;
 pub mod palette;
 
+use actions::sync_active_pane_changes;
 use crossterm::event::KeyEvent;
 
-use crate::{components::save_documents::Dialog, compositor::Component, current, doc, editor::Editor, panes::Layout};
+use crate::components::dialogs::{EditorExit, OverwriteFile};
+use crate::panes::Layout;
+use crate::editor::Editor;
+use crate::doc;
+use crate::current;
+use crate::compositor::Component;
 
 pub type KeyCallback = Box<dyn FnOnce(&mut Context, KeyEvent)>;
 
@@ -35,18 +41,24 @@ pub struct Command {
 pub fn save(ctx: &mut Context) {
     let doc = doc!(ctx.editor);
     let id = doc.id;
-    ctx.editor.save_document(id);
+
+    if doc.was_changed() {
+        ctx.push_component(Box::new(OverwriteFile::new(id)))
+    } else {
+        ctx.editor.save_document(id);
+    }
 }
 
 pub fn quit(ctx: &mut Context) {
     if ctx.editor.panes.panes.len() == 1 {
         if ctx.editor.has_unsaved_docs() {
-            ctx.push_component(Box::new(Dialog::new()));
+            ctx.push_component(Box::new(EditorExit::new()));
         } else {
             ctx.editor.quit();
         }
     } else {
         ctx.editor.panes.close(ctx.editor.panes.focus);
+        sync_active_pane_changes(ctx);
     }
 }
 

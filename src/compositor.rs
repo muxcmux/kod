@@ -4,7 +4,6 @@ use crate::ui::Rect;
 use std::any::Any;
 
 use crossterm::{cursor::SetCursorStyle, event::{Event, KeyEvent}};
-use notify_debouncer_full::DebouncedEvent;
 
 use crate::editor::Editor;
 
@@ -32,7 +31,7 @@ pub trait Component: Any + AnyComponent {
         self.handle_buffered_input(string, ctx)
     }
 
-    fn handle_file_event(&mut self, _event: &DebouncedEvent, _ctx: &mut Context) -> EventResult {
+    fn handle_focus_gained(&mut self, _ctx: &mut Context) -> EventResult {
         EventResult::Ignored(None)
     }
 
@@ -132,7 +131,36 @@ impl Compositor {
                 EventResult::Consumed(callback) => {
                     if let Some(cb) = callback { callbacks.push(cb) }
                     consumed = true;
+                    // breaking here prevents other components from
+                    // handling the event, which is generally
+                    // what we want
                     break;
+                }
+                EventResult::Ignored(callback) => {
+                    if let Some(cb) = callback { callbacks.push(cb) }
+                }
+            };
+        }
+
+        for callback in callbacks {
+            callback(self, ctx)
+        }
+
+        consumed
+    }
+
+    pub fn handle_focus_gained(&mut self, ctx: &mut Context) -> bool {
+        let mut callbacks = vec![];
+        let mut consumed = false;
+
+        for layer in self.layers.iter_mut().rev() {
+            match layer.handle_focus_gained(ctx) {
+                EventResult::Consumed(callback) => {
+                    if let Some(cb) = callback { callbacks.push(cb) }
+                    consumed = true;
+                    // not breaking here because we want to allow
+                    // multiple components to consume this event
+                    // (and thus cause a render)
                 }
                 EventResult::Ignored(callback) => {
                     if let Some(cb) = callback { callbacks.push(cb) }
@@ -156,30 +184,9 @@ impl Compositor {
                 EventResult::Consumed(callback) => {
                     if let Some(cb) = callback { callbacks.push(cb) }
                     consumed = true;
-                    break;
-                }
-                EventResult::Ignored(callback) => {
-                    if let Some(cb) = callback { callbacks.push(cb) }
-                }
-            };
-        }
-
-        for callback in callbacks {
-            callback(self, ctx)
-        }
-
-        consumed
-    }
-
-    pub fn handle_file_event(&mut self, event: DebouncedEvent, ctx: &mut Context) -> bool {
-        let mut callbacks = vec![];
-        let mut consumed = false;
-
-        for layer in self.layers.iter_mut().rev() {
-            match layer.handle_file_event(&event, ctx) {
-                EventResult::Consumed(callback) => {
-                    if let Some(cb) = callback { callbacks.push(cb) }
-                    consumed = true;
+                    // breaking here prevents other components from
+                    // handling the buffered input, which is generally
+                    // what we want
                     break;
                 }
                 EventResult::Ignored(callback) => {

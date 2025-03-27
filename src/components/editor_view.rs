@@ -1,11 +1,11 @@
 use std::collections::HashMap;
-
 use crate::commands;
 use crate::commands::actions::append_or_replace_string;
 use crate::commands::actions::append_string;
 use crate::commands::actions::ActionStatus;
 use crate::compositor;
 use crate::current;
+use crate::document::DocumentId;
 use crate::graphemes::NEW_LINE;
 use crate::gutter;
 use crate::pane;
@@ -283,4 +283,57 @@ impl Component for EditorView {
             }),
         )
     }
+
+    fn handle_focus_gained(&mut self, ctx: &mut Context) -> EventResult {
+        let docs_were_changed = reload_changed_docs_in_view(ctx);
+
+        let (pane, doc) = current!(ctx.editor);
+        let pane_id = pane.id;
+        let doc_id = doc.id;
+
+        let (current_doc_changed, callback) = ctx.editor.sync_pane_changes(pane_id, doc_id);
+
+        if !docs_were_changed && !current_doc_changed {
+            EventResult::Ignored(None)
+        } else {
+            EventResult::Consumed(callback)
+        }
+    }
+}
+
+// Silently reload all documents in view
+// which don't have local modifications and have
+// been changed externally
+fn reload_changed_docs_in_view(ctx: &mut Context) -> bool {
+    let mut had_changes = false;
+
+    let doc_ids = ctx.editor.panes.panes
+        .values()
+        .map(|pane| pane.doc_id)
+        .collect::<Vec<DocumentId>>();
+
+    for doc_id in doc_ids {
+        let pane_ids = ctx.editor.doc_in_panes(ctx.editor.documents.get(&doc_id).unwrap().id);
+        let doc = ctx.editor.documents.get_mut(&doc_id).unwrap();
+
+        if doc.was_changed() && !doc.is_modified() {
+            // Reload the document silently and reposition the cursors
+            // doc.reload() might fail for various reasons here, e.g.
+            // the file no longer exists, but because there are no local
+            // modifications, we silently ignore those errors as they
+            // will be handled when the given document is either saved,
+            // or comes into view
+            had_changes = true;
+            if doc.reload().is_ok() {
+                for pane_id in pane_ids {
+                    let sel = doc.selection(pane_id);
+                    doc.set_selection(pane_id, sel.transform(|r| {
+                        r.move_to(&doc.rope, None, None, &ctx.editor.mode)
+                    }))
+                }
+            }
+        }
+    }
+
+    had_changes
 }

@@ -9,6 +9,7 @@ pub fn enter_terminal_screen() -> Result<()> {
     let mut stdout = std::io::stdout();
     terminal::enable_raw_mode()?;
     stdout.execute(event::EnableBracketedPaste)?;
+    stdout.execute(event::EnableFocusChange)?;
     stdout.execute(terminal::EnterAlternateScreen)?;
     stdout.execute(terminal::Clear(terminal::ClearType::All))?;
 
@@ -25,6 +26,7 @@ pub fn enter_terminal_screen() -> Result<()> {
 pub fn leave_terminal_screen() -> Result<()> {
     terminal::disable_raw_mode()?;
     stdout().execute(event::DisableBracketedPaste)?;
+    stdout().execute(event::DisableFocusChange)?;
     stdout().execute(terminal::LeaveAlternateScreen)?;
 
     Ok(())

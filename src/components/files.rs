@@ -1,4 +1,7 @@
-use std::{cmp::Ordering, collections::{BTreeSet, HashMap, VecDeque}, fs::read_dir, path::{Path, PathBuf}};
+use std::path::{Path, PathBuf};
+use std::fs::read_dir;
+use std::collections::{BTreeSet, HashMap, VecDeque};
+use std::cmp::Ordering;
 use anyhow::{anyhow, bail, Result};
 
 use crossterm::{cursor::SetCursorStyle, event::{KeyCode, KeyEvent, KeyModifiers}};
@@ -11,7 +14,7 @@ use crate::ui::theme::THEME;
 use crate::ui::text_input::TextInput;
 use crate::ui::style::Style;
 use crate::ui::scroll::Scroll;
-use crate::ui::modal::{Choice, Modal};
+use crate::ui::modal::{YesNoCancel, Modal};
 use crate::ui::buffer::Buffer;
 use crate::ui::borders::Borders;
 use crate::ui::border_box::BorderBox;
@@ -204,7 +207,12 @@ impl Files {
     pub fn new(path: Option<&PathBuf>) -> Result<Self> {
         let (dir, file) = match path {
             Some(p) => {
-                if p.metadata()?.is_dir() {
+                if !p.exists() {
+                    let parent = p.parent()
+                        .map(|d| d.to_path_buf())
+                        .unwrap_or(std::env::current_dir()?);
+                    (parent, None)
+                } else if p.metadata()?.is_dir() {
                     (p.to_path_buf(), None)
                 } else if p.metadata()?.is_file() {
                     (p.parent().ok_or(anyhow!("Can't find parent dir of {:?}", p))?.to_path_buf(), Some(p))
@@ -252,14 +260,14 @@ impl Files {
     fn goto_path(&mut self, path: &Path) {
         for (i, p) in self.columns[self.active_column].paths.iter().enumerate() {
             if path.ancestors().any(|a| a == p) {
-                self.columns.get_mut(self.active_column).unwrap().index = i;
+                self.columns[self.active_column].index = i;
                 break;
             }
         }
     }
 
     fn move_up(&mut self) {
-        let col = self.columns.get_mut(self.active_column).unwrap();
+        let col = &mut self.columns[self.active_column];
 
         if col.index > 0 {
             col.index -= 1;
@@ -268,7 +276,7 @@ impl Files {
     }
 
     fn move_down(&mut self) {
-        let col = self.columns.get_mut(self.active_column).unwrap();
+        let col = &mut self.columns[self.active_column];
 
         if col.index < col.paths.len().saturating_sub(1) {
             col.index += 1;
@@ -277,7 +285,7 @@ impl Files {
     }
 
     fn move_half_page_up(&mut self) {
-        let col = self.columns.get_mut(self.active_column).unwrap();
+        let col = &mut self.columns[self.active_column];
 
         if col.index > 0 {
             col.index = col.index.saturating_sub((col.calculated_area.height / 2).into());
@@ -286,7 +294,7 @@ impl Files {
     }
 
     fn move_half_page_down(&mut self) {
-        let col = self.columns.get_mut(self.active_column).unwrap();
+        let col = &mut self.columns[self.active_column];
 
         let len = col.paths.len().saturating_sub(1);
         if col.index < len {
@@ -297,7 +305,7 @@ impl Files {
     }
 
     fn move_top(&mut self) {
-        let col = self.columns.get_mut(self.active_column).unwrap();
+        let col = &mut self.columns[self.active_column];
 
         if col.index > 0 {
             col.index = 0;
@@ -306,7 +314,7 @@ impl Files {
     }
 
     fn move_bottom(&mut self) {
-        let col = self.columns.get_mut(self.active_column).unwrap();
+        let col = &mut self.columns[self.active_column];
 
         if col.index < col.paths.len().saturating_sub(1) {
             col.index = col.paths.len().saturating_sub(1);
@@ -315,7 +323,7 @@ impl Files {
     }
 
     fn move_to_first_search_match(&mut self) {
-        let col = self.columns.get_mut(self.active_column).unwrap();
+        let col = &mut self.columns[self.active_column];
 
         for (i, path) in col.paths.iter().enumerate() {
             if let Some(path) = path.file_name().and_then(|p| p.to_str()) {
@@ -581,14 +589,14 @@ impl Files {
     fn start_add(&mut self) -> EventResult {
         self.file_name_input.clear();
         self.state = State::Adding;
-        let col = self.columns.get_mut(self.active_column).unwrap();
+        let col = &mut self.columns[self.active_column];
         col.paths.insert((col.index + 1).min(col.paths.len()), col.path.clone());
         self.move_down();
 
         EventResult::Consumed(None)
     }
 
-    fn rename(&mut self) -> Result<EventResult> {
+    fn rename(&mut self, ctx: &mut Context) -> Result<EventResult> {
         let col = &self.columns[self.active_column];
 
         if let Some(current_path) = col.paths.get(col.index) {
@@ -614,6 +622,16 @@ impl Files {
                 std::fs::rename(current_path, &new_path)?;
             }
 
+            // Update the paths of in-memory documents
+            if new_path.is_file() {
+                for doc in ctx.editor.documents.values_mut() {
+                    if doc.path.as_ref() == Some(current_path) {
+                        doc.path = Some(new_path.clone());
+                        break
+                    }
+                }
+            }
+
             self.close_children();
             self.reset()?;
             self.goto_path(&new_path);
@@ -622,7 +640,7 @@ impl Files {
         Ok(EventResult::Consumed(None))
     }
 
-    fn add(&mut self) -> Result<EventResult> {
+    fn add(&mut self, ctx: &mut Context) -> Result<EventResult> {
         let col = &self.columns[self.active_column];
 
         let value = self.file_name_input.value();
@@ -638,9 +656,21 @@ impl Files {
             std::fs::write(&new_path, "")?;
         }
 
+        // Update the currently focused doc if its path matches the created path
+        // This happens when we open a file, then delete it and create it again
+        let mut callback = None;
+        if new_path.is_file() {
+            let (pane, doc) = current!(ctx.editor);
+            let pane_id = pane.id;
+            let doc_id = doc.id;
+            if doc.path.as_ref() == Some(&new_path) {
+                (_, callback) = ctx.editor.sync_pane_changes(pane_id, doc_id);
+            }
+        }
+
         self.reset()?;
         self.goto_path(&new_path);
-        Ok(EventResult::Consumed(None))
+        Ok(EventResult::Consumed(callback))
     }
 
     fn reposition_cursor(&mut self) {
@@ -754,8 +784,8 @@ impl Files {
                 Ok(EventResult::Consumed(None))
             }
             KeyCode::Enter => match self.state {
-                State::Adding => self.add(),
-                _ => self.rename(),
+                State::Adding => self.add(ctx),
+                _ => self.rename(ctx),
             }
             _ => {
                 match self.file_name_input.handle_key_event(event) {
@@ -800,13 +830,13 @@ impl Files {
         self.state = State::Browsing;
         self.refresh_columns()?;
         self.reposition_cursor();
-        self.modal.choice = Choice::Yes;
+        self.modal.choice = YesNoCancel::Yes;
         Ok(())
     }
 
     fn handle_delete_confirmation_key_event(&mut self, event: KeyEvent) -> Result<EventResult> {
         if self.modal.handle_choice(event) {
-            if self.modal.choice == Choice::Yes {
+            if self.modal.choice == YesNoCancel::Yes {
                 match &mut self.state {
                     State::ConfirmDelete(paths) => {
                         while let Some(path) = paths.pop() {
@@ -831,7 +861,7 @@ impl Files {
     fn handle_overwrite_confirmation_key_event(&mut self, event: KeyEvent) -> Result<EventResult> {
         if self.modal.handle_choice(event) {
             match self.modal.choice {
-                Choice::Yes => match self.state {
+                YesNoCancel::Yes => match self.state {
                     State::ConfirmOverwrite(ref path) => {
                         let dest_dir = &self.columns[self.active_column].path;
                         if let Err(e) = self.paste(path, dest_dir) {
@@ -846,10 +876,10 @@ impl Files {
                     },
                     _ => unreachable!()
                 },
-                Choice::No => {
+                YesNoCancel::No => {
                     return self.try_paste();
                 },
-                Choice::Cancel => {
+                YesNoCancel::Cancel => {
                     self.yanked_paths.clear();
                 },
             }
@@ -916,7 +946,7 @@ impl Files {
             }
         };
 
-        let column = self.columns.get_mut(idx).unwrap();
+        let column = &mut self.columns[idx];
         let inner = column.render(area, buffer, short_title, each_row);
 
         if self.state == State::Searching {
@@ -963,9 +993,7 @@ impl Files {
             }
         };
 
-        self.columns.get_mut(idx)
-            .unwrap()
-            .render(area, buffer, short_title, each_row);
+        self.columns[idx].render(area, buffer, short_title, each_row);
     }
 
     fn render_file_input(&mut self, buffer: &mut Buffer) {
@@ -1133,11 +1161,11 @@ impl Component for Files {
                 } else {
                     self.modal.body = format!("Delete {}?", cwd_relative_name(paths.first().unwrap()));
                 }
-                self.modal.render_all(area, buffer);
+                self.modal.render(area, buffer);
             },
             State::ConfirmOverwrite(path) => {
                 self.modal.body = format!("Overwrite {}?", path.file_name().and_then(|f| f.to_str()).unwrap());
-                self.modal.render_all(area, buffer);
+                self.modal.render(area, buffer);
             },
             State::Adding | State::Renaming(_) => self.render_file_input(buffer),
             _ => {}
@@ -1233,5 +1261,13 @@ impl Component for Files {
                 (Some(cur), None)
             }
         }
+    }
+
+    fn handle_focus_gained(&mut self, ctx: &mut Context) -> EventResult {
+        if let Err(e) = self.reset() {
+            ctx.editor.set_error(e.to_string());
+        }
+
+        EventResult::Consumed(None)
     }
 }
