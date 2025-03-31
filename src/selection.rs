@@ -282,6 +282,20 @@ impl Selection {
         &self.ranges[self.primary_index]
     }
 
+    /// Removes a range from the selection.
+    pub fn remove(mut self, index: usize) -> Self {
+        debug_assert!(
+            self.ranges.len() > 1,
+            "can't remove the last range from a selection!"
+        );
+
+        self.ranges.remove(index);
+        if index < self.primary_index || self.primary_index == self.ranges.len() {
+            self.primary_index -= 1;
+        }
+        self
+    }
+
     /// Takes a closure and maps each `Range` over the closure.
     pub fn transform<F>(&self, mut f: F) -> Self
     where

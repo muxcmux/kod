@@ -256,6 +256,40 @@ pub fn add_cursor_prev_word(ctx: &mut Context) -> ActionResult {
     Ok(())
 }
 
+pub fn rotate_cursors_backward(ctx: &mut Context) -> ActionResult {
+    let (pane, doc) = current!(ctx.editor);
+    let mut sel = doc.selection(pane.id).clone();
+    let len = sel.ranges.len();
+    sel.primary_index = (sel.primary_index + (len.saturating_sub(1) % len)) % len;
+    doc.set_selection(pane.id, sel);
+
+    Ok(())
+}
+
+pub fn rotate_cursors_forward(ctx: &mut Context) -> ActionResult {
+    let (pane, doc) = current!(ctx.editor);
+    let mut sel = doc.selection(pane.id).clone();
+    sel.primary_index = (sel.primary_index + 1) % sel.ranges.len();
+    doc.set_selection(pane.id, sel);
+
+    Ok(())
+}
+
+pub fn remove_cursor(ctx: &mut Context) -> ActionResult {
+    let (pane, doc) = current!(ctx.editor);
+
+    let sel = doc.selection(pane.id);
+    if sel.ranges.len() == 1 {
+        return Ok(())
+    }
+
+    let selection = sel.clone().remove(sel.primary_index);
+
+    doc.set_selection(pane.id, selection);
+
+    Ok(())
+}
+
 pub fn enter_select_mode(ctx: &mut Context) -> ActionResult {
     let (pane, doc) = current!(ctx.editor);
     let sel = doc.selection(pane.id);

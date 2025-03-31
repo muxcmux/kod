@@ -34,6 +34,9 @@ pub fn normal_mode_keymap() -> Keymap {
         "A-k" => add_cursor_above,
         "A-l" => add_cursor_next_word,
         "A-h" => add_cursor_prev_word,
+        "(" => rotate_cursors_backward,
+        ")" => rotate_cursors_forward,
+        "A-," => remove_cursor,
 
         "C-w" => {
             "h" | "C-h" => switch_pane_left,
@@ -177,8 +180,11 @@ pub fn select_mode_keymap() -> Keymap {
         "s" => select_matches,
         "*" => search_word_under_cursor,
 
-        "i" => enter_insert_mode_before_range_start,
-        "a" => enter_insert_mode_after_range_end,
+        "(" => rotate_cursors_backward,
+        ")" => rotate_cursors_forward,
+        "A-," => remove_cursor,
+        "A-i" => enter_insert_mode_before_range_start,
+        "A-a" => enter_insert_mode_after_range_end,
 
         "h" => move_left,
         "j" => move_down,
